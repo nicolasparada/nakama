@@ -42,6 +42,7 @@ type Service interface {
 	Post(ctx context.Context, postID string) (nakama.Post, error)
 	DeletePost(ctx context.Context, postID string) error
 	TogglePostLike(ctx context.Context, postID string) (nakama.ToggleLikeOutput, error)
+	AddPostReaction(ctx context.Context, postID, emoji string) ([]nakama.PostReaction, error)
 	TogglePostSubscription(ctx context.Context, postID string) (nakama.ToggleSubscriptionOutput, error)
 
 	Timeline(ctx context.Context, last uint64, before *string) (nakama.Timeline, error)

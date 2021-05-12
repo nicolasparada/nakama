@@ -1,8 +1,8 @@
 import { isAuthenticated } from "../auth.js"
 import { doDelete, doPost } from "../http.js"
-import { ago, collectMedia, el, escapeHTML, linkify, replaceNode } from "../utils.js"
+import { ago, collectMedia, escapeHTML, linkify } from "../utils.js"
 import renderAvatarHTML from "./avatar.js"
-import { heartIconSVG, heartOulineIconSVG } from "./icons.js"
+import { smilingFaceIconSVG } from "./icons.js"
 
 const messageIconSVG = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g data-name="Layer 2"><g data-name="message-square"><rect width="24" height="24" opacity="0"/><circle cx="12" cy="11" r="1"/><circle cx="16" cy="11" r="1"/><circle cx="8" cy="11" r="1"/><path d="M19 3H5a3 3 0 0 0-3 3v15a1 1 0 0 0 .51.87A1 1 0 0 0 3 22a1 1 0 0 0 .51-.14L8 19.14a1 1 0 0 1 .55-.14H19a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3zm1 13a1 1 0 0 1-1 1H8.55a3 3 0 0 0-1.55.43l-3 1.8V6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1z"/></g></g></svg>`
 
@@ -33,19 +33,13 @@ export default function renderPost(post, timelineItemID = null) {
         </div>
         <div class="micro-post-controls">
             ${authenticated ? `
-                <button class="like-button"
-                    title="${post.liked ? "Unlike" : "Like"}"
-                    aria-pressed="${post.liked}"
-                    aria-label="${post.likesCount} likes">
-                    <span class="likes-count">${post.likesCount}</span>
-                    ${post.liked ? heartIconSVG : heartOulineIconSVG}
-                </button>
-            ` : `
-                <span class="likes-count-wrapper" aria-label="${post.likesCount} likes">
-                    <span>${post.likesCount}</span>
-                    ${heartOulineIconSVG}
-                </span>
-            `}
+                <div class="react-btn-wrapper">
+                    <button class="react-button" title="Add reaction">
+                        ${smilingFaceIconSVG}
+                    </button>
+                    <emoji-picker class="dark" hidden></emoji-picker>
+                </div>
+            ` : ""}
             <a class="comments-link"
                 href="/posts/${post.id}"
                 title="Comments"
@@ -92,43 +86,47 @@ export default function renderPost(post, timelineItemID = null) {
         }
     }(contentEl.querySelector("p"))
 
-    const likeButton = /** @type {HTMLButtonElement=} */ (article.querySelector(".like-button"))
-    if (likeButton !== null) {
-        const likesCountEl = likeButton.querySelector(".likes-count")
-
-        const onLikeButtonClick = async () => {
+    const reactButton = /** @type {HTMLButtonElement=} */ (article.querySelector(".react-button"))
+    const emojiPicker = /** @type {HTMLElement=} */ (article.querySelector("emoji-picker"))
+    if (reactButton !== null) {
+        const onReactButtonClick = async () => {
             if (typeof navigator.vibrate === "function") {
                 navigator.vibrate([50])
             }
 
-            likeButton.disabled = true
             try {
-                const out = await togglePostLike(post.id)
+                if (customElements.get("emoji-picker") === undefined) {
+                    await import("https://cdn.skypack.dev/emoji-picker-element")
+                }
 
-                post.likesCount = out.likesCount
-                post.liked = out.liked
-
-                likeButton.title = out.liked ? "Unlike" : "Like"
-                likeButton.setAttribute("aria-pressed", String(out.liked))
-                likeButton.setAttribute("aria-label", out.likesCount + " likes")
-                replaceNode(
-                    likeButton.querySelector("svg"),
-                    el(out.liked ? heartIconSVG : heartOulineIconSVG),
-                )
-                likesCountEl.textContent = String(out.likesCount)
-
-                dispatchEvent(new CustomEvent("postlikecountchange", {
-                    detail: { postID: post.id, ...out },
-                }))
+                emojiPicker.hidden = !emojiPicker.hidden
             } catch (err) {
                 console.error(err)
                 alert(err.message)
-            } finally {
-                likeButton.disabled = false
             }
         }
 
-        likeButton.addEventListener("click", onLikeButtonClick)
+        /**
+         * @param {FocusEvent} ev
+         */
+        const onReactButtonBlur = ev => {
+            if (ev.relatedTarget === null && !reactButton.parentElement.contains(ev.relatedTarget)) {
+                emojiPicker.hidden = true
+            }
+        }
+
+        /**
+         * @param {FocusEvent} ev
+         */
+        const onEmojiPickerBlur = ev => {
+            if (ev.relatedTarget === null && !emojiPicker.parentElement.contains(ev.relatedTarget)) {
+                emojiPicker.hidden = true
+            }
+        }
+
+        reactButton.addEventListener("click", onReactButtonClick)
+        reactButton.addEventListener("focusout", onReactButtonBlur)
+        emojiPicker.addEventListener("blur", onEmojiPickerBlur)
     }
 
     const menuWrapper = article.querySelector(".menu-wrapper")

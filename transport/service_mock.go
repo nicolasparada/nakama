@@ -23,6 +23,9 @@ var _ Service = &ServiceMock{}
 //
 // 		// make and configure a mocked Service
 // 		mockedService := &ServiceMock{
+// 			AddPostReactionFunc: func(ctx context.Context, postID string, emoji string) ([]nakama.PostReaction, error) {
+// 				panic("mock out the AddPostReaction method")
+// 			},
 // 			AuthUserFunc: func(ctx context.Context) (nakama.User, error) {
 // 				panic("mock out the AuthUser method")
 // 			},
@@ -141,6 +144,9 @@ var _ Service = &ServiceMock{}
 //
 // 	}
 type ServiceMock struct {
+	// AddPostReactionFunc mocks the AddPostReaction method.
+	AddPostReactionFunc func(ctx context.Context, postID string, emoji string) ([]nakama.PostReaction, error)
+
 	// AuthUserFunc mocks the AuthUser method.
 	AuthUserFunc func(ctx context.Context) (nakama.User, error)
 
@@ -254,6 +260,15 @@ type ServiceMock struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// AddPostReaction holds details about calls to the AddPostReaction method.
+		AddPostReaction []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// PostID is the postID argument value.
+			PostID string
+			// Emoji is the emoji argument value.
+			Emoji string
+		}
 		// AuthUser holds details about calls to the AuthUser method.
 		AuthUser []struct {
 			// Ctx is the ctx argument value.
@@ -542,6 +557,7 @@ type ServiceMock struct {
 			Reply *protocol.ParsedCredentialAssertionData
 		}
 	}
+	lockAddPostReaction           sync.RWMutex
 	lockAuthUser                  sync.RWMutex
 	lockAuthUserIDFromToken       sync.RWMutex
 	lockCommentStream             sync.RWMutex
@@ -579,6 +595,45 @@ type ServiceMock struct {
 	lockUsers                     sync.RWMutex
 	lockVerifyMagicLink           sync.RWMutex
 	lockWebAuthnLogin             sync.RWMutex
+}
+
+// AddPostReaction calls AddPostReactionFunc.
+func (mock *ServiceMock) AddPostReaction(ctx context.Context, postID string, emoji string) ([]nakama.PostReaction, error) {
+	if mock.AddPostReactionFunc == nil {
+		panic("ServiceMock.AddPostReactionFunc: method is nil but Service.AddPostReaction was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		PostID string
+		Emoji  string
+	}{
+		Ctx:    ctx,
+		PostID: postID,
+		Emoji:  emoji,
+	}
+	mock.lockAddPostReaction.Lock()
+	mock.calls.AddPostReaction = append(mock.calls.AddPostReaction, callInfo)
+	mock.lockAddPostReaction.Unlock()
+	return mock.AddPostReactionFunc(ctx, postID, emoji)
+}
+
+// AddPostReactionCalls gets all the calls that were made to AddPostReaction.
+// Check the length with:
+//     len(mockedService.AddPostReactionCalls())
+func (mock *ServiceMock) AddPostReactionCalls() []struct {
+	Ctx    context.Context
+	PostID string
+	Emoji  string
+} {
+	var calls []struct {
+		Ctx    context.Context
+		PostID string
+		Emoji  string
+	}
+	mock.lockAddPostReaction.RLock()
+	calls = mock.calls.AddPostReaction
+	mock.lockAddPostReaction.RUnlock()
+	return calls
 }
 
 // AuthUser calls AuthUserFunc.

@@ -90,6 +90,31 @@ func (h *handler) togglePostLike(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, out, http.StatusOK)
 }
 
+type addPostReactionReqBody struct {
+	Emoji string `json:"emoji"`
+}
+
+func (h *handler) addPostReaction(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var reqBody addPostReactionReqBody
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		h.respondErr(w, errBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	postID := way.Param(ctx, "post_id")
+	out, err := h.svc.AddPostReaction(ctx, postID, reqBody.Emoji)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.respond(w, out, http.StatusOK)
+}
+
 func (h *handler) togglePostSubscription(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	postID := way.Param(ctx, "post_id")

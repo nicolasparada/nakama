@@ -804,3 +804,24 @@ button[role=switch][aria-checked=true] span {
     color: var(--on-primary);
     outline: none;
 }
+
+.react-btn-wrapper {
+    position: relative;
+}
+
+emoji-picker {
+    --background: var(--surface-1);
+    --border-color: var(--border-color);
+    --button-hover-background: var(--surface-2);
+    --button-active-background: var(--surface-3);
+    --indicator-color: var(--primary);
+    --input-font-color: var(--on-surface);
+    --input-border-color: var(--border-color);
+    --input-border-radius: 1.5rem;
+    --input-line-height: 2rem;
+    --input-padding: .5rem;
+    position: absolute;
+    top: 3.5rem;
+    left: 0;
+    z-index: 1;
+}

@@ -51,6 +51,7 @@ func New(svc transport.Service, logger log.Logger, store storage.Store, cdc *sec
 	api.HandleFunc("GET", "/api/posts/:post_id", h.post)
 	api.HandleFunc("DELETE", "/api/posts/:post_id", h.deletePost)
 	api.HandleFunc("POST", "/api/posts/:post_id/toggle_like", h.togglePostLike)
+	api.HandleFunc("POST", "/api/posts/:post_id/add_reaction", h.addPostReaction)
 	api.HandleFunc("POST", "/api/posts/:post_id/toggle_subscription", h.togglePostSubscription)
 	api.HandleFunc("GET", "/api/timeline", h.timeline)
 	api.HandleFunc("DELETE", "/api/timeline/:timeline_item_id", h.deleteTimelineItem)
