@@ -9,6 +9,7 @@ import renderList from "./list.js"
 import renderPost from "./post.js"
 
 const PAGE_SIZE = 10
+const AUTOCOMPLETE_PAGE_SIZE = 5
 
 const template = document.createElement("template")
 template.innerHTML = /*html*/`
@@ -62,7 +63,7 @@ export default async function renderPostPage(params) {
     const textcomplete = new Textcomplete(editor, [{
         match: /\B@([\-+\w]*)$/,
         search: async (term, cb) => {
-            cb(await fetchUsernames(term, 5))
+            cb(await fetchUsernames(term).then(page => page.items))
         },
         replace: username => `@${username} `,
     }], {})
@@ -304,12 +305,12 @@ function toggleCommentLike(commentID) {
 
 /**
  * @param {string} startingWith
- * @param {number} first
- * @returns {Promise<string[]>}
+ * @param {string|null} after
+ * @returns {Promise<import("../types.js").Page<string>>}
  */
-function fetchUsernames(startingWith, first = 25) {
+function fetchUsernames(startingWith, after = null) {
     if (startingWith === "") {
-        return Promise.resolve([])
+        return Promise.resolve({ items: [], startCursor: null, endCursor: null })
     }
-    return doGet(`/api/usernames?starting_with=${encodeURIComponent(startingWith)}&first=${encodeURIComponent(first)}`)
+    return doGet(`/api/usernames?starting_with=${encodeURIComponent(startingWith)}&first=${encodeURIComponent(AUTOCOMPLETE_PAGE_SIZE)}` + (after !== null ? "&after=" + encodeURIComponent(after) : ""))
 }

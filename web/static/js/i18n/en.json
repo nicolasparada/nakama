@@ -56,7 +56,7 @@
     },
     "searchPage": {
         "heading": "Search",
-        "searchBoxPlacehoder": "Search..."
+        "searchBoxPlaceholder": "Search..."
     },
     "userProfile": {
         "updateAvatarHelp": "Double click to update avatar",

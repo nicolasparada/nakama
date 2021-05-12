@@ -89,47 +89,6 @@ export default function renderPost(post, timelineItemID = null) {
     if (authenticated) {
         const reactButton = /** @type {HTMLButtonElement=} */ (article.querySelector(".react-button"))
         const emojiPicker = /** @type {HTMLElement=} */ (article.querySelector("emoji-picker"))
-        if (reactButton !== null) {
-            const onReactButtonClick = async () => {
-                if (typeof navigator.vibrate === "function") {
-                    navigator.vibrate([50])
-                }
-
-                try {
-                    if (customElements.get("emoji-picker") === undefined) {
-                        await import("https://cdn.skypack.dev/emoji-picker-element")
-                    }
-
-                    emojiPicker.hidden = !emojiPicker.hidden
-                } catch (err) {
-                    console.error(err)
-                    alert(err.message)
-                }
-            }
-
-            /**
-             * @param {FocusEvent} ev
-             */
-            const onReactButtonBlur = ev => {
-                if (ev.relatedTarget === null && !reactButton.parentElement.contains(ev.relatedTarget)) {
-                    emojiPicker.hidden = true
-                }
-            }
-
-            /**
-             * @param {FocusEvent} ev
-             */
-            const onEmojiPickerBlur = ev => {
-                if (ev.relatedTarget === null && !emojiPicker.parentElement.contains(ev.relatedTarget)) {
-                    emojiPicker.hidden = true
-                }
-            }
-
-            reactButton.addEventListener("click", onReactButtonClick)
-            reactButton.addEventListener("focusout", onReactButtonBlur)
-            emojiPicker.addEventListener("blur", onEmojiPickerBlur)
-        }
-
         const menuWrapper = article.querySelector(".menu-wrapper")
         const menuBtn = /** @type {HTMLButtonElement} */ (article.querySelector(".menu-btn"))
         const menu = /** @type {HTMLUListElement} */ (article.querySelector(".menu"))
@@ -141,6 +100,40 @@ export default function renderPost(post, timelineItemID = null) {
         const deleteBtn = menu.querySelector(".delete-btn")
         let menuExpanded = false
         let menuIdx = -1
+        const onReactButtonClick = async () => {
+            if (typeof navigator.vibrate === "function") {
+                navigator.vibrate([50])
+            }
+
+            try {
+                if (customElements.get("emoji-picker") === undefined) {
+                    await import("https://cdn.skypack.dev/emoji-picker-element")
+                }
+
+                emojiPicker.hidden = !emojiPicker.hidden
+            } catch (err) {
+                console.error(err)
+                alert(err.message)
+            }
+        }
+
+        /**
+         * @param {FocusEvent} ev
+         */
+        const onReactButtonBlur = ev => {
+            if (ev.relatedTarget === null || !reactButton.parentElement.contains(ev.relatedTarget)) {
+                emojiPicker.hidden = true
+            }
+        }
+
+        /**
+         * @param {FocusEvent} ev
+         */
+        const onEmojiPickerBlur = ev => {
+            if (ev.relatedTarget === null || !emojiPicker.parentElement.contains(ev.relatedTarget)) {
+                emojiPicker.hidden = true
+            }
+        }
 
         /**
          * @param {boolean} newVal
@@ -262,13 +255,6 @@ export default function renderPost(post, timelineItemID = null) {
             setMenuIdx(idx)
         }
 
-        menuBtn.addEventListener("click", onMenuBtnClick)
-        menuBtn.addEventListener("blur", onBlur)
-        menu.addEventListener("keydown", onMenuKeyDown)
-        for (const menuItem of menuItems) {
-            menuItem.addEventListener("click", onMenuItemClick)
-            menuItem.addEventListener("blur", onBlur)
-        }
 
         const onEditBtnClick = ev => {
             alert("not implemented yet")
@@ -298,6 +284,17 @@ export default function renderPost(post, timelineItemID = null) {
                 console.error(err)
                 alert(err.message)
             })
+        }
+
+        reactButton.addEventListener("click", onReactButtonClick)
+        reactButton.addEventListener("focusout", onReactButtonBlur)
+        emojiPicker.addEventListener("blur", onEmojiPickerBlur)
+        menuBtn.addEventListener("click", onMenuBtnClick)
+        menuBtn.addEventListener("blur", onBlur)
+        menu.addEventListener("keydown", onMenuKeyDown)
+        for (const menuItem of menuItems) {
+            menuItem.addEventListener("click", onMenuItemClick)
+            menuItem.addEventListener("blur", onBlur)
         }
 
         if (post.mine) {
