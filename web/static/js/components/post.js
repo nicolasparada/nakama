@@ -86,221 +86,220 @@ export default function renderPost(post, timelineItemID = null) {
         }
     }(contentEl.querySelector("p"))
 
-    const reactButton = /** @type {HTMLButtonElement=} */ (article.querySelector(".react-button"))
-    const emojiPicker = /** @type {HTMLElement=} */ (article.querySelector("emoji-picker"))
-    if (reactButton !== null) {
-        const onReactButtonClick = async () => {
-            if (typeof navigator.vibrate === "function") {
-                navigator.vibrate([50])
-            }
-
-            try {
-                if (customElements.get("emoji-picker") === undefined) {
-                    await import("https://cdn.skypack.dev/emoji-picker-element")
+    if (authenticated) {
+        const reactButton = /** @type {HTMLButtonElement=} */ (article.querySelector(".react-button"))
+        const emojiPicker = /** @type {HTMLElement=} */ (article.querySelector("emoji-picker"))
+        if (reactButton !== null) {
+            const onReactButtonClick = async () => {
+                if (typeof navigator.vibrate === "function") {
+                    navigator.vibrate([50])
                 }
 
-                emojiPicker.hidden = !emojiPicker.hidden
-            } catch (err) {
+                try {
+                    if (customElements.get("emoji-picker") === undefined) {
+                        await import("https://cdn.skypack.dev/emoji-picker-element")
+                    }
+
+                    emojiPicker.hidden = !emojiPicker.hidden
+                } catch (err) {
+                    console.error(err)
+                    alert(err.message)
+                }
+            }
+
+            /**
+             * @param {FocusEvent} ev
+             */
+            const onReactButtonBlur = ev => {
+                if (ev.relatedTarget === null && !reactButton.parentElement.contains(ev.relatedTarget)) {
+                    emojiPicker.hidden = true
+                }
+            }
+
+            /**
+             * @param {FocusEvent} ev
+             */
+            const onEmojiPickerBlur = ev => {
+                if (ev.relatedTarget === null && !emojiPicker.parentElement.contains(ev.relatedTarget)) {
+                    emojiPicker.hidden = true
+                }
+            }
+
+            reactButton.addEventListener("click", onReactButtonClick)
+            reactButton.addEventListener("focusout", onReactButtonBlur)
+            emojiPicker.addEventListener("blur", onEmojiPickerBlur)
+        }
+
+        const menuWrapper = article.querySelector(".menu-wrapper")
+        const menuBtn = /** @type {HTMLButtonElement} */ (article.querySelector(".menu-btn"))
+        const menu = /** @type {HTMLUListElement} */ (article.querySelector(".menu"))
+        const menuItems = menu.querySelectorAll("[role=menuitem]")
+        const menuItemsLength = menuItems.length
+        const editBtn = menu.querySelector(".edit-btn")
+        const subscriptionToggleBtn = menu.querySelector(".subscription-toggle-btn")
+        const removeBtn = menu.querySelector(".remove-btn")
+        const deleteBtn = menu.querySelector(".delete-btn")
+        let menuExpanded = false
+        let menuIdx = -1
+
+        /**
+         * @param {boolean} newVal
+         */
+        const setMenuExpanded = newVal => {
+            menuExpanded = newVal
+            if (menuExpanded) {
+                menuBtn.setAttribute("aria-expanded", String(menuExpanded))
+            } else {
+                menuBtn.removeAttribute("aria-expanded")
+            }
+            menu.style.display = menuExpanded ? "block" : "none"
+        }
+
+        /**
+         * @param {number} newVal
+         */
+        const setMenuIdx = newVal => {
+            menuIdx = newVal
+            const child = /** @type {HTMLLIElement} */ (menu.children.item(menuIdx))
+            if (child === null) {
+                return
+            }
+
+            const menuItem = child.getAttribute("role") === "menuitem" ? child : /** @type {HTMLElement} */ (child.querySelector("[role=menuitem]"))
+            if (menuItem === null) {
+                return
+            }
+
+            menuItem.focus()
+        }
+
+        /**
+         * @param {Event} ev
+         */
+        const onMenuBtnClick = ev => {
+            setTimeout(() => {
+                if (document.activeElement !== null && !menu.contains(document.activeElement)) {
+                    setMenuExpanded(!menuExpanded)
+                    if (menuExpanded) {
+                        setMenuIdx(0)
+                    }
+                }
+            })
+        }
+
+        const onBlur = () => {
+            setTimeout(() => {
+                if (document.activeElement !== null && !menuWrapper.contains(document.activeElement)) {
+                    setMenuExpanded(false)
+                }
+            })
+        }
+
+        /**
+         * @param {KeyboardEvent} ev
+         */
+        const onMenuKeyDown = ev => {
+            if (ev.key === "Enter") {
+                if (document.activeElement !== null && menu.contains(document.activeElement)) {
+                    const menuItem = /** @type {HTMLElement} */ (document.activeElement)
+                    menuItem.click()
+                }
+                setMenuExpanded(false)
+                menuBtn.focus()
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+
+            if (ev.key === "Escape") {
+                setMenuExpanded(false)
+                menuBtn.focus()
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+
+            if (ev.key === "ArrowUp") {
+                // decrease or go to last if already first
+                setMenuIdx(menuIdx - 1 === -1 ? menuItemsLength - 1 : menuIdx - 1)
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+
+            if (ev.key === "ArrowDown") {
+                // increse or go to first if already last
+                setMenuIdx(menuIdx + 1 === menuItemsLength ? 0 : menuIdx + 1)
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+
+            if (ev.key === "Home") {
+                setMenuIdx(0)
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+
+            if (ev.key === "End") {
+                setMenuIdx(menuItemsLength - 1)
+                ev.preventDefault()
+                ev.stopPropagation()
+                return
+            }
+        }
+
+        /**
+         * @param {Event} ev
+         */
+        const onMenuItemClick = ev => {
+            const idx = Array.from(menuItems).findIndex(item => item === ev.currentTarget)
+            if (idx === -1) {
+                return
+            }
+
+            setMenuIdx(idx)
+        }
+
+        menuBtn.addEventListener("click", onMenuBtnClick)
+        menuBtn.addEventListener("blur", onBlur)
+        menu.addEventListener("keydown", onMenuKeyDown)
+        for (const menuItem of menuItems) {
+            menuItem.addEventListener("click", onMenuItemClick)
+            menuItem.addEventListener("blur", onBlur)
+        }
+
+        const onEditBtnClick = ev => {
+            alert("not implemented yet")
+        }
+
+        const onSubscriptionToggleBtnClick = ev => {
+            togglePostSubscription(post.id).then(out => {
+                post.subscribed = out.subscribed
+                subscriptionToggleBtn.setAttribute("aria-pressed", String(out.subscribed))
+                subscriptionToggleBtn.textContent = out.subscribed ? "Unsubscribe" : "Subscribe"
+            })
+        }
+
+        const onRemoveBtnClick = ev => {
+            removeTimelineItem(timelineItemID).then(() => {
+                article.remove()
+            }).catch(err => {
                 console.error(err)
                 alert(err.message)
-            }
+            })
         }
 
-        /**
-         * @param {FocusEvent} ev
-         */
-        const onReactButtonBlur = ev => {
-            if (ev.relatedTarget === null && !reactButton.parentElement.contains(ev.relatedTarget)) {
-                emojiPicker.hidden = true
-            }
+        const onDeleteBtnClick = ev => {
+            deletePost(post.id).then(() => {
+                article.remove()
+            }).catch(err => {
+                console.error(err)
+                alert(err.message)
+            })
         }
 
-        /**
-         * @param {FocusEvent} ev
-         */
-        const onEmojiPickerBlur = ev => {
-            if (ev.relatedTarget === null && !emojiPicker.parentElement.contains(ev.relatedTarget)) {
-                emojiPicker.hidden = true
-            }
-        }
-
-        reactButton.addEventListener("click", onReactButtonClick)
-        reactButton.addEventListener("focusout", onReactButtonBlur)
-        emojiPicker.addEventListener("blur", onEmojiPickerBlur)
-    }
-
-    const menuWrapper = article.querySelector(".menu-wrapper")
-    const menuBtn = /** @type {HTMLButtonElement} */ (article.querySelector(".menu-btn"))
-    const menu = /** @type {HTMLUListElement} */ (article.querySelector(".menu"))
-    const menuItems = menu.querySelectorAll("[role=menuitem]")
-    const menuItemsLength = menuItems.length
-    const editBtn = menu.querySelector(".edit-btn")
-    const subscriptionToggleBtn = menu.querySelector(".subscription-toggle-btn")
-    const removeBtn = menu.querySelector(".remove-btn")
-    const deleteBtn = menu.querySelector(".delete-btn")
-    let menuExpanded = false
-    let menuIdx = -1
-
-    /**
-     * @param {boolean} newVal
-     */
-    const setMenuExpanded = newVal => {
-        menuExpanded = newVal
-        if (menuExpanded) {
-            menuBtn.setAttribute("aria-expanded", String(menuExpanded))
-        } else {
-            menuBtn.removeAttribute("aria-expanded")
-        }
-        menu.style.display = menuExpanded ? "block" : "none"
-    }
-
-    /**
-     * @param {number} newVal
-     */
-    const setMenuIdx = newVal => {
-        menuIdx = newVal
-        const child = /** @type {HTMLLIElement} */ (menu.children.item(menuIdx))
-        if (child === null) {
-            return
-        }
-
-        const menuItem = child.getAttribute("role") === "menuitem" ? child : /** @type {HTMLElement} */ (child.querySelector("[role=menuitem]"))
-        if (menuItem === null) {
-            return
-        }
-
-        menuItem.focus()
-    }
-
-    /**
-     * @param {Event} ev
-     */
-    const onMenuBtnClick = ev => {
-        setTimeout(() => {
-            if (document.activeElement !== null && !menu.contains(document.activeElement)) {
-                setMenuExpanded(!menuExpanded)
-                if (menuExpanded) {
-                    setMenuIdx(0)
-                }
-            }
-        })
-    }
-
-    const onBlur = () => {
-        setTimeout(() => {
-            if (document.activeElement !== null && !menuWrapper.contains(document.activeElement)) {
-                setMenuExpanded(false)
-            }
-        })
-    }
-
-    /**
-     * @param {KeyboardEvent} ev
-     */
-    const onMenuKeyDown = ev => {
-        if (ev.key === "Enter") {
-            if (document.activeElement !== null && menu.contains(document.activeElement)) {
-                const menuItem = /** @type {HTMLElement} */ (document.activeElement)
-                menuItem.click()
-            }
-            setMenuExpanded(false)
-            menuBtn.focus()
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-
-        if (ev.key === "Escape") {
-            setMenuExpanded(false)
-            menuBtn.focus()
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-
-        if (ev.key === "ArrowUp") {
-            // decrease or go to last if already first
-            setMenuIdx(menuIdx - 1 === -1 ? menuItemsLength - 1 : menuIdx - 1)
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-
-        if (ev.key === "ArrowDown") {
-            // increse or go to first if already last
-            setMenuIdx(menuIdx + 1 === menuItemsLength ? 0 : menuIdx + 1)
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-
-        if (ev.key === "Home") {
-            setMenuIdx(0)
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-
-        if (ev.key === "End") {
-            setMenuIdx(menuItemsLength - 1)
-            ev.preventDefault()
-            ev.stopPropagation()
-            return
-        }
-    }
-
-    /**
-     * @param {Event} ev
-     */
-    const onMenuItemClick = ev => {
-        const idx = Array.from(menuItems).findIndex(item => item === ev.currentTarget)
-        if (idx === -1) {
-            return
-        }
-
-        setMenuIdx(idx)
-    }
-
-    menuBtn.addEventListener("click", onMenuBtnClick)
-    menuBtn.addEventListener("blur", onBlur)
-    menu.addEventListener("keydown", onMenuKeyDown)
-    for (const menuItem of menuItems) {
-        menuItem.addEventListener("click", onMenuItemClick)
-        menuItem.addEventListener("blur", onBlur)
-    }
-
-    const onEditBtnClick = ev => {
-        alert("not implemented yet")
-    }
-
-    const onSubscriptionToggleBtnClick = ev => {
-        togglePostSubscription(post.id).then(out => {
-            post.subscribed = out.subscribed
-            subscriptionToggleBtn.setAttribute("aria-pressed", String(out.subscribed))
-            subscriptionToggleBtn.textContent = out.subscribed ? "Unsubscribe" : "Subscribe"
-        })
-    }
-
-    const onRemoveBtnClick = ev => {
-        removeTimelineItem(timelineItemID).then(() => {
-            article.remove()
-        }).catch(err => {
-            console.error(err)
-            alert(err.message)
-        })
-    }
-
-    const onDeleteBtnClick = ev => {
-        deletePost(post.id).then(() => {
-            article.remove()
-        }).catch(err => {
-            console.error(err)
-            alert(err.message)
-        })
-    }
-
-
-    if (authenticated) {
         if (post.mine) {
             editBtn.addEventListener("click", onEditBtnClick)
             deleteBtn.addEventListener("click", onDeleteBtnClick)
