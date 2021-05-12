@@ -820,6 +820,7 @@ emoji-picker {
     --input-border-radius: 1.5rem;
     --input-line-height: 2rem;
     --input-padding: .5rem;
+    --outline-size: 1px;
     position: absolute;
     top: 3.5rem;
     left: 0;
