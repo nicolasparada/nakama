@@ -3,6 +3,7 @@ package nakama
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -28,18 +29,19 @@ var (
 
 // Post model.
 type Post struct {
-	ID            string    `json:"id"`
-	UserID        string    `json:"-"`
-	Content       string    `json:"content"`
-	SpoilerOf     *string   `json:"spoilerOf"`
-	NSFW          bool      `json:"NSFW"`
-	LikesCount    int       `json:"likesCount"`
-	CommentsCount int       `json:"commentsCount"`
-	CreatedAt     time.Time `json:"createdAt"`
-	User          *User     `json:"user,omitempty"`
-	Mine          bool      `json:"mine"`
-	Liked         bool      `json:"liked"`
-	Subscribed    bool      `json:"subscribed"`
+	ID             string     `json:"id"`
+	UserID         string     `json:"-"`
+	Content        string     `json:"content"`
+	SpoilerOf      *string    `json:"spoilerOf"`
+	NSFW           bool       `json:"NSFW"`
+	LikesCount     int        `json:"likesCount"`
+	ReactionCounts []Reaction `json:"reactionCounts"`
+	CommentsCount  int        `json:"commentsCount"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	User           *User      `json:"user,omitempty"`
+	Mine           bool       `json:"mine"`
+	Liked          bool       `json:"liked"`
+	Subscribed     bool       `json:"subscribed"`
 }
 
 // ToggleLikeOutput response.
@@ -174,6 +176,7 @@ func (s *Service) Posts(ctx context.Context, username string, last uint64, befor
 		, posts.spoiler_of
 		, posts.nsfw
 		, posts.likes_count
+		, posts.reaction_counts
 		, posts.comments_count
 		, posts.created_at
 		{{ if .auth }}
@@ -219,12 +222,14 @@ func (s *Service) Posts(ctx context.Context, username string, last uint64, befor
 	var pp Posts
 	for rows.Next() {
 		var p Post
+		var rawReactionCounts []byte
 		dest := []interface{}{
 			&p.ID,
 			&p.Content,
 			&p.SpoilerOf,
 			&p.NSFW,
 			&p.LikesCount,
+			&rawReactionCounts,
 			&p.CommentsCount,
 			&p.CreatedAt,
 		}
@@ -234,6 +239,13 @@ func (s *Service) Posts(ctx context.Context, username string, last uint64, befor
 
 		if err = rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("could not scan post: %w", err)
+		}
+
+		if rawReactionCounts != nil {
+			err = json.Unmarshal(rawReactionCounts, &p.ReactionCounts)
+			if err != nil {
+				return nil, fmt.Errorf("could not json unmarshall post reaction counts: %w", err)
+			}
 		}
 
 		pp = append(pp, p)
@@ -255,7 +267,14 @@ func (s *Service) Post(ctx context.Context, postID string) (Post, error) {
 
 	uid, auth := ctx.Value(KeyAuthUserID).(string)
 	query, args, err := buildQuery(`
-		SELECT posts.id, content, spoiler_of, nsfw, likes_count, comments_count, created_at
+		SELECT posts.id
+		, posts.content
+		, posts.spoiler_of
+		, posts.nsfw
+		, posts.likes_count
+		, posts.reaction_counts
+		, posts.comments_count
+		, posts.created_at
 		, users.username, users.avatar
 		{{if .auth}}
 		, posts.user_id = @uid AS mine
@@ -280,6 +299,7 @@ func (s *Service) Post(ctx context.Context, postID string) (Post, error) {
 	}
 
 	var u User
+	var rawReactionCounts []byte
 	var avatar sql.NullString
 	dest := []interface{}{
 		&p.ID,
@@ -287,6 +307,7 @@ func (s *Service) Post(ctx context.Context, postID string) (Post, error) {
 		&p.SpoilerOf,
 		&p.NSFW,
 		&p.LikesCount,
+		&rawReactionCounts,
 		&p.CommentsCount,
 		&p.CreatedAt,
 		&u.Username,
@@ -301,7 +322,14 @@ func (s *Service) Post(ctx context.Context, postID string) (Post, error) {
 	}
 
 	if err != nil {
-		return p, fmt.Errorf("could not query select post: %w", err)
+		return p, fmt.Errorf("could not sql query select post: %w", err)
+	}
+
+	if rawReactionCounts != nil {
+		err = json.Unmarshal(rawReactionCounts, &p.ReactionCounts)
+		if err != nil {
+			return p, fmt.Errorf("could not json unmarshall post reaction counts: %w", err)
+		}
 	}
 
 	u.AvatarURL = s.avatarURL(avatar)

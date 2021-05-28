@@ -14,6 +14,7 @@
     --on-secondary: hsl(var(--hue), 0%, 0%);
     --on-error: hsl(var(--hue), 0%, 0%);
     --on-surface-muted: hsla(var(--hue), 100%, 100%, .6);
+    --surface-primary: hsl(var(--hue), 50%, 10%);
     --box-shadow: 0 0 .25rem rgba(0, 0, 0, .38);
 
     box-sizing: border-box;
@@ -160,14 +161,13 @@ button {
     padding: 0 1.5rem;
     border: none;
     border-radius: 1.5rem;
-    display: inline-flex;
+    display: grid;
+    grid-auto-flow: column dense;
     align-items: center;
+    justify-content: center;
+    gap: .5rem;
     touch-action: manipulation;
     user-select: none;
-}
-
-button > * + * {
-    margin-left: .5rem;
 }
 
 button:hover {
@@ -821,8 +821,28 @@ emoji-picker {
     --input-line-height: 2rem;
     --input-padding: .5rem;
     --outline-size: 1px;
+    border-radius: 1.5rem;
+    overflow: hidden;
     position: absolute;
     top: 3.5rem;
     left: 0;
     z-index: 1;
+}
+
+.btn-group {
+    display: grid;
+    grid-auto-flow: column;
+    gap: .5rem;
+}
+
+.reactions button,
+.react-button {
+    padding: 0 .5rem;
+    height: 2rem;
+}
+
+.post-reaction-count[aria-pressed="true"] {
+    background-color: var(--surface-primary);
+    border: 2px solid var(--primary);
+    color: var(--on-surface);
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -62,6 +63,8 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 		, posts.spoiler_of
 		, posts.nsfw
 		, posts.likes_count
+		, posts.reaction_counts
+		, reactions.user_reactions
 		, posts.comments_count
 		, posts.created_at
 		, posts.user_id = @uid AS post_mine
@@ -76,6 +79,13 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 			ON likes.user_id = @uid AND likes.post_id = posts.id
 		LEFT JOIN post_subscriptions AS subscriptions
 			ON subscriptions.user_id = @uid AND subscriptions.post_id = posts.id
+		LEFT JOIN (
+			SELECT user_id
+			, post_id
+			, json_agg(json_build_object('reaction', reaction, 'type', type)) AS user_reactions
+			FROM post_reactions
+			GROUP BY user_id, post_id
+		) AS reactions ON reactions.user_id = @uid AND reactions.post_id = posts.id
 		WHERE timeline.user_id = @uid
 		{{ if and .beforePostID .beforeCreatedAt }}
 			AND posts.created_at <= @beforeCreatedAt
@@ -106,6 +116,8 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 	for rows.Next() {
 		var ti TimelineItem
 		var p Post
+		var rawReactionCounts []byte
+		var rawUserReactions []byte
 		var u User
 		var avatar sql.NullString
 		if err = rows.Scan(
@@ -115,6 +127,8 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 			&p.SpoilerOf,
 			&p.NSFW,
 			&p.LikesCount,
+			&rawReactionCounts,
+			&rawUserReactions,
 			&p.CommentsCount,
 			&p.CreatedAt,
 			&p.Mine,
@@ -124,6 +138,32 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 			&avatar,
 		); err != nil {
 			return nil, fmt.Errorf("could not scan timeline item: %w", err)
+		}
+
+		if rawReactionCounts != nil {
+			err = json.Unmarshal(rawReactionCounts, &p.ReactionCounts)
+			if err != nil {
+				return nil, fmt.Errorf("could not json unmarshall post reaction counts: %w", err)
+			}
+		}
+
+		if rawUserReactions != nil {
+			var userReactions []struct {
+				Reaction string `json:"reaction"`
+				Type     string `json:"type"`
+			}
+			err = json.Unmarshal(rawUserReactions, &userReactions)
+			if err != nil {
+				return nil, fmt.Errorf("could not json unmarshall user post reactions: %w", err)
+			}
+
+			for i, rc := range p.ReactionCounts {
+				for _, ur := range userReactions {
+					if rc.Type == ur.Type && rc.Reaction == ur.Reaction {
+						p.ReactionCounts[i].Reacted = true
+					}
+				}
+			}
 		}
 
 		u.AvatarURL = s.avatarURL(avatar)

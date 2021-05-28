@@ -26,12 +26,21 @@
  */
 
 /**
+ * @typedef {object} ReactionCount
+ * @property {"emoji"|"custom"} type
+ * @property {string} reaction
+ * @property {number} count
+ * @property {boolean} reacted
+ */
+
+/**
  * @typedef Post
  * @property {string} id
  * @property {string} content
  * @property {boolean} NSFW
  * @property {string=} spoilerOf
  * @property {number} likesCount
+ * @property {ReactionCount[]} reactionCounts
  * @property {number} commentsCount
  * @property {string|Date} createdAt
  * @property {User=} user

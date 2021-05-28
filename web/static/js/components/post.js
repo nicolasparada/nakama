@@ -33,6 +33,16 @@ export default function renderPost(post, timelineItemID = null) {
         </div>
         <div class="micro-post-controls">
             ${authenticated ? `
+                ${Array.isArray(post.reactionCounts) ? `
+                    <div class="btn-group reactions">
+                        ${post.reactionCounts.map(r => `
+                            <button class="post-reaction-count"${r.reacted ? ` aria-pressed="true"` : ""}>
+                                <span>${r.type === "emoji" ? r.reaction : ""}</span>
+                                <span>${r.count}</span>
+                            </button>
+                        `).join("\n")}
+                    </div>
+                ` : ""}
                 <div class="react-btn-wrapper">
                     <button class="react-button" title="Add reaction">
                         ${smilingFaceIconSVG}
@@ -133,6 +143,27 @@ export default function renderPost(post, timelineItemID = null) {
             if (ev.relatedTarget === null || !emojiPicker.parentElement.contains(ev.relatedTarget)) {
                 emojiPicker.hidden = true
             }
+        }
+
+        /**
+         * @param {KeyboardEvent} ev
+         */
+        const onEmojiPickerParentKeydown = ev => {
+            if (ev.key === "Escape") {
+                emojiPicker.hidden = true
+            }
+        }
+
+        /**
+         * @param {CustomEvent} ev
+         */
+        const onEmojiPickerEmojiClick = ev => {
+            const emoji = ev.detail.unicode
+            addPostReaction(post.id, emoji).then(out => {
+                console.log("new reaction:", out)
+            }).catch(console.error).finally(() => {
+                emojiPicker.hidden = true
+            })
         }
 
         /**
@@ -289,6 +320,8 @@ export default function renderPost(post, timelineItemID = null) {
         reactButton.addEventListener("click", onReactButtonClick)
         reactButton.addEventListener("focusout", onReactButtonBlur)
         emojiPicker.addEventListener("blur", onEmojiPickerBlur)
+        emojiPicker.parentElement.addEventListener("keydown", onEmojiPickerParentKeydown)
+        emojiPicker.addEventListener("emoji-click", onEmojiPickerEmojiClick)
         menuBtn.addEventListener("click", onMenuBtnClick)
         menuBtn.addEventListener("blur", onBlur)
         menu.addEventListener("keydown", onMenuKeyDown)
@@ -314,10 +347,11 @@ export default function renderPost(post, timelineItemID = null) {
 
 /**
  * @param {string} postID
+ * @param {string} emoji
  * @returns {Promise<import("../types.js").ToggleLikeOutput>}
  */
-function togglePostLike(postID) {
-    return doPost(`/api/posts/${encodeURIComponent(postID)}/toggle_like`)
+function addPostReaction(postID, emoji) {
+    return doPost(`/api/posts/${encodeURIComponent(postID)}/add_reaction`, { emoji })
 }
 
 /**

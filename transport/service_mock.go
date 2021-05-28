@@ -145,7 +145,7 @@ var _ Service = &ServiceMock{}
 // 	}
 type ServiceMock struct {
 	// AddPostReactionFunc mocks the AddPostReaction method.
-	AddPostReactionFunc func(ctx context.Context, postID string, emoji string) ([]nakama.PostReaction, error)
+	AddPostReactionFunc func(ctx context.Context, postID string, emoji string) ([]nakama.Reaction, error)
 
 	// AuthUserFunc mocks the AuthUser method.
 	AuthUserFunc func(ctx context.Context) (nakama.User, error)
@@ -598,7 +598,7 @@ type ServiceMock struct {
 }
 
 // AddPostReaction calls AddPostReactionFunc.
-func (mock *ServiceMock) AddPostReaction(ctx context.Context, postID string, emoji string) ([]nakama.PostReaction, error) {
+func (mock *ServiceMock) AddPostReaction(ctx context.Context, postID string, emoji string) ([]nakama.Reaction, error) {
 	if mock.AddPostReactionFunc == nil {
 		panic("ServiceMock.AddPostReactionFunc: method is nil but Service.AddPostReaction was just called")
 	}
