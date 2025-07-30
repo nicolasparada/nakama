@@ -1,6 +1,7 @@
 package mailing
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/mail"
 
@@ -36,6 +37,16 @@ func (s *SendgridSender) Send(to, subject, html, text string) error {
 	}
 
 	if resp.StatusCode >= 400 {
+		var respBody struct {
+			Errors []struct {
+				Message string  `json:"message"`
+				Field   *string `json:"field"`
+				Help    *string `json:"help"`
+			} `json:"errors"`
+		}
+		if err := json.Unmarshal([]byte(resp.Body), &respBody); err == nil && len(respBody.Errors) > 0 {
+			return fmt.Errorf("could not send mail; got status_code=%d errors=%v", resp.StatusCode, respBody.Errors)
+		}
 		return fmt.Errorf("could not send mail; got status_code=%d headers=%+v body=%v", resp.StatusCode, resp.Headers, resp.Body)
 	}
 
