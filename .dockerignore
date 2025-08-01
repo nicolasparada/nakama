@@ -1,9 +1,0 @@
-/cockroach-data/**
-/grafana-data/**
-/loki-data/**
-/prometheus-data/**
-/letsencrypt
-/web/app/node_modules/**
-/.env
-/nakama
-*.exe
