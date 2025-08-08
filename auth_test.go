@@ -63,7 +63,7 @@ func TestService_SendMagicLink(t *testing.T) {
 			DB:     testDB,
 			Origin: origin,
 			Sender: &mailing.SenderMock{
-				SendFunc: func(to, subject, html, text string) error {
+				SendFunc: func(_ context.Context, to, subject, html, text string) error {
 					return errInternal
 				},
 			},
@@ -75,7 +75,7 @@ func TestService_SendMagicLink(t *testing.T) {
 
 	t.Run("ok", func(t *testing.T) {
 		senderMock := &mailing.SenderMock{
-			SendFunc: func(to, subject, html, text string) error {
+			SendFunc: func(_ context.Context, to, subject, html, text string) error {
 				return nil
 			},
 		}

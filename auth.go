@@ -185,7 +185,7 @@ func (s *Service) SendMagicLink(ctx context.Context, in SendMagicLink) error {
 	} else {
 		subject = "Login to Nakama"
 	}
-	err = s.Sender.Send(in.Email, subject, b.String(), magicLink.String())
+	err = s.Sender.Send(ctx, in.Email, subject, b.String(), magicLink.String())
 	if err != nil {
 		return fmt.Errorf("could not send magic link: %w", err)
 	}

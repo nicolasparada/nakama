@@ -4,6 +4,7 @@ package mailing
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/mail"
 
@@ -12,7 +13,7 @@ import (
 
 // Sender sends mails.
 type Sender interface {
-	Send(to, subject, html, text string) error
+	Send(ctx context.Context, to, subject, html, text string) error
 }
 
 func buildBody(from, to mail.Address, subject, html, text string) ([]byte, error) {

@@ -60,7 +60,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		execSchema, _       = strconv.ParseBool(env("EXEC_SCHEMA", "false"))
 		tokenKey            = env("TOKEN_KEY", "supersecretkeyyoushouldnotcommit")
 		natsURL             = env("NATS_URL", nats.DefaultURL)
-		sendgridAPIKey      = os.Getenv("SENDGRID_API_KEY")
+		resendAPIKey        = os.Getenv("RESEND_API_KEY")
 		smtpHost            = env("SMTP_HOST", "smtp.mailtrap.io")
 		smtpPort, _         = strconv.Atoi(env("SMTP_PORT", "25"))
 		smtpUsername        = os.Getenv("SMTP_USERNAME")
@@ -89,7 +89,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 	fs := flag.NewFlagSet("nakama", flag.ExitOnError)
 	fs.Usage = func() {
 		fs.PrintDefaults()
-		fmt.Println("\nDon't forget to set TOKEN_KEY, and SENDGRID_API_KEY or SMTP_USERNAME and SMTP_PASSWORD for real usage.")
+		fmt.Println("\nDon't forget to set TOKEN_KEY, and RESEND_API_KEY or SMTP_USERNAME and SMTP_PASSWORD for real usage.")
 	}
 	fs.IntVar(&port, "port", port, "Port in which this server will run")
 	fs.StringVar(&originStr, "origin", originStr, "URL origin for this service")
@@ -154,9 +154,9 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 
 	var sender mailing.Sender
 	sendFrom := "no-reply@" + origin.Hostname()
-	if sendgridAPIKey != "" {
-		_ = logger.Log("mailing_implementation", "sendgrid")
-		sender = mailing.NewSendgridSender(sendFrom, sendgridAPIKey)
+	if resendAPIKey != "" {
+		_ = logger.Log("mailing_implementation", "resend")
+		sender = mailing.NewResend(sendFrom, resendAPIKey)
 	} else if smtpUsername != "" && smtpPassword != "" {
 		_ = logger.Log("mailing_implementation", "smtp")
 		sender = mailing.NewSMTPSender(

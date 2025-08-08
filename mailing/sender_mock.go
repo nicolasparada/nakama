@@ -4,6 +4,7 @@
 package mailing
 
 import (
+	"context"
 	"sync"
 )
 
@@ -17,7 +18,7 @@ var _ Sender = &SenderMock{}
 //
 //		// make and configure a mocked Sender
 //		mockedSender := &SenderMock{
-//			SendFunc: func(to string, subject string, html string, text string) error {
+//			SendFunc: func(ctx context.Context, to string, subject string, html string, text string) error {
 //				panic("mock out the Send method")
 //			},
 //		}
@@ -28,12 +29,14 @@ var _ Sender = &SenderMock{}
 //	}
 type SenderMock struct {
 	// SendFunc mocks the Send method.
-	SendFunc func(to string, subject string, html string, text string) error
+	SendFunc func(ctx context.Context, to string, subject string, html string, text string) error
 
 	// calls tracks calls to the methods.
 	calls struct {
 		// Send holds details about calls to the Send method.
 		Send []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
 			// To is the to argument value.
 			To string
 			// Subject is the subject argument value.
@@ -48,13 +51,15 @@ type SenderMock struct {
 }
 
 // Send calls SendFunc.
-func (mock *SenderMock) Send(to string, subject string, html string, text string) error {
+func (mock *SenderMock) Send(ctx context.Context, to string, subject string, html string, text string) error {
 	callInfo := struct {
+		Ctx     context.Context
 		To      string
 		Subject string
 		HTML    string
 		Text    string
 	}{
+		Ctx:     ctx,
 		To:      to,
 		Subject: subject,
 		HTML:    html,
@@ -69,7 +74,7 @@ func (mock *SenderMock) Send(to string, subject string, html string, text string
 		)
 		return errOut
 	}
-	return mock.SendFunc(to, subject, html, text)
+	return mock.SendFunc(ctx, to, subject, html, text)
 }
 
 // SendCalls gets all the calls that were made to Send.
@@ -77,12 +82,14 @@ func (mock *SenderMock) Send(to string, subject string, html string, text string
 //
 //	len(mockedSender.SendCalls())
 func (mock *SenderMock) SendCalls() []struct {
+	Ctx     context.Context
 	To      string
 	Subject string
 	HTML    string
 	Text    string
 } {
 	var calls []struct {
+		Ctx     context.Context
 		To      string
 		Subject string
 		HTML    string

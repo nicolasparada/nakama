@@ -1,6 +1,7 @@
 package mailing
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"net/smtp"
@@ -23,7 +24,7 @@ func NewSMTPSender(from, host string, port int, username, password string) *SMTP
 }
 
 // Send an email to the given email address.
-func (s *SMTPSender) Send(to, subject, html, text string) error {
+func (s *SMTPSender) Send(_ context.Context, to, subject, html, text string) error {
 	toAddr := mail.Address{Address: to}
 	b, err := buildBody(s.From, toAddr, subject, html, text)
 	if err != nil {

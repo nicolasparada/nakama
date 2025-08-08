@@ -1,6 +1,7 @@
 package mailing
 
 import (
+	"context"
 	"net/mail"
 
 	"github.com/go-kit/log"
@@ -21,7 +22,7 @@ func NewLogSender(from string, l log.Logger) *LogSender {
 }
 
 // Send will just log the email.
-func (s *LogSender) Send(to, subject, html, text string) error {
+func (s *LogSender) Send(_ context.Context, to, subject, html, text string) error {
 	toAddr := mail.Address{Address: to}
 	b, err := buildBody(s.From, toAddr, subject, html, text)
 	if err != nil {
