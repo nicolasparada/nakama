@@ -1,0 +1,35 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <article>
+        <h1>{{.Publication.Title}}</h1>
+        <p>{{.Publication.Description}}</p>
+        <p><small>Created by <a href="/u/{{.Publication.User.Username}}">{{.Publication.User.Username}}</a></small></p>
+    </article>
+
+    <h2>Chapters</h2>
+
+    {{if .LoggedIn}}
+    <div>
+        <a href="/publications/{{.Publication.ID}}/chapters/new" role="button">Add Chapter</a>
+    </div>
+    <br>
+    {{end}}
+
+    {{if not .Chapters.Items}}
+        <p>No chapters yet</p>
+    {{else}}
+        <div role="feed">
+            {{range .Chapters.Items}}
+                <article>
+                    <span>#{{.Number}}</span>
+                    <h3><a href="/publications/{{$.Publication.ID}}/chapters/{{.ID}}">{{.Title}}</a></h3>
+                    <p>{{.Content}}</p>
+                </article>
+            {{end}}
+        </div>
+    {{end}}
+
+</main>
+{{end}}

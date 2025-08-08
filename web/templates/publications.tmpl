@@ -1,0 +1,31 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>{{strings.Title .Kind.Plural}}</h1>
+
+    {{if .LoggedIn}}
+    <div>
+        <a href="/publications/new?kind={{.Kind}}" role="button">Create {{strings.Title .Kind.String}}</a>
+    </div>
+
+    <br>
+    {{end}}
+
+    {{if not .Publications.Items}}
+        <p>No {{.Kind.Plural}} yet</p>
+    {{else}}
+        <div role="feed">
+            {{range .Publications.Items}}
+                <article>
+                    <h2>
+                        <a href="/publications/{{.ID}}">{{.Title}}</a>
+                    </h2>
+                    <p>{{.Description}}</p>
+                    <p><small>Created by <a href="/u/{{.User.Username}}">{{.User.Username}}</a></small></p>
+                </article>
+            {{end}}
+        </div>
+    {{end}}
+</main>
+{{end}}

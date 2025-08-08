@@ -1,0 +1,29 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>New {{strings.Title .Kind.String}}</h1>
+
+    <form action="/publications" method="post">
+        <input type="hidden" name="kind" value="{{.Kind}}">
+
+        <div>
+            <label for="title">Title:</label>
+            <input type="text" name="title" id="title" placeholder="Enter {{.Kind.String}} title" autocomplete="off" required>
+        </div>
+
+        <div>
+            <label for="description">Description:</label>
+            <textarea name="description" id="description" placeholder="Enter {{.Kind.String}} description" required></textarea>
+        </div>
+
+        {{with .Error}}
+        <div class="error">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+
+        <button>Create {{strings.Title .Kind.String}}</button>
+    </form>
+</main>
+{{end}}

@@ -1,0 +1,36 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <hgroup>
+        <h1>New Chapter</h1>
+        <p>({{strings.Title .Publication.Kind.String}}: <a href="/publications/{{.Publication.ID}}">{{.Publication.Title}}</a>)</p>
+    </hgroup>
+
+    <form action="/publications/{{.Publication.ID}}/chapters" method="post">
+        <div>
+            <label for="number">Chapter Number:</label>
+            <input type="number" name="number" id="number" placeholder="Enter chapter number" min="1" required
+                   value="{{.SuggestedNumber}}" autocomplete="off">
+        </div>
+
+        <div>
+            <label for="title">Title:</label>
+            <input type="text" name="title" id="title" placeholder="Enter chapter title" autocomplete="off" required>
+        </div>
+
+        <div>
+            <label for="content">Content:</label>
+            <textarea name="content" id="content" placeholder="Enter chapter content" required></textarea>
+        </div>
+
+        {{with .Error}}
+        <div class="error">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+
+        <button>Publish Chapter</button>
+    </form>
+</main>
+{{end}}

@@ -1,0 +1,52 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>Home</h1>
+
+    {{if .LoggedIn}}
+    <form action="/posts" method="post" enctype="multipart/form-data">
+        <div>
+            <textarea name="content" placeholder="Share something..." aria-label="Content"></textarea>
+        </div>
+
+        <div>
+            <label for="attachments">Attach an image:</label>
+            <input type="file" name="attachments" id="attachments" accept="image/*" multiple>
+        </div>
+
+        {{with .Error}}
+        <div class="error">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+
+        <button>Post</button>
+    </form>
+
+    <br>
+    {{end}}
+
+    {{if not .Posts.Items}}
+        <p>No posts available</p>
+    {{else}}
+        <div role="feed">
+            {{range .Posts.Items}}
+                <article class="card">
+                    <p>{{.Content}}</p>
+
+                    {{if .Attachments}}
+                        <div class="attachments">
+                            {{range .Attachments}}
+                                <img src="http://localhost:9000/post-attachments/{{.Path}}" alt="Attachment" width="{{.Width}}" height="{{.Height}}">
+                            {{end}}
+                        </div>
+                    {{end}}
+                    
+                    <p><small>Posted by <a href="/u/{{.User.Username}}">{{.User.Username}}</a> at <a href="/p/{{.ID}}"><time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time></a></small></p>
+                </article>
+            {{end}}
+        </div>
+    {{end}}
+</main>
+{{end}}

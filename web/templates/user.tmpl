@@ -1,0 +1,30 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>{{.User.Username}}</h1>
+    <p>Joined on <time datetime='{{.User.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.User.CreatedAt.Format "2006-01-02 15:04:05"}}</time></p>
+    
+    {{if .User.Relationship}}
+        {{if .User.Relationship.FollowsYou}}
+            <mark>follows you</mark>
+        {{end}}
+        
+        {{if and .LoggedIn (not .User.Relationship.IsMe)}}
+            <form method="post" action="/users/{{.User.ID}}/toggle-follow">
+                <button role="switch" aria-pressed="{{.User.Relationship.FollowedByYou}}">
+                    {{if .User.Relationship.FollowedByYou}}
+                        Unfollow
+                    {{else}}
+                        Follow
+                    {{end}}
+                </button>
+            </form>
+        {{end}}
+        
+        {{if .User.Relationship.IsMe}}
+            <a href="/users/{{.User.ID}}/edit">Edit Profile</a>
+        {{end}}
+    {{end}}
+</main>
+{{end}}
