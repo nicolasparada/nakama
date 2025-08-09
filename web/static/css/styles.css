@@ -22,14 +22,18 @@
     --secondary-hover: oklch(0.65 0.02 270); /* Secondary hover state */
     
     /* Status colors */
-    --success: oklch(0.65 0.15 145);        /* Success - green */
-    --success-bg: oklch(0.25 0.08 145);     /* Success background */
-    --info: oklch(0.70 0.15 200);           /* Info - cyan */
-    --info-bg: oklch(0.25 0.08 200);        /* Info background */
-    --warning: oklch(0.75 0.15 80);         /* Warning - yellow */
-    --warning-bg: oklch(0.25 0.08 80);      /* Warning background */
-    --error: oklch(0.65 0.20 25);           /* Error - red */
-    --error-bg: oklch(0.25 0.10 25);        /* Error background */
+    --success: oklch(0.70 0.12 145);        /* Success - softer green */
+    --success-bg: oklch(0.20 0.06 145);     /* Success background - much subtler */
+    --success-border: oklch(0.35 0.08 145); /* Success border - subtle contrast */
+    --info: oklch(0.70 0.12 200);           /* Info - softer cyan */
+    --info-bg: oklch(0.20 0.06 200);        /* Info background - much subtler */
+    --info-border: oklch(0.35 0.08 200);    /* Info border - subtle contrast */
+    --warning: oklch(0.75 0.12 80);         /* Warning - softer yellow */
+    --warning-bg: oklch(0.20 0.06 80);      /* Warning background - much subtler */
+    --warning-border: oklch(0.35 0.08 80);  /* Warning border - subtle contrast */
+    --error: oklch(0.70 0.15 15);           /* Error - softer red */
+    --error-bg: oklch(0.20 0.06 15);        /* Error background - much subtler */
+    --error-border: oklch(0.35 0.08 15);    /* Error border - subtle contrast */
     
     /* Spacing scale */
     --space-xs: 0.25rem;         /* 4px */
@@ -357,5 +361,17 @@ body {
         padding: var(--space-lg);
         background-color: var(--surface-0);
         overflow: auto;
+    }
+}
+
+.error {
+    background-color: var(--error-bg);
+    border: 1px solid var(--error-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin: var(--space-lg) 0;
+
+    p {
+        white-space: pre-wrap;
     }
 }

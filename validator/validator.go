@@ -1,5 +1,7 @@
 package validator
 
+import "strings"
+
 type Validator struct {
 	Errors map[string][]string
 }
@@ -37,7 +39,14 @@ func (v *Validator) All(field string) []string {
 
 func (v *Validator) Error() string {
 	if v.HasErrors() {
-		return "Validation errors occurred"
+		var s string
+		for field, msgs := range v.Errors {
+			s += field + ": \n"
+			for _, msg := range msgs {
+				s += "\t- " + msg + "\n"
+			}
+		}
+		return strings.TrimSpace(s)
 	}
 	return ""
 }
