@@ -42,11 +42,14 @@ function AccessCallbackPage() {
 
             setErr(err)
 
+            setLocalAuth(null)
+            setAuth(null)
+            
             if (data.has("retry_endpoint") && isRetriableError(err)) {
                 setRetryEndpoint(new URL(decodeURIComponent(data.get("retry_endpoint")), location.origin))
                 return
             }
-
+            
             return
         }
 
