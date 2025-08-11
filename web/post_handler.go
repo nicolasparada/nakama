@@ -50,6 +50,7 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	in := types.CreatePost{
 		Content:     r.PostFormValue("content"),
+		IsR18:       r.PostFormValue("is_r18") == "on",
 		Attachments: attachments,
 	}
 	_, err := h.Service.CreatePost(ctx, in)

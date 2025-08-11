@@ -15,7 +15,7 @@ type Minio struct {
 	baseCtx        context.Context
 	cleanupTimeout time.Duration
 	client         *minio.Client
-	errChan        chan error
+	errs           chan error
 }
 
 func New(ctx context.Context, client *minio.Client, cleanupTimeout time.Duration) *Minio {
@@ -23,8 +23,12 @@ func New(ctx context.Context, client *minio.Client, cleanupTimeout time.Duration
 		baseCtx:        ctx,
 		cleanupTimeout: cleanupTimeout,
 		client:         client,
-		errChan:        make(chan error, 1),
+		errs:           make(chan error, 1),
 	}
+}
+
+func (m *Minio) Errs() <-chan error {
+	return m.errs
 }
 
 func (m *Minio) UploadMany(ctx context.Context, bucket string, files []types.Attachment) (func(), error) {
@@ -89,7 +93,7 @@ func (m *Minio) Upload(ctx context.Context, bucket string, file types.Attachment
 		if err := m.client.RemoveObject(ctx, bucket, file.Path, minio.RemoveObjectOptions{
 			VersionID: info.VersionID,
 		}); err != nil {
-			m.errChan <- fmt.Errorf("remove object %s: %w", file.Path, err)
+			m.errs <- fmt.Errorf("remove object %s: %w", file.Path, err)
 		}
 	}, nil
 }

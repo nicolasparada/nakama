@@ -17,6 +17,7 @@ require (
 	github.com/rs/xid v1.6.0
 	golang.org/x/sync v0.16.0
 	golang.org/x/text v0.28.0
+	mvdan.cc/xurls/v2 v2.6.0
 )
 
 require (

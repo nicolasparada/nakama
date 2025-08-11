@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
+	"strings"
 	"syscall"
+	"unicode/utf8"
 
 	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/errs"
 	"github.com/nicolasparada/nakama/validator"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"mvdan.cc/xurls/v2"
 )
 
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any, statusCode int) {
@@ -136,10 +140,163 @@ var funcMap = template.FuncMap{
 	"strings": func() stringsModule {
 		return stringsModule{}
 	},
+	"plus":    plus,
+	"linkify": linkify,
 }
 
 type stringsModule struct{}
 
 func (s stringsModule) Title(str string) string {
 	return cases.Title(language.English).String(str)
+}
+
+func plus(args ...any) (any, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+
+	if len(args) == 1 {
+		return args[0], nil
+	}
+
+	switch v := args[0].(type) {
+	case int:
+		for _, arg := range args[1:] {
+			n, ok := arg.(int)
+			if !ok {
+				return nil, fmt.Errorf("expected int argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	case int32:
+		for _, arg := range args[1:] {
+			n, ok := arg.(int32)
+			if !ok {
+				return nil, fmt.Errorf("expected int32 argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	case int64:
+		for _, arg := range args[1:] {
+			n, ok := arg.(int64)
+			if !ok {
+				return nil, fmt.Errorf("expected int64 argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	case uint32:
+		for _, arg := range args[1:] {
+			n, ok := arg.(uint32)
+			if !ok {
+				return nil, fmt.Errorf("expected uint32 argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	case uint64:
+		for _, arg := range args[1:] {
+			n, ok := arg.(uint64)
+			if !ok {
+				return nil, fmt.Errorf("expected uint64 argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	case float64:
+		for _, arg := range args[1:] {
+			n, ok := arg.(float64)
+			if !ok {
+				return nil, fmt.Errorf("expected float64 argument, got %T", arg)
+			}
+			v += n
+		}
+		return v, nil
+	}
+
+	return nil, fmt.Errorf("unsupported argument type")
+}
+
+var (
+	reURL      = xurls.Strict()
+	reMentions = regexp.MustCompile(`(?:^|[^a-zA-Z0-9_-])@([a-zA-Z0-9][a-zA-Z0-9_\.-]*)`)
+)
+
+// linkify converts URLs and @mentions in text to clickable HTML links
+func linkify(text string) template.HTML {
+	if text == "" {
+		return template.HTML("")
+	}
+
+	// First convert URLs to links using the existing reURL regex
+	result := reURL.ReplaceAllStringFunc(text, func(url string) string {
+		return fmt.Sprintf(`<a href="%[1]s" target="_blank" rel="noreferrer noopener" class="primary">%[1]s</a>`, url)
+	})
+
+	// Then convert @mentions to links using the existing reMentions regex
+	result = reMentions.ReplaceAllStringFunc(result, func(match string) string {
+		// Extract the username from the match
+		// The username is everything after the @ symbol
+		atIndex := strings.LastIndex(match, "@")
+		if atIndex == -1 {
+			return match
+		}
+
+		rawUsername := match[atIndex+1:]
+
+		// Clean and validate the username
+		cleanedUsername := cleanMentionUsername(rawUsername)
+		if cleanedUsername == "" || utf8.RuneCountInString(cleanedUsername) > 21 {
+			return match
+		}
+
+		// Check if this mention is part of an email
+		if isPartOfMentionEmail(text, match) {
+			return match
+		}
+
+		// Get the context character(s) before @
+		contextChar := match[:atIndex]
+
+		// Find any trailing punctuation that was removed during cleaning
+		trailingPunctuation := ""
+		if len(rawUsername) > len(cleanedUsername) {
+			trailingPunctuation = rawUsername[len(cleanedUsername):]
+		}
+
+		// Generate the link
+		link := fmt.Sprintf(`<a href="/u/%s" class="primary">@%s</a>`, cleanedUsername, cleanedUsername)
+
+		return contextChar + link + trailingPunctuation
+	})
+
+	return template.HTML(result)
+}
+
+// cleanMentionUsername removes trailing punctuation that's not part of the username
+func cleanMentionUsername(username string) string {
+	// Remove trailing dots that are likely sentence punctuation
+	for len(username) > 0 && username[len(username)-1] == '.' {
+		username = username[:len(username)-1]
+	}
+	return username
+}
+
+// isPartOfMentionEmail checks if the @username is part of an email address
+func isPartOfMentionEmail(text, fullMatch string) bool {
+	// Find the position of the full match in the text
+	pos := strings.Index(text, fullMatch)
+	if pos == -1 {
+		return false
+	}
+
+	// Check if there's another @ character immediately after the username
+	endPos := pos + len(fullMatch)
+	if endPos < len(text) && text[endPos] == '@' {
+		return true
+	}
+
+	return false
 }

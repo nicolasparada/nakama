@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alexedwards/scs/pgxstore"
 	charmlog "github.com/charmbracelet/log"
@@ -28,6 +30,13 @@ func main() {
 }
 
 func run() error {
+	errLogger := slog.New(charmlog.NewWithOptions(os.Stderr, charmlog.Options{
+		ReportTimestamp: true,
+	}))
+	infoLogger := slog.New(charmlog.NewWithOptions(os.Stdout, charmlog.Options{
+		ReportTimestamp: true,
+	}))
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -44,9 +53,14 @@ func run() error {
 		return fmt.Errorf("ping cockroach: %w", err)
 	}
 
+	migrationStart := time.Now()
+	infoLogger.Info("starting cockroach migrations")
+
 	if err := migrator.Migrate(context.Background(), dbPool, cockroach.MigrationsFS); err != nil {
 		return fmt.Errorf("migrate cockroach schema: %w", err)
 	}
+
+	infoLogger.Info("finished cockroach migrations", "took", time.Since(migrationStart))
 
 	minioClient, err := minio.New(cfg.MinioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
@@ -57,22 +71,36 @@ func run() error {
 	}
 
 	minio := nakamaminio.New(context.Background(), minioClient, cfg.MinioCleanupTimeout)
+	go func() {
+		for err := range minio.Errs() {
+			errLogger.Error("minio error", "error", err)
+		}
+	}()
+
+	bucketsStart := time.Now()
+	infoLogger.Info("creating minio buckets")
+
 	if err := minio.CreateReadOnlyBucket(context.Background(), "post-attachments"); err != nil {
 		return fmt.Errorf("create minio bucket: %w", err)
 	}
 
-	errLogger := slog.New(charmlog.NewWithOptions(os.Stderr, charmlog.Options{
-		ReportTimestamp: true,
-	}))
-	infoLogger := slog.New(charmlog.NewWithOptions(os.Stdout, charmlog.Options{
-		ReportTimestamp: true,
-	}))
+	infoLogger.Info("finished creating minio buckets", "took", time.Since(bucketsStart))
 
-	cockroach := cockroach.New(dbPool)
+	svcErrChan := make(chan error, 1)
+	defer close(svcErrChan)
+
+	go func() {
+		for err := range svcErrChan {
+			errLogger.Error("service error", "error", err)
+		}
+	}()
 
 	svc := &service.Service{
-		Cockroach: cockroach,
-		Minio:     minio,
+		Cockroach:         cockroach.New(dbPool),
+		Minio:             minio,
+		Errs:              svcErrChan,
+		BaseContext:       context.Background(),
+		BackgroundTimeout: 15 * time.Second,
 	}
 	handler := &web.Handler{
 		Service:       svc,
@@ -85,5 +113,11 @@ func run() error {
 	}
 
 	infoLogger.Info("starting nakama server", "url", fmt.Sprintf("http://localhost:%d", cfg.Port))
-	return srv.ListenAndServe()
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("start nakama server: %w", err)
+	}
+
+	svc.Wait()
+
+	return nil
 }

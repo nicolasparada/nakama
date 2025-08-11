@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/nicolasparada/nakama/auth"
@@ -26,11 +27,14 @@ func (svc *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.
 
 	in.SetUserID(loggedInUser.ID)
 
-	if err := processPostAttachments(ctx, &in); err != nil {
+	processedAttachments, err := processAttachments(ctx, 2_000, in.Attachments)
+	if err != nil {
 		return out, fmt.Errorf("process attachments: %w", err)
 	}
 
-	cleanup, err := svc.Minio.UploadMany(ctx, "post-attachments", in.ProcessedAttachments())
+	in.SetProcessedAttachments(processedAttachments)
+
+	cleanup, err := svc.Minio.UploadMany(ctx, "post-attachments", processedAttachments)
 	if err != nil {
 		return out, err
 	}
@@ -39,6 +43,17 @@ func (svc *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.
 	if err != nil {
 		go cleanup()
 		return out, err
+	}
+
+	if mentions := extractMentions(in.Content); len(mentions) != 0 {
+		svc.background(func(ctx context.Context) error {
+			return svc.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
+				ActorUserID:    loggedInUser.ID,
+				NotifiableKind: types.NotifiableKindPost,
+				NotifiableID:   out.ID,
+				Usernames:      mentions,
+			})
+		})
 	}
 
 	return out, nil
@@ -58,10 +73,10 @@ func (svc *Service) Post(ctx context.Context, postID string) (types.Post, error)
 	return svc.Cockroach.Post(ctx, postID)
 }
 
-func processPostAttachments(ctx context.Context, in *types.CreatePost) error {
-	images, err := ffmpeg.ResizeImages(ctx, 2_000, in.Attachments)
+func processAttachments(ctx context.Context, maxRes uint32, attachments []io.ReadSeeker) ([]types.Attachment, error) {
+	images, err := ffmpeg.ResizeImages(ctx, maxRes, attachments)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	now := time.Now()
@@ -81,7 +96,5 @@ func processPostAttachments(ctx context.Context, in *types.CreatePost) error {
 		processed[i] = attachment
 	}
 
-	in.SetProcessedAttachments(processed)
-
-	return nil
+	return processed, nil
 }

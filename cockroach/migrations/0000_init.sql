@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS posts (
     id VARCHAR NOT NULL PRIMARY KEY,
     user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
     content TEXT NOT NULL,
+    is_r18 BOOLEAN NOT NULL DEFAULT FALSE,
     attachments JSONB,
+    -- comments_count INT NOT NULL DEFAULT 0, -- updated by [comments_count_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
 );
@@ -75,3 +77,63 @@ CREATE TABLE IF NOT EXISTS follows (
 
 CREATE INDEX IF NOT EXISTS follows_follower_id_idx ON follows (follower_id);
 CREATE INDEX IF NOT EXISTS follows_followee_id_idx ON follows (followee_id);
+
+-- CREATE OR REPLACE FUNCTION update_comments_count()
+-- RETURNS TRIGGER AS $$
+-- DECLARE
+--     post_id_to_update VARCHAR;
+-- BEGIN
+--     IF TG_OP = 'INSERT' THEN
+--         post_id_to_update := NEW.post_id;
+--     ELSIF TG_OP = 'DELETE' THEN
+--         post_id_to_update := OLD.post_id;
+--     END IF;
+
+--     UPDATE posts 
+--     SET comments_count = (
+--         SELECT COUNT(*) 
+--         FROM comments 
+--         WHERE comments.post_id = post_id_to_update
+--     )
+--     WHERE id = post_id_to_update;
+
+--     IF TG_OP = 'INSERT' THEN
+--         RETURN NEW;
+--     ELSE
+--         RETURN OLD;
+--     END IF;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- DROP TRIGGER IF EXISTS comments_count_trigger ON comments;
+-- CREATE TRIGGER comments_count_trigger
+--     AFTER INSERT OR DELETE ON comments
+--     FOR EACH ROW EXECUTE FUNCTION update_comments_count();
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id VARCHAR NOT NULL PRIMARY KEY,
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    kind VARCHAR NOT NULL,
+    actor_user_ids VARCHAR[] NOT NULL, -- keeps only the latest few, full list is on [notification_actors] table.
+    actors_count INT NOT NULL DEFAULT 1, -- stores the full total count.
+    notifiable_kind VARCHAR, -- kind of the entity being notified (e.g., post, comment, publication, chapter)
+    notifiable_id VARCHAR, -- ID of the entity being notified (e.g., post_id, comment_id, publication_id, chapter_id)
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON notifications (user_id);
+CREATE INDEX IF NOT EXISTS notifications_user_id_read_at_idx ON notifications (user_id, read_at);
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_id_kind_notifiable_kind_notifiable_id_idx ON notifications (user_id, kind, notifiable_kind, notifiable_id, read_at);
+
+CREATE TABLE IF NOT EXISTS notification_actors (
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    notification_id VARCHAR NOT NULL REFERENCES notifications ON DELETE CASCADE ON UPDATE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+    PRIMARY KEY (user_id, notification_id)
+);
+
+CREATE INDEX IF NOT EXISTS notification_actors_user_id_idx ON notification_actors (user_id);
+CREATE INDEX IF NOT EXISTS notification_actors_notification_id_idx ON notification_actors (notification_id);

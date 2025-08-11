@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"regexp"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/errs"
@@ -62,5 +65,67 @@ func (svc *Service) ToggleFollow(ctx context.Context, in types.ToggleFollow) err
 		return errs.NewPermissionDeniedError("Cannot follow yourself")
 	}
 
-	return svc.Cockroach.ToggleFollow(ctx, in)
+	inserted, err := svc.Cockroach.ToggleFollow(ctx, in)
+	if err != nil {
+		return err
+	}
+
+	if inserted {
+		svc.background(func(ctx context.Context) error {
+			return svc.Cockroach.CreateFollowNotification(ctx, types.CreateFollowNotification{
+				UserID:      in.FolloweeID,
+				ActorUserID: loggedInUser.ID,
+			})
+		})
+	}
+
+	return nil
+}
+
+var reMention = regexp.MustCompile(`(?:^|[^a-zA-Z0-9_-])@([a-zA-Z0-9][a-zA-Z0-9_\.-]*)`)
+
+func extractMentions(text string) []string {
+	matches := reMention.FindAllStringSubmatch(text, -1)
+	var mentions []string
+	seen := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			username := match[1]
+			// Clean up trailing punctuation that might be part of sentence structure
+			username = cleanUsername(username)
+			if username != "" && utf8.RuneCountInString(username) <= 21 && !seen[username] && !isPartOfEmail(text, match[0]) {
+				mentions = append(mentions, username)
+				seen[username] = true
+			}
+		}
+	}
+
+	return mentions
+}
+
+// cleanUsername removes trailing punctuation that's not part of the username
+func cleanUsername(username string) string {
+	// Remove trailing dots that are likely sentence punctuation
+	for len(username) > 0 && username[len(username)-1] == '.' {
+		username = username[:len(username)-1]
+	}
+	return username
+}
+
+// isPartOfEmail checks if the @username is part of an email address
+func isPartOfEmail(text, fullMatch string) bool {
+	// Find the position of the full match in the text
+	pos := strings.Index(text, fullMatch)
+	if pos == -1 {
+		return false
+	}
+
+	// Check if there's another @ character immediately after the username
+	endPos := pos + len(fullMatch)
+	if endPos < len(text) && text[endPos] == '@' {
+		return true
+	}
+
+	return false
 }

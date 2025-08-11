@@ -12,6 +12,7 @@ type Post struct {
 	ID          string       `db:"id"`
 	UserID      string       `db:"user_id"`
 	Content     string       `db:"content"`
+	IsR18       bool         `db:"is_r18"`
 	Attachments []Attachment `db:"attachments"`
 	CreatedAt   time.Time    `db:"created_at"`
 	UpdatedAt   time.Time    `db:"updated_at"`
@@ -22,6 +23,7 @@ type Post struct {
 type CreatePost struct {
 	userID      string
 	Content     string
+	IsR18       bool
 	Attachments []io.ReadSeeker
 
 	processedAttachments []Attachment
@@ -39,7 +41,7 @@ func (in *CreatePost) SetProcessedAttachments(attachments []Attachment) {
 	in.processedAttachments = attachments
 }
 
-func (in *CreatePost) ProcessedAttachments() []Attachment {
+func (in CreatePost) ProcessedAttachments() []Attachment {
 	return in.processedAttachments
 }
 

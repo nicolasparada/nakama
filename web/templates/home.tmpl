@@ -10,9 +10,25 @@
             <textarea name="content" placeholder="Share something..." aria-label="Content"></textarea>
         </div>
 
-        <div>
-            <label for="attachments">Attach an image:</label>
-            <input type="file" name="attachments" id="attachments" accept="image/*" multiple>
+        <div class="hstack">
+            <div>
+                <label for="attachments" role="button" aria-label="Attach an image">
+                    <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M21.4383 11.6622L12.2483 20.8522C11.1225 21.9781 9.59552 22.6106 8.00334 22.6106C6.41115 22.6106 4.88418 21.9781 3.75834 20.8522C2.63249 19.7264 2 18.1994 2 16.6072C2 15.015 2.63249 13.4881 3.75834 12.3622L12.9483 3.17222C13.6989 2.42166 14.7169 2 15.7783 2C16.8398 2 17.8578 2.42166 18.6083 3.17222C19.3589 3.92279 19.7806 4.94077 19.7806 6.00222C19.7806 7.06368 19.3589 8.08166 18.6083 8.83222L9.40834 18.0222C9.03306 18.3975 8.52406 18.6083 7.99334 18.6083C7.46261 18.6083 6.95362 18.3975 6.57834 18.0222C6.20306 17.6469 5.99222 17.138 5.99222 16.6072C5.99222 16.0765 6.20306 15.5675 6.57834 15.1922L15.0683 6.71222" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+                </label>
+                <input type="file" name="attachments" id="attachments" accept="image/*" multiple>
+            </div>
+            
+            <div>
+                <label for="is_r18">R-18:</label>
+                <input type="checkbox" name="is_r18" id="is_r18">
+            </div>
+
+            <div class="spacer"></div>
+
+            <button>
+                <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: #e8e6e3;" data-darkreader-inline-color=""><path d="M22.1525 3.55321L11.1772 21.0044L9.50686 12.4078L2.00002 7.89795L22.1525 3.55321Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M9.45557 12.4436L22.1524 3.55321" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+                <span>Post</span>
+            </button>
         </div>
 
         {{with .Error}}
@@ -22,10 +38,6 @@
         </div>
         {{end}}
 
-        <button>
-            <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: #e8e6e3;" data-darkreader-inline-color=""><path d="M22.1525 3.55321L11.1772 21.0044L9.50686 12.4078L2.00002 7.89795L22.1525 3.55321Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M9.45557 12.4436L22.1524 3.55321" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
-            <span>Post</span>
-        </button>
     </form>
 
     <br>
@@ -37,7 +49,7 @@
         <div role="feed">
             {{range .Posts.Items}}
                 <article class="card">
-                    <p>{{.Content}}</p>
+                    <p>{{.Content | linkify}}</p>
 
                     {{if .Attachments}}
                         <div class="attachments">

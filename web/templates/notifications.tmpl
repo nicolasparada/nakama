@@ -1,0 +1,49 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>Notifications</h1>
+
+    {{if not .Notifications.Items}}
+        <p>No notifications available</p>
+    {{else}}
+        <div role="feed">
+            {{range .Notifications.Items}}
+                <article class="card{{if .Read}} notification-read{{end}}">
+                    {{if eq .Kind.String "follow"}}
+                    <p>{{template "actors" .}} followed you.</p>
+                    {{else if eq .Kind.String "post_mention"}}
+                    <p>{{template "actors" .}} mentioned you in a <a href="/p/{{.NotifiableID}}" class="primary">post</a>.</p>
+                    {{end}}
+                    {{if not .Read}}
+                    <form action="/notifications/{{.ID}}/read" method="POST">
+                        <button>
+                            <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M5 13L9 17L19 7" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+                            <span>Mark as read</span>
+                        </button>
+                    </form>
+                    <br>
+                    {{end}}
+                    <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+                </article>
+            {{end}}
+        </div>
+    {{end}}
+</main>
+{{end}}
+
+{{define "actors"}}
+{{- $total := len .Actors -}}
+{{if eq $total 1}}
+    {{- $actor := (index .Actors 0) -}}
+    <a href="/u/{{$actor.Username}}" class="primary">{{$actor.Username}}</a>
+{{else if eq $total 2}}
+    {{- $actorA := index .Actors 0}}
+    {{- $actorB := index .Actors 1}}
+    <a href="/u/{{$actorA.Username}}" class="primary">{{$actorA.Username}}</a> and <a href="/u/{{$actorB.Username}}" class="primary">{{$actorB.Username}}</a>
+{{else if gt $total 2}}
+    {{- $actorA := index .Actors 0}}
+    {{- $actorB := index .Actors 1}}
+    <a href="/u/{{$actorA.Username}}" class="primary">{{$actorA.Username}}</a>, <a href="/u/{{$actorB.Username}}" class="primary">{{$actorB.Username}}</a> and {{plus $total -2}} others
+{{end}}
+{{end}}

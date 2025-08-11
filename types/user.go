@@ -61,7 +61,7 @@ func (in *UpsertUser) Validate() error {
 		v.AddError("Username", "Username can only contain letters, numbers, and underscores")
 	}
 	if utf8.RuneCountInString(in.Username) > 21 {
-		v.AddError("Username", "Username must be less than 22 characters")
+		v.AddError("Username", "Username must be at most 21 characters")
 	}
 
 	return v.AsError()

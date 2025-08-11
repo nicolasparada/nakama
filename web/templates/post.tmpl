@@ -33,7 +33,7 @@
         <div role="feed">
             {{range .Comments.Items}}
                 <article>
-                    <p>{{.Content}}</p>
+                    <p>{{.Content | linkify}}</p>
                     <p><small>Commented on by <a href="/u/{{.User.Username}}">{{.User.Username}}</a> at <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time></small></p>
                 </article>
             {{end}}

@@ -23,7 +23,23 @@ func (svc *Service) CreateComment(ctx context.Context, in types.CreateComment) (
 
 	in.SetUserID(loggedInUser.ID)
 
-	return svc.Cockroach.CreateComment(ctx, in)
+	out, err := svc.Cockroach.CreateComment(ctx, in)
+	if err != nil {
+		return out, err
+	}
+
+	if mentions := extractMentions(in.Content); len(mentions) != 0 {
+		svc.background(func(ctx context.Context) error {
+			return svc.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
+				ActorUserID:    loggedInUser.ID,
+				NotifiableKind: types.NotifiableKindComment,
+				NotifiableID:   out.ID,
+				Usernames:      mentions,
+			})
+		})
+	}
+
+	return out, nil
 }
 
 func (svc *Service) Comments(ctx context.Context, postID string) (types.Page[types.Comment], error) {

@@ -99,6 +99,12 @@ h1, h2, h3, h4, h5, h6 {
     outline: none;
 }
 
+button, label {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
 button, input, textarea {
     font: inherit;
     color: inherit;
@@ -231,6 +237,7 @@ textarea {
 textarea {
     width: 100%;
     resize: vertical;
+    field-sizing: content;
 }
 
 .container {
@@ -374,4 +381,42 @@ body {
     p {
         white-space: pre-wrap;
     }
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    align-items: flex-start;
+
+    div:has(textarea) {
+        width: 100%;
+    }
+}
+
+label[role=button] + input[type=file] {
+    display: none;
+}
+
+div:has(label):has(input[type=checkbox]) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.hstack {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+
+    .spacer {
+        flex-grow: 1;
+    }
+}
+
+.notification-read {
+    background-color: var(--surface-2);
+    opacity: 0.6;
+    text-decoration: line-through;
 }

@@ -13,8 +13,8 @@ func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.
 	var out types.Created
 
 	const q = `
-		INSERT INTO posts (id, user_id, content, attachments)
-		VALUES (@post_id, @user_id, @content, @attachments)
+		INSERT INTO posts (id, user_id, content, is_r18, attachments)
+		VALUES (@post_id, @user_id, @content, @is_r18, @attachments)
 		RETURNING id, created_at
 	`
 
@@ -22,6 +22,7 @@ func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.
 		"post_id":     id.Generate(),
 		"user_id":     in.UserID(),
 		"content":     in.Content,
+		"is_r18":      in.IsR18,
 		"attachments": in.ProcessedAttachments(),
 	})
 	if err != nil {

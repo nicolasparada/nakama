@@ -127,8 +127,8 @@ func (c *Cockroach) UserFromUsername(ctx context.Context, in types.RetrieveUserF
 	return out, nil
 }
 
-func (c *Cockroach) ToggleFollow(ctx context.Context, in types.ToggleFollow) error {
-	return c.db.RunTx(ctx, func(ctx context.Context) error {
+func (c *Cockroach) ToggleFollow(ctx context.Context, in types.ToggleFollow) (inserted bool, err error) {
+	return inserted, c.db.RunTx(ctx, func(ctx context.Context) error {
 		exists, err := c.followExists(ctx, in.LoggedInUserID(), in.FolloweeID)
 		if err != nil {
 			return err
@@ -138,6 +138,7 @@ func (c *Cockroach) ToggleFollow(ctx context.Context, in types.ToggleFollow) err
 			return c.deleteFollow(ctx, in.LoggedInUserID(), in.FolloweeID)
 		}
 
+		inserted = true
 		return c.insertFollow(ctx, in.LoggedInUserID(), in.FolloweeID)
 	})
 }
