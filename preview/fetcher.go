@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
@@ -54,19 +53,18 @@ func NewFetcher(size int, successTTL, errorTTL time.Duration, client *http.Clien
 // It negative-caches on fetch or parse error to prevent repeated attempts for errorTTL.
 func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, error) {
 	var empty opengraph.OpenGraph
-	key := canonicalURL(urlStr)
 
-	if _, found := f.cacheErr.Get(key); found {
+	if _, found := f.cacheErr.Get(urlStr); found {
 		return empty, ErrBackoff
 	}
 
-	if og, found := f.cacheOK.Get(key); found {
+	if og, found := f.cacheOK.Get(urlStr); found {
 		return og, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, key, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
 	if err != nil {
-		f.cacheErr.Add(key, struct{}{})
+		f.cacheErr.Add(urlStr, struct{}{})
 		return empty, fmt.Errorf("new request: %w", err)
 	}
 
@@ -76,14 +74,14 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		f.cacheErr.Add(key, struct{}{})
+		f.cacheErr.Add(urlStr, struct{}{})
 		return empty, fmt.Errorf("http get: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		f.cacheErr.Add(key, struct{}{})
+		f.cacheErr.Add(urlStr, struct{}{})
 
 		if b, err := io.ReadAll(resp.Body); err == nil {
 			return empty, fmt.Errorf("http status: %d, body: %s", resp.StatusCode, string(b))
@@ -93,25 +91,13 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 	}
 
 	limited := io.LimitReader(resp.Body, f.maxBytes)
-	og, parseErr := opengraph.Parse(limited)
+
+	og, parseErr := opengraph.Parse(limited, urlStr)
 	if parseErr != nil {
-		f.cacheErr.Add(key, struct{}{})
+		f.cacheErr.Add(urlStr, struct{}{})
 		return empty, fmt.Errorf("parse opengraph: %w", parseErr)
 	}
 
-	f.cacheOK.Add(key, og)
+	f.cacheOK.Add(urlStr, og)
 	return og, nil
-}
-
-func canonicalURL(u string) string {
-	s := strings.TrimSpace(u)
-	if s == "" {
-		return s
-	}
-
-	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-		return s
-	}
-
-	return "https://" + s
 }

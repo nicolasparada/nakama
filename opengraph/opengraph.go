@@ -3,6 +3,7 @@ package opengraph
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -34,7 +35,15 @@ type Image struct {
 	Type      string
 }
 
-func Parse(r io.Reader) (OpenGraph, error) {
+// fallbackData holds standard HTML meta values to use when OpenGraph tags are missing
+type fallbackData struct {
+	title       string
+	description string
+	siteName    string
+	url         string
+}
+
+func Parse(r io.Reader, urlStr string) (OpenGraph, error) {
 	var out OpenGraph
 
 	node, err := html.Parse(r)
@@ -42,32 +51,84 @@ func Parse(r io.Reader) (OpenGraph, error) {
 		return out, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	extractOGTags(node, &out)
+	var fallbacks fallbackData
+	extractTags(node, &out, &fallbacks)
+
+	// Apply fallbacks for missing OpenGraph properties
+	if out.Title == "" {
+		out.Title = fallbacks.title
+	}
+	if out.Description == "" {
+		out.Description = fallbacks.description
+	}
+	if out.SiteName == "" {
+		out.SiteName = fallbacks.siteName
+	}
+	if out.URL == "" {
+		out.URL = fallbacks.url
+	}
+
+	// If we still don't have a site name, try to extract it from the base URL
+	if out.SiteName == "" {
+		if u, err := url.Parse(urlStr); err == nil {
+			out.SiteName = strings.TrimPrefix(u.Hostname(), "www.")
+		}
+	}
+
+	if out.URL == "" {
+		out.URL = urlStr
+	}
+
 	return out, nil
 }
 
-// extractOGTags recursively walks the HTML tree and extracts OpenGraph properties
-func extractOGTags(n *html.Node, og *OpenGraph) {
-	if n.Type == html.ElementNode && n.Data == "meta" {
-		var property, content string
-
-		for _, attr := range n.Attr {
-			switch attr.Key {
-			case "property":
-				property = attr.Val
-			case "content":
-				content = attr.Val
+// extractTags recursively walks the HTML tree and extracts both OpenGraph and fallback properties
+func extractTags(n *html.Node, og *OpenGraph, fallbacks *fallbackData) {
+	if n.Type == html.ElementNode {
+		switch n.Data {
+		case "meta":
+			var property, name, content string
+			for _, attr := range n.Attr {
+				switch attr.Key {
+				case "property":
+					property = attr.Val
+				case "name":
+					name = attr.Val
+				case "content":
+					content = attr.Val
+				}
 			}
-		}
 
-		if strings.HasPrefix(property, "og:") {
-			parseOGProperty(property, content, og)
+			if strings.HasPrefix(property, "og:") {
+				parseOGProperty(property, content, og)
+			} else if name == "description" && fallbacks.description == "" {
+				fallbacks.description = content
+			}
+
+		case "title":
+			if fallbacks.title == "" && n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
+				fallbacks.title = strings.TrimSpace(n.FirstChild.Data)
+			}
+
+		case "link":
+			var rel, href string
+			for _, attr := range n.Attr {
+				switch attr.Key {
+				case "rel":
+					rel = attr.Val
+				case "href":
+					href = attr.Val
+				}
+			}
+			if rel == "canonical" && fallbacks.url == "" {
+				fallbacks.url = href
+			}
 		}
 	}
 
 	// Recursively process child nodes
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		extractOGTags(c, og)
+		extractTags(c, og, fallbacks)
 	}
 }
 

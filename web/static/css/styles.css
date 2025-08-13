@@ -195,6 +195,10 @@ input[type=file]:hover::file-selector-button {
     border-color: var(--border-strong);
 }
 
+input[type="file"] {
+    color: var(--text-muted);
+}
+
 /* Button variants */
 button.primary, [role=button].primary {
     background-color: var(--primary);
@@ -408,21 +412,6 @@ div:has(>label):has(>input[type=checkbox]) {
     gap: var(--space-sm);
 }
 
-.hstack {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    width: 100%;
-
-    &.spaced {
-        gap: var(--space-lg);
-    }
-
-    .spacer {
-        flex-grow: 1;
-    }
-}
-
 .notification-read {
     background-color: var(--surface-2);
     opacity: 0.6;
@@ -625,5 +614,16 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
             max-height: 60vh;
             object-fit: contain;
         }
+    }
+}
+
+.post-form-controls {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    width: 100%;
+
+    >div:has(input[type=file]) {
+        flex-grow: 1;
     }
 }

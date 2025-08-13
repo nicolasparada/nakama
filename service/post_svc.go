@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/nicolasparada/nakama/auth"
@@ -158,7 +158,6 @@ func newAttachment(image ffmpeg.Image) types.Attachment {
 func (svc *Service) setPostsPreviews(ctx context.Context, posts types.Page[types.Post]) {
 	for i, post := range posts.Items {
 		results := svc.Preview.Fetch(ctx, extractURLs(post.Content))
-		slog.Info("fetched previews for post", "post_content", post.Content, "results", fmt.Sprintf("%+v", results))
 		posts.Items[i].SetPreviews(results)
 	}
 }
@@ -171,5 +170,11 @@ func (svc *Service) setPostPreviews(ctx context.Context, post *types.Post) {
 var reURL = xurls.Strict()
 
 func extractURLs(text string) []string {
-	return reURL.FindAllString(text, -1)
+	var out []string
+	for _, u := range reURL.FindAllString(text, -1) {
+		if u, err := url.Parse(u); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+			out = append(out, u.String())
+		}
+	}
+	return out
 }

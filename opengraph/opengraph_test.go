@@ -125,7 +125,10 @@ func TestParse(t *testing.T) {
 </head>
 <body></body>
 </html>`,
-			want: OpenGraph{},
+			want: OpenGraph{
+				Title:       "Regular Title",
+				Description: "Regular description",
+			},
 		},
 		{
 			name: "unicode_content",
@@ -157,11 +160,67 @@ func TestParse(t *testing.T) {
 				Description: "Missing closing tag",
 			},
 		},
+		{
+			name: "fallback_values",
+			in: `<!DOCTYPE html>
+<html>
+<head>
+	<title>Fallback Page Title</title>
+	<meta name="description" content="This is a fallback description">
+	<link rel="canonical" href="https://www.example.com/page">
+</head>
+<body></body>
+</html>`,
+			want: OpenGraph{
+				Title:       "Fallback Page Title",
+				Description: "This is a fallback description",
+				URL:         "https://www.example.com/page",
+			},
+		},
+	}
+
+	// Test with domain name extraction for site name
+	domainTestCases := []struct {
+		name    string
+		in      string
+		baseURL string
+		want    OpenGraph
+	}{
+		{
+			name: "domain_site_name_fallback",
+			in: `<!DOCTYPE html>
+<html>
+<head>
+	<title>Page without OpenGraph</title>
+</head>
+<body></body>
+</html>`,
+			baseURL: "https://www.github.com/user/repo",
+			want: OpenGraph{
+				Title:    "Page without OpenGraph",
+				SiteName: "Github.com",
+			},
+		},
+	}
+
+	for _, tc := range domainTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Parse(strings.NewReader(tc.in), tc.baseURL)
+			if err != nil {
+				t.Fatalf("Parse returned error: %v", err)
+			}
+
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("Test %s failed", tc.name)
+				t.Errorf("Want: %+v", tc.want)
+				t.Errorf("Got:  %+v", got)
+			}
+		})
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Parse(strings.NewReader(tc.in))
+			got, err := Parse(strings.NewReader(tc.in), "")
 			if err != nil {
 				t.Fatalf("Parse returned error: %v", err)
 			}
