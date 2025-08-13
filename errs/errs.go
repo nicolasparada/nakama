@@ -63,5 +63,10 @@ func (e *Error) Error() string {
 	if e.Field != nil {
 		return fmt.Sprintf("%s (field: %s): %s", e.Kind, *e.Field, e.Message)
 	}
+
+	if e.Message == string(e.Kind) {
+		return e.Message
+	}
+
 	return fmt.Sprintf("%s: %s", e.Kind, e.Message)
 }

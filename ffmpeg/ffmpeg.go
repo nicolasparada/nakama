@@ -282,40 +282,58 @@ func resizeToAVIF(ctx context.Context, inputPath string, maxRes uint32, isAnimat
 	cpuUsed := getCPUUsedSetting(maxRes)
 	crf := getCRFSetting(maxRes)
 
+	// Determine if input has alpha to choose proper pixel format
+	hasAlpha, _ := hasAlphaPixelFormat(ctx, inputPath)
+	// Build filter chain: scale to fit, ensure even dims for 4:2:0, set pixel format
+	// Enforce even dimensions because AV1 4:2:0 requires even width/height.
+	scaleFit := fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease", maxRes, maxRes)
+	scaleEven := "scale=ceil(iw/2)*2:ceil(ih/2)*2"
+	pixFmt := "yuv420p"
+	if hasAlpha {
+		pixFmt = "yuva420p"
+	}
+	vf := fmt.Sprintf("%s,%s,format=%s", scaleFit, scaleEven, pixFmt)
+
 	var cmd *exec.Cmd
 
 	if isAnimated {
 		// For animated AVIF - do not use still-picture mode
 		cmd = exec.CommandContext(ctx, "ffmpeg",
+			"-hide_banner", "-nostdin", "-loglevel", "error",
 			"-i", inputPath,
-			"-vf", fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease", maxRes, maxRes),
+			"-vf", vf,
+			"-map", "0:v:0",
+			"-an",
 			"-c:v", "libaom-av1",
 			"-crf", fmt.Sprintf("%d", crf),
 			"-cpu-used", fmt.Sprintf("%d", cpuUsed),
-			"-row-mt", "1", // Enable row-based multithreading
-			"-tiles", "2x2", // Enable tile-based encoding for parallelism
+			"-row-mt", "1",
+			"-tiles", "2x2",
 			"-y",
 			tmpOutput.Name())
 	} else {
 		// For static AVIF - use still-picture mode to prevent flickering
 		cmd = exec.CommandContext(ctx, "ffmpeg",
+			"-hide_banner", "-nostdin", "-loglevel", "error",
 			"-i", inputPath,
-			"-vf", fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease", maxRes, maxRes),
+			"-vf", vf,
+			"-map", "0:v:0",
+			"-an",
 			"-c:v", "libaom-av1",
 			"-crf", fmt.Sprintf("%d", crf),
 			"-cpu-used", fmt.Sprintf("%d", cpuUsed),
-			"-row-mt", "1", // Enable row-based multithreading
-			"-tiles", "2x2", // Enable tile-based encoding for parallelism
-			"-still-picture", "1", // Force still picture mode
-			"-usage", "allintra", // All intra frames
-			"-tune", "0", // Tune for still image
-			"-frames:v", "1", // Only encode 1 frame
+			"-row-mt", "1",
+			"-tiles", "2x2",
+			"-still-picture", "1",
+			"-frames:v", "1",
 			"-y",
 			tmpOutput.Name())
 	}
 
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, 0, 0, 0, fmt.Errorf("ffmpeg resize failed: %w", err)
+		return nil, 0, 0, 0, fmt.Errorf("ffmpeg resize failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
 	processedFile, err := os.Open(tmpOutput.Name())
@@ -338,6 +356,27 @@ func resizeToAVIF(ctx context.Context, inputPath string, maxRes uint32, isAnimat
 	}
 
 	return processedFile, width, height, fileSize, nil
+}
+
+// hasAlphaPixelFormat inspects the input's pixel format to guess if it contains an alpha channel.
+func hasAlphaPixelFormat(ctx context.Context, filePath string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=pix_fmt",
+		"-of", "default=nw=1:nk=1",
+		filePath,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("ffprobe pix_fmt failed: %w", err)
+	}
+	pf := strings.TrimSpace(string(out))
+	if pf == "" {
+		return false, nil
+	}
+	// Heuristic: alpha formats usually contain 'a'
+	return strings.Contains(pf, "a"), nil
 }
 
 func getCPUUsedSetting(maxRes uint32) int {

@@ -10,16 +10,14 @@
             <textarea name="content" placeholder="Share something..." aria-label="Content"></textarea>
         </div>
 
-        <div class="hstack">
+        <div class="hstack spaced">
             <div>
-                <label for="attachments" role="button" aria-label="Attach an image">
-                    <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M21.4383 11.6622L12.2483 20.8522C11.1225 21.9781 9.59552 22.6106 8.00334 22.6106C6.41115 22.6106 4.88418 21.9781 3.75834 20.8522C2.63249 19.7264 2 18.1994 2 16.6072C2 15.015 2.63249 13.4881 3.75834 12.3622L12.9483 3.17222C13.6989 2.42166 14.7169 2 15.7783 2C16.8398 2 17.8578 2.42166 18.6083 3.17222C19.3589 3.92279 19.7806 4.94077 19.7806 6.00222C19.7806 7.06368 19.3589 8.08166 18.6083 8.83222L9.40834 18.0222C9.03306 18.3975 8.52406 18.6083 7.99334 18.6083C7.46261 18.6083 6.95362 18.3975 6.57834 18.0222C6.20306 17.6469 5.99222 17.138 5.99222 16.6072C5.99222 16.0765 6.20306 15.5675 6.57834 15.1922L15.0683 6.71222" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
-                </label>
+                <label for="attachments">Attach an image</label>
                 <input type="file" name="attachments" id="attachments" accept="image/*" multiple>
             </div>
             
             <div>
-                <label for="is_r18">R-18:</label>
+                <label for="is_r18">R-18</label>
                 <input type="checkbox" name="is_r18" id="is_r18">
             </div>
 
@@ -43,23 +41,58 @@
     <br>
     {{end}}
 
-    {{if not .Posts.Items}}
+    {{if not .Feed.Items}}
         <p>No posts available</p>
     {{else}}
         <div role="feed">
-            {{range .Posts.Items}}
-                <article class="card">
-                    <p>{{.Content | linkify}}</p>
+            {{range .Feed.Items}}
+                <article class="card post">
+                    <a href="/u/{{.User.Username}}" class="post-avatar">
+                        {{template "avatar.tmpl" .User}}
+                    </a>
+
+                    <div class="post-header">
+                        <a href="/u/{{.User.Username}}" class="post-username">{{.User.Username}}</a>
+                        <a href="/p/{{.ID}}" class="post-time">
+                            <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+                        </a>
+                    </div>
+
+                    <p class="post-content">{{.Content | linkify}}</p>
+
+                    {{if not .Previews.IsEmpty}}
+                        <div class="post-previews">
+                            {{range .Previews}}
+                                {{if not .Data.IsEmpty}}
+                                    <div class="post-preview">
+                                        <h4>{{.Data.SiteName}}</h4>
+                                        <h3>
+                                            <a href="{{.Data.URL}}" target="_blank" rel="noopener noreferrer">
+                                                {{.Data.Title}}
+                                            </a>
+                                        </h3>
+                                        <p>{{.Data.Description}}</p>
+
+                                        {{if .Data.Images}}
+                                            <div class="post-preview-images">
+                                                {{range .Data.Images}}
+                                                    <img src="{{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
+                                                {{end}}
+                                            </div>
+                                        {{end}}
+                                    </div>
+                                {{end}}
+                            {{end}}
+                        </div>
+                    {{end}}
 
                     {{if .Attachments}}
-                        <div class="attachments">
+                        <div class="post-attachments">
                             {{range .Attachments}}
                                 <img src="http://localhost:9000/post-attachments/{{.Path}}" alt="Attachment" width="{{.Width}}" height="{{.Height}}">
                             {{end}}
                         </div>
                     {{end}}
-                    
-                    <p><small>Posted by <a href="/u/{{.User.Username}}">{{.User.Username}}</a> at <a href="/p/{{.ID}}"><time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time></a></small></p>
                 </article>
             {{end}}
         </div>

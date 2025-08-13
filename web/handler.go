@@ -49,6 +49,8 @@ func (h *Handler) init() {
 	mux.HandleFunc("POST /login", h.login)
 	mux.HandleFunc("POST /logout", h.logout)
 	mux.HandleFunc("GET /u/{username}", h.showUser)
+	mux.HandleFunc("GET /u/{username}/edit", h.showEditUser)
+	mux.HandleFunc("POST /user_avatars", h.uploadAvatar)
 	mux.HandleFunc("POST /users/{userID}/toggle-follow", h.toggleFollow)
 	mux.HandleFunc("POST /posts", h.createPost)
 	mux.HandleFunc("GET /p/{postID}", h.showPost)

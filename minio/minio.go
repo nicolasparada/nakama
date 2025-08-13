@@ -12,23 +12,20 @@ import (
 )
 
 type Minio struct {
+	client         *minio.Client
 	baseCtx        context.Context
 	cleanupTimeout time.Duration
-	client         *minio.Client
+	wg             sync.WaitGroup
 	errs           chan error
 }
 
 func New(ctx context.Context, client *minio.Client, cleanupTimeout time.Duration) *Minio {
 	return &Minio{
+		client:         client,
 		baseCtx:        ctx,
 		cleanupTimeout: cleanupTimeout,
-		client:         client,
 		errs:           make(chan error, 1),
 	}
-}
-
-func (m *Minio) Errs() <-chan error {
-	return m.errs
 }
 
 func (m *Minio) UploadMany(ctx context.Context, bucket string, files []types.Attachment) (func(), error) {
@@ -87,15 +84,48 @@ func (m *Minio) Upload(ctx context.Context, bucket string, file types.Attachment
 	}
 
 	return func() {
-		ctx, cancel := context.WithTimeout(m.baseCtx, m.cleanupTimeout)
-		defer cancel()
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
 
-		if err := m.client.RemoveObject(ctx, bucket, file.Path, minio.RemoveObjectOptions{
-			VersionID: info.VersionID,
-		}); err != nil {
-			m.errs <- fmt.Errorf("remove object %s: %w", file.Path, err)
-		}
+			defer func() {
+				if rcv := recover(); rcv != nil {
+					select {
+					case m.errs <- fmt.Errorf("remove object panic %s: %v", file.Path, rcv):
+					default:
+					}
+				}
+			}()
+
+			ctx, cancel := context.WithTimeout(m.baseCtx, m.cleanupTimeout)
+			defer cancel()
+
+			err := m.client.RemoveObject(ctx, bucket, file.Path, minio.RemoveObjectOptions{
+				VersionID: info.VersionID,
+			})
+			if err != nil {
+				select {
+				case m.errs <- fmt.Errorf("remove object %s: %w", file.Path, err):
+				default:
+				}
+			}
+		}()
 	}, nil
+}
+
+func (m *Minio) CreateReadOnlyBuckets(ctx context.Context, buckets ...string) error {
+	g, gctx := errgroup.WithContext(ctx)
+
+	for _, bucket := range buckets {
+		g.Go(func() error {
+			if err := m.CreateReadOnlyBucket(gctx, bucket); err != nil {
+				return fmt.Errorf("create read-only bucket %s: %w", bucket, err)
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 // CreateReadOnlyBucket creates a bucket and sets up read-only public access policy
@@ -134,4 +164,13 @@ func (m *Minio) CreateReadOnlyBucket(ctx context.Context, bucketName string) err
 	}
 
 	return nil
+}
+
+func (m *Minio) Errs() <-chan error {
+	return m.errs
+}
+
+func (m *Minio) Close() {
+	m.wg.Wait()
+	close(m.errs)
 }

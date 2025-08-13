@@ -16,11 +16,12 @@ var (
 )
 
 type User struct {
-	ID        string    `db:"id"`
-	Email     string    `db:"email"`
-	Username  string    `db:"username"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID        string      `db:"id"`
+	Email     string      `db:"email"`
+	Username  string      `db:"username"`
+	Avatar    *Attachment `db:"avatar"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
 
 	Relationship *UserRelationship `db:"relationship"`
 }
@@ -150,4 +151,9 @@ func (in *ToggleFollow) Validate() error {
 	}
 
 	return v.AsError()
+}
+
+type UpdateUserAvatar struct {
+	UserID string
+	Avatar Attachment
 }

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar JSONB;
+
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (username);
 
@@ -137,3 +139,12 @@ CREATE TABLE IF NOT EXISTS notification_actors (
 
 CREATE INDEX IF NOT EXISTS notification_actors_user_id_idx ON notification_actors (user_id);
 CREATE INDEX IF NOT EXISTS notification_actors_notification_id_idx ON notification_actors (notification_id);
+
+CREATE TABLE IF NOT EXISTS feed (
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    post_id VARCHAR NOT NULL REFERENCES posts ON DELETE CASCADE ON UPDATE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, post_id)
+);
+
+CREATE INDEX IF NOT EXISTS feed_user_id_idx ON feed (user_id);

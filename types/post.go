@@ -5,6 +5,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nicolasparada/nakama/preview"
 	"github.com/nicolasparada/nakama/validator"
 )
 
@@ -18,6 +19,16 @@ type Post struct {
 	UpdatedAt   time.Time    `db:"updated_at"`
 
 	User *User `db:"user,omitempty"`
+
+	previews preview.Results
+}
+
+func (p *Post) SetPreviews(previews preview.Results) {
+	p.previews = previews
+}
+
+func (p *Post) Previews() preview.Results {
+	return p.previews
 }
 
 type CreatePost struct {
@@ -56,4 +67,21 @@ func (in *CreatePost) Validate() error {
 	}
 
 	return v.AsError()
+}
+
+type FanoutPost struct {
+	UserID string
+	PostID string
+}
+
+type ListFeed struct {
+	userID string
+}
+
+func (in *ListFeed) SetUserID(userID string) {
+	in.userID = userID
+}
+
+func (in ListFeed) UserID() string {
+	return in.userID
 }

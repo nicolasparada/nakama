@@ -18,6 +18,7 @@ import (
 	"github.com/nicolasparada/nakama/cockroach/migrator"
 	"github.com/nicolasparada/nakama/config"
 	nakamaminio "github.com/nicolasparada/nakama/minio"
+	"github.com/nicolasparada/nakama/preview"
 	"github.com/nicolasparada/nakama/service"
 	"github.com/nicolasparada/nakama/web"
 )
@@ -30,17 +31,18 @@ func main() {
 }
 
 func run() error {
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
 	errLogger := slog.New(charmlog.NewWithOptions(os.Stderr, charmlog.Options{
 		ReportTimestamp: true,
 	}))
 	infoLogger := slog.New(charmlog.NewWithOptions(os.Stdout, charmlog.Options{
 		ReportTimestamp: true,
 	}))
-
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
 
 	dbPool, err := pgxpool.New(context.Background(), cfg.CockroachURL)
 	if err != nil {
@@ -70,38 +72,49 @@ func run() error {
 		return fmt.Errorf("create minio client: %w", err)
 	}
 
-	minio := nakamaminio.New(context.Background(), minioClient, cfg.MinioCleanupTimeout)
+	minio := nakamaminio.New(context.Background(), minioClient, cfg.CleanupTimeout)
+	defer minio.Close()
+
 	go func() {
 		for err := range minio.Errs() {
-			errLogger.Error("minio error", "error", err)
+			errLogger.Error("minio error", "err", err)
 		}
 	}()
 
 	bucketsStart := time.Now()
 	infoLogger.Info("creating minio buckets")
 
-	if err := minio.CreateReadOnlyBucket(context.Background(), "post-attachments"); err != nil {
+	if err := minio.CreateReadOnlyBuckets(context.Background(), "post-attachments", "avatars"); err != nil {
 		return fmt.Errorf("create minio bucket: %w", err)
 	}
 
 	infoLogger.Info("finished creating minio buckets", "took", time.Since(bucketsStart))
 
-	svcErrChan := make(chan error, 1)
-	defer close(svcErrChan)
+	previewFetcher := preview.NewFetcher(1_000, time.Hour*24, time.Hour, nil)
+	monitoredPreviews := preview.NewMonitored(previewFetcher)
+	defer monitoredPreviews.Close()
 
 	go func() {
-		for err := range svcErrChan {
-			errLogger.Error("service error", "error", err)
+		for err := range monitoredPreviews.Errs() {
+			errLogger.Error("preview service error", "err", err)
 		}
 	}()
 
-	svc := &service.Service{
+	svc := service.New(&service.Config{
 		Cockroach:         cockroach.New(dbPool),
 		Minio:             minio,
-		Errs:              svcErrChan,
-		BaseContext:       context.Background(),
-		BackgroundTimeout: 15 * time.Second,
-	}
+		Preview:           monitoredPreviews,
+		BaseCtx:           context.Background(),
+		BackgroundTimeout: cfg.CleanupTimeout,
+	})
+	defer svc.Close()
+
+	go func() {
+		for err := range svc.Errs() {
+			errLogger.Error("service error", "err", err)
+		}
+	}()
+
 	handler := &web.Handler{
 		Service:       svc,
 		ErrorLogger:   errLogger,
@@ -116,8 +129,6 @@ func run() error {
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("start nakama server: %w", err)
 	}
-
-	svc.Wait()
 
 	return nil
 }

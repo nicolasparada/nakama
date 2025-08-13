@@ -69,6 +69,8 @@
     --leading-tight: 1.25;
     --leading-normal: 1.5;
     --leading-relaxed: 1.75;
+
+    --blur-strong: 2rem;
 }
 
 :root {
@@ -108,6 +110,13 @@ button, label {
 button, input, textarea {
     font: inherit;
     color: inherit;
+}
+
+label {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
 }
 
 a {
@@ -175,6 +184,10 @@ button, input[type=file]::file-selector-button, [role=button] {
         align-items: center;
         gap: var(--space-sm);
     }
+}
+
+a[role=button]:hover {
+    text-decoration: none;
 }
 
 input[type=file]:hover::file-selector-button {
@@ -264,12 +277,7 @@ svg {
     padding: var(--space-xl);
     box-shadow: var(--shadow-md);
 
-    img {
-        border-radius: var(--radius-lg);
-        max-height: 60vh;
-        width: auto;
-        max-width: 100%;
-    }
+    
 }
 
 .card+.card {
@@ -394,11 +402,7 @@ form {
     }
 }
 
-label[role=button] + input[type=file] {
-    display: none;
-}
-
-div:has(label):has(input[type=checkbox]) {
+div:has(>label):has(>input[type=checkbox]) {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
@@ -410,6 +414,10 @@ div:has(label):has(input[type=checkbox]) {
     gap: var(--space-sm);
     width: 100%;
 
+    &.spaced {
+        gap: var(--space-lg);
+    }
+
     .spacer {
         flex-grow: 1;
     }
@@ -419,4 +427,203 @@ div:has(label):has(input[type=checkbox]) {
     background-color: var(--surface-2);
     opacity: 0.6;
     text-decoration: line-through;
+}
+
+input[type=checkbox] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    width: 3rem;
+    height: 1.5rem;
+    background-color: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+
+    &:hover {
+        border-color: var(--border-strong);
+        background-color: var(--surface-3);
+    }
+
+    &:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px oklch(0.65 0.25 45 / 0.2);
+    }
+
+    /* Switch knob/thumb */
+    &::before {
+        content: '';
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        width: calc(1.5rem - 4px);
+        height: calc(1.5rem - 4px);
+        background-color: var(--text-muted);
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        transform: translateX(0);
+    }
+
+    /* Checked state */
+    &:checked {
+        background-color: var(--primary);
+        border-color: var(--primary);
+
+        &::before {
+            background-color: var(--text-inverse);
+            transform: translateX(1.5rem);
+        }
+
+        &:hover {
+            background-color: var(--primary-hover);
+            border-color: var(--primary-hover);
+        }
+
+        &:focus {
+            border-color: var(--primary-hover);
+            box-shadow: 0 0 0 2px oklch(0.70 0.25 45 / 0.2);
+        }
+    }
+
+    /* Disabled state */
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+
+        &::before {
+            background-color: var(--text-muted);
+        }
+    }
+}
+
+form div:has(>label):not(:has(>input[type=checkbox])) {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.avatar {
+    --size: 3rem;
+    width: var(--size);
+    height: var(--size);
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.avatar-initial {
+    --size: 3rem;
+    width: var(--size);
+    height: var(--size);
+    position: relative;
+    background-color: var(--primary);
+    border-radius: 50%;
+    
+    &::after {
+        content: attr(data-initial);
+        font-family: 'Nunito', sans-serif;
+        font-weight: bold;
+        color: var(--text-inverse);
+        text-transform: uppercase;
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+.post {
+    display: grid;
+    grid-template-areas: 
+        "avatar header"
+        "avatar content"
+        "avatar previews"
+        "avatar attachments";
+    grid-template-columns: auto 1fr;
+    gap: var(--space-md);
+
+    .post-avatar {
+        grid-area: avatar;
+    }
+
+    .post-header {
+        grid-area: header;
+        display: flex;
+        align-items: center;
+        height: 3rem; /* same as avatar */
+
+        .post-username {
+            font-family: 'Nunito', sans-serif;
+            font-weight: bold;
+        }
+
+        .post-time {
+            margin-left: auto;
+            font-size: var(--font-size-sm);
+            color: var(--text-muted);
+        }
+    }
+
+    .post-content {
+        grid-area: content;
+        margin: 0;
+    }
+
+    .post-previews {
+        grid-area: previews;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+
+        .post-preview {
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: var(--space-lg);
+            background-color: var(--surface-2);
+
+            h4 {
+                color: var(--text-muted);
+                margin: 0;
+            }
+
+            h3 {
+                margin-top: 0;
+            }
+
+            p {
+                color: var(--text-muted);
+                font-size: var(--font-size-md);
+            }
+
+            img {
+                border-radius: var(--radius-lg);
+                width: 100%;
+                height: auto;
+                max-width: 100%;
+                max-height: 60vh;
+                object-fit: contain;
+            }
+        }
+    }
+
+    .post-attachments {
+        grid-area: attachments;
+        display: flex;
+        align-items: start;
+        flex-wrap: nowrap;
+        gap: var(--space-sm);
+        overflow-x: auto;
+
+        img {
+            border-radius: var(--radius-lg);
+            flex: 0 0 auto;
+            height: auto;
+            width: auto;
+            max-width: 100%;
+            max-height: 60vh;
+            object-fit: contain;
+        }
+    }
 }

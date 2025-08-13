@@ -71,6 +71,9 @@ func (h *Handler) renderErrorPage(w http.ResponseWriter, r *http.Request, err er
 }
 
 func (h *Handler) renderWithError(w http.ResponseWriter, r *http.Request, name string, data map[string]any, err error) {
+	if data == nil {
+		data = map[string]any{}
+	}
 	h.ErrorLogger.Error("got error", "req_method", r.Method, "req_url", r.URL.String(), "err", err)
 	data["Error"] = maskError(err)
 	h.render(w, r, name, data, errorToStatusCode(err))

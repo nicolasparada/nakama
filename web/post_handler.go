@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/types"
 	"golang.org/x/sync/errgroup"
 )
@@ -13,14 +14,27 @@ const storeInMemoryUntil = 10 * 1024 * 1024 // 10 MB
 
 func (h *Handler) showHome(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	posts, err := h.Service.Posts(ctx)
-	if err != nil {
-		h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch posts: %w", err))
-		return
+	q := r.URL.Query()
+
+	var feed types.Page[types.Post]
+	if _, loggedIn := auth.UserFromContext(ctx); loggedIn && q.Get("feed") != "global" {
+		var err error
+		feed, err = h.Service.Feed(ctx, types.ListFeed{})
+		if err != nil {
+			h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch user feed: %w", err))
+			return
+		}
+	} else {
+		var err error
+		feed, err = h.Service.Posts(ctx)
+		if err != nil {
+			h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch general feed: %w", err))
+			return
+		}
 	}
 
 	h.render(w, r, "home.tmpl", map[string]any{
-		"Posts": posts,
+		"Feed": feed,
 	}, http.StatusOK)
 }
 

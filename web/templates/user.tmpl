@@ -23,7 +23,7 @@
         {{end}}
         
         {{if .User.Relationship.IsMe}}
-            <a href="/users/{{.User.ID}}/edit">Edit Profile</a>
+            <a href="/u/{{.User.Username}}/edit" role="button">Edit Profile</a>
         {{end}}
     {{end}}
 </main>

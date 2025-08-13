@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/errs"
+	"github.com/nicolasparada/nakama/ffmpeg"
 	"github.com/nicolasparada/nakama/types"
 )
 
@@ -77,6 +80,36 @@ func (svc *Service) ToggleFollow(ctx context.Context, in types.ToggleFollow) err
 				ActorUserID: loggedInUser.ID,
 			})
 		})
+	}
+
+	return nil
+}
+
+func (svc *Service) UploadAvatar(ctx context.Context, r io.ReadSeeker) error {
+	loggedInUser, loggedIn := auth.UserFromContext(ctx)
+	if !loggedIn {
+		return errs.Unauthenticated
+	}
+
+	img, err := ffmpeg.ResizeImage(ctx, 400, r)
+	if err != nil {
+		return fmt.Errorf("resize avatar: %w", err)
+	}
+
+	attachment := newAttachment(img)
+
+	cleanup, err := svc.Minio.Upload(ctx, "avatars", attachment)
+	if err != nil {
+		return err
+	}
+
+	err = svc.Cockroach.UpdateUserAvatar(ctx, types.UpdateUserAvatar{
+		UserID: loggedInUser.ID,
+		Avatar: attachment,
+	})
+	if err != nil {
+		go cleanup()
+		return err
 	}
 
 	return nil

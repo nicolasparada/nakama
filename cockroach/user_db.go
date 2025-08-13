@@ -187,3 +187,21 @@ func (c *Cockroach) deleteFollow(ctx context.Context, followerID, followeeID str
 	}
 	return nil
 }
+
+func (c *Cockroach) UpdateUserAvatar(ctx context.Context, in types.UpdateUserAvatar) error {
+	const q = `
+		UPDATE users
+		SET avatar = @avatar, updated_at = NOW()
+		WHERE id = @user_id
+	`
+
+	_, err := c.db.Exec(ctx, q, pgx.StrictNamedArgs{
+		"user_id": in.UserID,
+		"avatar":  in.Avatar,
+	})
+	if err != nil {
+		return fmt.Errorf("sql update user avatar: %w", err)
+	}
+
+	return nil
+}
