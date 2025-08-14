@@ -3,17 +3,19 @@ package types
 import "time"
 
 type Notification struct {
-	ID             string           `db:"id"`
-	UserID         string           `db:"user_id"`
-	Kind           NotificationKind `db:"kind"`
-	ActorUserIDs   []string         `db:"actor_user_ids"`
-	ActorsCount    uint32           `db:"actors_count"`
-	NotifiableKind *NotifiableKind  `db:"notifiable_kind"`
-	NotifiableID   *string          `db:"notifiable_id"`
-	ReadAt         *time.Time       `db:"read_at"`
-	CreatedAt      time.Time        `db:"created_at"`
-	UpdatedAt      time.Time        `db:"updated_at"`
+	ID     string           `db:"id"`
+	UserID string           `db:"user_id"`
+	Kind   NotificationKind `db:"kind"`
+	// ActorUserIDs only includes the last 2 actors max.
+	ActorUserIDs   []string        `db:"actor_user_ids"`
+	ActorsCount    uint32          `db:"actors_count"`
+	NotifiableKind *NotifiableKind `db:"notifiable_kind"`
+	NotifiableID   *string         `db:"notifiable_id"`
+	ReadAt         *time.Time      `db:"read_at"`
+	CreatedAt      time.Time       `db:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at"`
 
+	// Actors only includes the last 2 actors max.
 	Actors *[]User `db:"actors,omitempty"`
 }
 

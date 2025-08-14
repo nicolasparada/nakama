@@ -33,17 +33,16 @@
 {{end}}
 
 {{define "actors"}}
-{{- $total := len .Actors -}}
-{{if eq $total 1}}
+{{if eq .ActorsCount 1}}
     {{- $actor := (index .Actors 0) -}}
     <a href="/u/{{$actor.Username}}" class="primary">{{$actor.Username}}</a>
-{{else if eq $total 2}}
+{{else if eq .ActorsCount 2}}
     {{- $actorA := index .Actors 0}}
     {{- $actorB := index .Actors 1}}
     <a href="/u/{{$actorA.Username}}" class="primary">{{$actorA.Username}}</a> and <a href="/u/{{$actorB.Username}}" class="primary">{{$actorB.Username}}</a>
-{{else if gt $total 2}}
+{{else if gt .ActorsCount 2}}
     {{- $actorA := index .Actors 0}}
     {{- $actorB := index .Actors 1}}
-    <a href="/u/{{$actorA.Username}}" class="primary">{{$actorA.Username}}</a>, <a href="/u/{{$actorB.Username}}" class="primary">{{$actorB.Username}}</a> and {{plus $total -2}} others
+    <a href="/u/{{$actorA.Username}}" class="primary">{{$actorA.Username}}</a>, <a href="/u/{{$actorB.Username}}" class="primary">{{$actorB.Username}}</a> and {{plus .ActorsCount -2}} others
 {{end}}
 {{end}}

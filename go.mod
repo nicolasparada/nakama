@@ -1,6 +1,6 @@
 module github.com/nicolasparada/nakama
 
-go 1.24.6
+go 1.25.0
 
 tool github.com/air-verse/air
 
@@ -14,11 +14,11 @@ require (
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/nicolasparada/go-db v0.3.2
 	github.com/nicolasparada/go-tmpl-renderer v0.2.1
-	github.com/peterbourgon/ff/v4 v4.0.0-alpha.4
+	github.com/peterbourgon/ff/v4 v4.0.0-beta.1
 	github.com/rs/xid v1.6.0
 	golang.org/x/net v0.41.0
-	golang.org/x/sync v0.16.0
-	golang.org/x/text v0.28.0
+	golang.org/x/sync v0.15.0
+	golang.org/x/text v0.26.0
 	mvdan.cc/xurls/v2 v2.6.0
 )
 

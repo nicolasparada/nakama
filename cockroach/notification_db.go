@@ -16,15 +16,17 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	const q = `
 		SELECT 
 			notifications.*,
-			json_agg(
-				json_build_object(
-					'id', users.id,
-					'username', users.username
-				)
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', users.id,
+						'username', users.username
+					) ORDER BY array_position(notifications.actor_user_ids, users.id)
+				) FILTER (WHERE users.id IS NOT NULL),
+				'[]'::json
 			) AS actors
 		FROM notifications
-		LEFT JOIN notification_actors AS actors ON notifications.id = actors.notification_id
-		LEFT JOIN users ON actors.user_id = users.id
+		LEFT JOIN users ON users.id = ANY(notifications.actor_user_ids)
 		WHERE notifications.user_id = @user_id
 		GROUP BY notifications.id
 		ORDER BY notifications.id DESC

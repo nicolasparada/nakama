@@ -101,7 +101,7 @@ h1, h2, h3, h4, h5, h6 {
     outline: none;
 }
 
-button, label {
+button, [role=button] label {
     user-select: none;
     -webkit-user-select: none;
     touch-action: manipulation;
@@ -529,7 +529,8 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
         "avatar header"
         "avatar content"
         "avatar previews"
-        "avatar attachments";
+        "avatar attachments"
+        "avatar controls";
     grid-template-columns: auto 1fr;
     gap: var(--space-md);
 
@@ -614,6 +615,14 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
             max-height: 60vh;
             object-fit: contain;
         }
+    }
+
+    .post-controls {
+        grid-area: controls;
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        width: 100%;
     }
 }
 

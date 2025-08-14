@@ -162,64 +162,55 @@ func plus(args ...any) (any, error) {
 		return args[0], nil
 	}
 
-	switch v := args[0].(type) {
-	case int:
-		for _, arg := range args[1:] {
-			n, ok := arg.(int)
-			if !ok {
-				return nil, fmt.Errorf("expected int argument, got %T", arg)
-			}
-			v += n
+	// Convert all arguments to float64 for calculation
+	var sum float64
+	var hasFloat bool
+
+	for i, arg := range args {
+		switch v := arg.(type) {
+		case int:
+			sum += float64(v)
+		case int8:
+			sum += float64(v)
+		case int16:
+			sum += float64(v)
+		case int32:
+			sum += float64(v)
+		case int64:
+			sum += float64(v)
+		case uint:
+			sum += float64(v)
+		case uint8:
+			sum += float64(v)
+		case uint16:
+			sum += float64(v)
+		case uint32:
+			sum += float64(v)
+		case uint64:
+			sum += float64(v)
+		case float32:
+			sum += float64(v)
+			hasFloat = true
+		case float64:
+			sum += v
+			hasFloat = true
+		default:
+			return nil, fmt.Errorf("argument %d: unsupported type %T (expected numeric type)", i, arg)
 		}
-		return v, nil
-	case int32:
-		for _, arg := range args[1:] {
-			n, ok := arg.(int32)
-			if !ok {
-				return nil, fmt.Errorf("expected int32 argument, got %T", arg)
-			}
-			v += n
-		}
-		return v, nil
-	case int64:
-		for _, arg := range args[1:] {
-			n, ok := arg.(int64)
-			if !ok {
-				return nil, fmt.Errorf("expected int64 argument, got %T", arg)
-			}
-			v += n
-		}
-		return v, nil
-	case uint32:
-		for _, arg := range args[1:] {
-			n, ok := arg.(uint32)
-			if !ok {
-				return nil, fmt.Errorf("expected uint32 argument, got %T", arg)
-			}
-			v += n
-		}
-		return v, nil
-	case uint64:
-		for _, arg := range args[1:] {
-			n, ok := arg.(uint64)
-			if !ok {
-				return nil, fmt.Errorf("expected uint64 argument, got %T", arg)
-			}
-			v += n
-		}
-		return v, nil
-	case float64:
-		for _, arg := range args[1:] {
-			n, ok := arg.(float64)
-			if !ok {
-				return nil, fmt.Errorf("expected float64 argument, got %T", arg)
-			}
-			v += n
-		}
-		return v, nil
 	}
 
-	return nil, fmt.Errorf("unsupported argument type")
+	// Return the appropriate type based on inputs
+	if hasFloat {
+		return sum, nil
+	}
+
+	// If all inputs were integers, try to return an integer
+	// Check if the result fits in int64
+	if sum >= float64(^uint64(0)>>1) || sum < float64(-1<<63) {
+		return sum, nil // Return float64 if too large for int64
+	}
+
+	return int64(sum), nil
 }
 
 var (
@@ -233,8 +224,11 @@ func linkify(text string) template.HTML {
 		return template.HTML("")
 	}
 
+	// SECURITY: First escape any HTML in the input text to prevent XSS
+	escapedText := template.HTMLEscapeString(text)
+
 	// First convert URLs to links using the existing reURL regex
-	result := reURL.ReplaceAllStringFunc(text, func(url string) string {
+	result := reURL.ReplaceAllStringFunc(escapedText, func(url string) string {
 		return fmt.Sprintf(`<a href="%[1]s" target="_blank" rel="noreferrer noopener" class="primary">%[1]s</a>`, url)
 	})
 
@@ -256,7 +250,7 @@ func linkify(text string) template.HTML {
 		}
 
 		// Check if this mention is part of an email
-		if isPartOfMentionEmail(text, match) {
+		if isPartOfMentionEmail(escapedText, match) {
 			return match
 		}
 
@@ -288,16 +282,16 @@ func cleanMentionUsername(username string) string {
 }
 
 // isPartOfMentionEmail checks if the @username is part of an email address
-func isPartOfMentionEmail(text, fullMatch string) bool {
-	// Find the position of the full match in the text
-	pos := strings.Index(text, fullMatch)
+func isPartOfMentionEmail(escapedText, fullMatch string) bool {
+	// Find the position of the full match in the escaped text
+	pos := strings.Index(escapedText, fullMatch)
 	if pos == -1 {
 		return false
 	}
 
 	// Check if there's another @ character immediately after the username
 	endPos := pos + len(fullMatch)
-	if endPos < len(text) && text[endPos] == '@' {
+	if endPos < len(escapedText) && escapedText[endPos] == '@' {
 		return true
 	}
 
