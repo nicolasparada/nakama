@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR NOT NULL PRIMARY KEY,
     email VARCHAR NOT NULL,
     username VARCHAR NOT NULL,
+    followers_count INT NOT NULL DEFAULT 0, -- updated by [follows_count_trigger]
+    following_count INT NOT NULL DEFAULT 0, -- updated by [follows_count_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
 );
@@ -18,6 +20,60 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar JSONB;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (username);
+
+CREATE TABLE IF NOT EXISTS follows (
+    follower_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    followee_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (follower_id, followee_id)
+);
+
+CREATE INDEX IF NOT EXISTS follows_follower_id_idx ON follows (follower_id);
+CREATE INDEX IF NOT EXISTS follows_followee_id_idx ON follows (followee_id);
+
+DROP TRIGGER IF EXISTS follows_count_trigger ON follows;
+
+CREATE OR REPLACE FUNCTION update_follows_count()
+RETURNS TRIGGER AS $$
+DECLARE
+    follower_user_id VARCHAR;
+    followee_user_id VARCHAR;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        follower_user_id := (NEW).follower_id;
+        followee_user_id := (NEW).followee_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        follower_user_id := (OLD).follower_id;
+        followee_user_id := (OLD).followee_id;
+    END IF;
+
+    UPDATE users 
+    SET following_count = (
+        SELECT COUNT(*) 
+        FROM follows 
+        WHERE follows.follower_id = follower_user_id
+    )
+    WHERE id = follower_user_id;
+
+    UPDATE users 
+    SET followers_count = (
+        SELECT COUNT(*) 
+        FROM follows 
+        WHERE follows.followee_id = followee_user_id
+    )
+    WHERE id = followee_user_id;
+
+    IF TG_OP = 'INSERT' THEN
+        RETURN (NEW);
+    ELSE
+        RETURN (OLD);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER follows_count_trigger
+    AFTER INSERT OR DELETE ON follows
+    FOR EACH ROW EXECUTE FUNCTION update_follows_count();
 
 CREATE TABLE IF NOT EXISTS posts (
     id VARCHAR NOT NULL PRIMARY KEY,
@@ -41,7 +97,6 @@ CREATE TABLE IF NOT EXISTS comments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
 );
 
--- Drop the trigger first to avoid conflicts when replacing the function
 DROP TRIGGER IF EXISTS comments_count_trigger ON comments;
 
 CREATE OR REPLACE FUNCTION update_comments_count()
@@ -71,7 +126,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Recreate the trigger after the function is updated
 CREATE TRIGGER comments_count_trigger
     AFTER INSERT OR DELETE ON comments
     FOR EACH ROW EXECUTE FUNCTION update_comments_count();
@@ -105,16 +159,6 @@ CREATE TABLE IF NOT EXISTS chapters (
 CREATE INDEX IF NOT EXISTS chapters_publication_id_idx ON chapters (publication_id);
 CREATE UNIQUE INDEX IF NOT EXISTS chapters_publication_id_number_idx ON chapters (publication_id, number);
 
-CREATE TABLE IF NOT EXISTS follows (
-    follower_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
-    followee_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (follower_id, followee_id)
-);
-
-CREATE INDEX IF NOT EXISTS follows_follower_id_idx ON follows (follower_id);
-CREATE INDEX IF NOT EXISTS follows_followee_id_idx ON follows (followee_id);
-
 CREATE TABLE IF NOT EXISTS notifications (
     id VARCHAR NOT NULL PRIMARY KEY,
     user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
@@ -143,15 +187,13 @@ CREATE TABLE IF NOT EXISTS notification_actors (
 CREATE INDEX IF NOT EXISTS notification_actors_user_id_idx ON notification_actors (user_id);
 CREATE INDEX IF NOT EXISTS notification_actors_notification_id_idx ON notification_actors (notification_id);
 
--- Drop existing trigger if it exists to avoid conflicts when replacing the function
 DROP TRIGGER IF EXISTS notification_actors_update_trigger ON notification_actors;
 
--- Function to update notification actors data
 CREATE OR REPLACE FUNCTION update_notification_actors()
 RETURNS TRIGGER AS $$
 DECLARE
     notification_id_to_update VARCHAR;
-    latest_actors VARCHAR[];
+    latest_two_actor_user_ids VARCHAR[];
     total_count INT;
 BEGIN
     IF TG_OP = 'INSERT' THEN
@@ -160,24 +202,21 @@ BEGIN
         notification_id_to_update := (OLD).notification_id;
     END IF;
 
-    -- Get total count of actors for this notification
     SELECT COUNT(*) INTO total_count
     FROM notification_actors 
     WHERE notification_id = notification_id_to_update;
 
-    -- Get the latest 2 actors (most recent first)
     SELECT ARRAY(
         SELECT user_id 
         FROM notification_actors 
         WHERE notification_id = notification_id_to_update
         ORDER BY created_at DESC
         LIMIT 2
-    ) INTO latest_actors;
+    ) INTO latest_two_actor_user_ids;
 
-    -- Update the notification with the new data
     UPDATE notifications 
     SET 
-        actor_user_ids = latest_actors,
+        actor_user_ids = latest_two_actor_user_ids,
         actors_count = total_count
     WHERE id = notification_id_to_update;
 
@@ -189,7 +228,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for notification_actors changes after the function is updated
 CREATE TRIGGER notification_actors_update_trigger
     AFTER INSERT OR DELETE ON notification_actors
     FOR EACH ROW EXECUTE FUNCTION update_notification_actors();

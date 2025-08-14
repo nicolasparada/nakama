@@ -16,12 +16,14 @@ var (
 )
 
 type User struct {
-	ID        string      `db:"id"`
-	Email     string      `db:"email"`
-	Username  string      `db:"username"`
-	Avatar    *Attachment `db:"avatar"`
-	CreatedAt time.Time   `db:"created_at"`
-	UpdatedAt time.Time   `db:"updated_at"`
+	ID             string      `db:"id"`
+	Email          string      `db:"email"`
+	Username       string      `db:"username"`
+	Avatar         *Attachment `db:"avatar"`
+	FollowersCount uint64      `db:"followers_count"`
+	FollowingCount uint64      `db:"following_count"`
+	CreatedAt      time.Time   `db:"created_at"`
+	UpdatedAt      time.Time   `db:"updated_at"`
 
 	Relationship *UserRelationship `db:"relationship"`
 }
