@@ -41,65 +41,13 @@
     {{end}}
 
     {{if not .Feed.Items}}
-        <p>No posts available</p>
+        <div class="info">
+            <p>No posts available</p>
+        </div>
     {{else}}
         <div role="feed">
             {{range .Feed.Items}}
-                <article class="card post">
-                    <a href="/u/{{.User.Username}}" class="post-avatar">
-                        {{template "avatar.tmpl" .User}}
-                    </a>
-
-                    <div class="post-header">
-                        <a href="/u/{{.User.Username}}" class="post-username">{{.User.Username}}</a>
-                        <a href="/p/{{.ID}}" class="post-time">
-                            <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
-                        </a>
-                    </div>
-
-                    <p class="post-content">{{.Content | linkify}}</p>
-
-                    {{if not .Previews.IsEmpty}}
-                        <div class="post-previews">
-                            {{range .Previews}}
-                                {{if not .Data.IsEmpty}}
-                                    <div class="post-preview">
-                                        <h4>{{.Data.SiteName}}</h4>
-                                        <h3>
-                                            <a href="{{.Data.URL}}" target="_blank" rel="noopener noreferrer">
-                                                {{.Data.Title}}
-                                            </a>
-                                        </h3>
-                                        <p>{{.Data.Description}}</p>
-
-                                        {{if .Data.Images}}
-                                            <div class="post-preview-images">
-                                                {{range .Data.Images}}
-                                                    <img src="{{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
-                                                {{end}}
-                                            </div>
-                                        {{end}}
-                                    </div>
-                                {{end}}
-                            {{end}}
-                        </div>
-                    {{end}}
-
-                    {{if .Attachments}}
-                        <div class="post-attachments">
-                            {{range .Attachments}}
-                                <img src="http://localhost:9000/post-attachments/{{.Path}}" alt="Attachment" width="{{.Width}}" height="{{.Height}}">
-                            {{end}}
-                        </div>
-                    {{end}}
-
-                    <div class="post-controls">
-                        <a href="/p/{{.ID}}" role="button" class="post-comments-count" aria-label="{{.CommentsCount}} comments" title="{{.CommentsCount}} comments">
-                            <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M7 12L17 12" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M7 8L13 8" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M3 20.2895V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V15C21 16.1046 20.1046 17 19 17H7.96125C7.35368 17 6.77906 17.2762 6.39951 17.7506L4.06852 20.6643C3.71421 21.1072 3 20.8567 3 20.2895Z" stroke="#000000" stroke-width="1.5" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
-                            <span>{{.CommentsCount}}</span>
-                        </a>
-                    </div>
-                </article>
+                {{template "post-card.tmpl" .}}
             {{end}}
         </div>
     {{end}}

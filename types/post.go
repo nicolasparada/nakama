@@ -86,3 +86,7 @@ func (in *ListFeed) SetUserID(userID string) {
 func (in ListFeed) UserID() string {
 	return in.userID
 }
+
+type SearchPosts struct {
+	Query string
+}

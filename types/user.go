@@ -159,3 +159,16 @@ type UpdateUserAvatar struct {
 	UserID string
 	Avatar Attachment
 }
+
+type SearchUsers struct {
+	Query          string
+	loggedInUserID *string
+}
+
+func (in *SearchUsers) SetLoggedInUserID(userID string) {
+	in.loggedInUserID = &userID
+}
+
+func (in SearchUsers) LoggedInUserID() *string {
+	return in.loggedInUserID
+}

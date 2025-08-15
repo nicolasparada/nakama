@@ -395,6 +395,18 @@ body {
     }
 }
 
+.info {
+    background-color: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin: var(--space-lg) 0;
+
+    p {
+        white-space: pre-wrap;
+    }
+}
+
 form {
     display: flex;
     flex-direction: column;
@@ -525,21 +537,16 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 
 .post {
     display: grid;
-    grid-template-areas: 
-        "avatar header"
-        "avatar content"
-        "avatar previews"
-        "avatar attachments"
-        "avatar controls";
     grid-template-columns: auto 1fr;
     gap: var(--space-md);
 
     .post-avatar {
-        grid-area: avatar;
+        grid-column: 1;
+        grid-row: 1 / -1; /* Span from first to last row */
     }
 
     .post-header {
-        grid-area: header;
+        grid-column: 2;
         display: flex;
         align-items: center;
         height: 3rem; /* same as avatar */
@@ -557,12 +564,12 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 
     .post-content {
-        grid-area: content;
+        grid-column: 2;
         margin: 0;
     }
 
     .post-previews {
-        grid-area: previews;
+        grid-column: 2;
         display: flex;
         flex-direction: column;
         gap: var(--space-sm);
@@ -599,7 +606,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 
     .post-attachments {
-        grid-area: attachments;
+        grid-column: 2;
         display: flex;
         align-items: start;
         flex-wrap: nowrap;
@@ -618,7 +625,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 
     .post-controls {
-        grid-area: controls;
+        grid-column: 2;
         display: flex;
         align-items: center;
         gap: var(--space-sm);
@@ -634,5 +641,128 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 
     >div:has(input[type=file]) {
         flex-grow: 1;
+    }
+}
+
+.search-form {
+    display: flex;
+    flex-direction: row;
+    gap: var(--space-sm);
+    align-items: center;
+    width: 100%;
+
+    >div {
+        flex-grow: 1;
+        input {
+            width: 100%;
+        }
+    }
+
+
+}
+
+/* Tabs Component */
+.tabs {
+    background-color: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xs);
+    display: flex;
+    gap: var(--space-xs);
+    margin: var(--space-lg) 0;
+    overflow-x: auto;
+}
+
+.tab {
+    background-color: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--space-sm) var(--space-md);
+    text-decoration: none;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+    position: relative;
+    
+    &:hover {
+        background-color: var(--surface-2);
+        color: var(--text);
+        text-decoration: none;
+    }
+    
+    &[aria-selected="true"] {
+        background-color: var(--surface-3);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        color: var(--text);
+    }
+    
+    /* Focus styles for accessibility */
+    &:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+}
+
+/* Tab content */
+.tab-content {
+    display: none;
+    
+    &.active {
+        display: block;
+    }
+}
+
+/* Search Results */
+.search-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.search-result {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    
+    .search-result-avatar {
+        flex-shrink: 0;
+        
+        img {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-lg);
+            object-fit: cover;
+        }
+    }
+    
+    .search-result-content {
+        flex-grow: 1;
+        min-width: 0; /* Allow text truncation */
+        
+        .search-result-username {
+            margin: 0 0 var(--space-xs) 0;
+            font-size: 1rem;
+            font-weight: 600;
+            
+            a {
+                color: var(--text);
+                text-decoration: none;
+                
+                &:hover {
+                    color: var(--primary);
+                }
+            }
+        }
+        
+        .search-result-meta {
+            margin: 0;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
     }
 }

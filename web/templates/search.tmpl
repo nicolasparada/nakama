@@ -1,0 +1,133 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>Search</h1>
+
+    <form action="/search" method="get" class="search-form">
+        <input type="hidden" name="tab" value="{{.Tab}}">
+        <div>
+            <input type="text" name="q" placeholder="Search something..." autocomplete="off" value="{{.Query}}" required autofocus>
+        </div>
+
+        <button>
+            <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M17 17L21 21" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M3 11C3 15.4183 6.58172 19 11 19C13.213 19 15.2161 18.1015 16.6644 16.6493C18.1077 15.2022 19 13.2053 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+            <span>Search</span>
+        </button>
+    </form>
+
+    <div class="tabs" role="tablist" aria-label="Search results by category">
+        <a href="/search?q={{.Query}}&tab=users" 
+            class="tab" 
+            role="tab"
+            aria-selected="{{if or (not .Tab) (eq .Tab "users")}}true{{else}}false{{end}}"
+            aria-controls="users-results"
+            id="users-tab">
+            Users
+        </a>
+        <a href="/search?q={{.Query}}&tab=posts" 
+            class="tab" 
+            role="tab"
+            aria-selected="{{if eq .Tab "posts"}}true{{else}}false{{end}}"
+            aria-controls="posts-results"
+            id="posts-tab">
+            Posts
+        </a>
+        <a href="/search?q={{.Query}}&tab=manga" 
+            class="tab" 
+            role="tab"
+            aria-selected="{{if eq .Tab "manga"}}true{{else}}false{{end}}"
+            aria-controls="manga-results"
+            id="manga-tab">
+            Manga
+        </a>
+    </div>
+    
+    {{if or (not .Tab) (eq .Tab "users")}}
+        <div class="tab-content active" 
+                role="tabpanel" 
+                aria-labelledby="users-tab"
+                id="users-results">
+            {{template "user-results.tmpl" .}}
+        </div>
+    {{end}}
+    
+    {{if eq .Tab "posts"}}
+        <div class="tab-content active" 
+                role="tabpanel" 
+                aria-labelledby="posts-tab"
+                id="posts-results">
+            {{template "post-results.tmpl" .}}
+        </div>
+    {{end}}
+    
+    {{if eq .Tab "manga"}}
+        <div class="tab-content active" 
+                role="tabpanel" 
+                aria-labelledby="manga-tab"
+                id="manga-results">
+            {{template "manga-results.tmpl" .}}
+        </div>
+    {{end}}
+</main>
+{{end}}
+
+{{define "user-results.tmpl"}}
+    <h2>Users</h2>
+    {{if not .Query}}
+        <div class="info">
+            <p>Please enter a search query.</p>
+        </div>
+    {{else if not .Results.Items}}
+        <div class="info">
+            <p>No users found for {{printf "%q" .Query}}</p>
+        </div>
+    {{else}}
+        <div class="search-results" role="feed">
+            {{range .Results.Items}}
+                <article class="card search-result">
+                    <a href="/u/{{.Username}}" class="search-result-avatar">
+                        {{template "avatar.tmpl" .}}
+                    </a>
+
+                    <div class="search-result-content">
+                        <h2 class="search-result-username">
+                            <a href="/u/{{.Username}}">{{.Username}}</a>
+                        </h2>
+                        {{if .FollowersCount}}
+                            <p class="search-result-meta">{{.FollowersCount}} followers</p>
+                        {{end}}
+                    </div>
+                </article>
+            {{end}}
+        </div>
+    {{end}}
+{{end}}
+
+{{define "post-results.tmpl"}}
+    <h2>Posts</h2>
+    {{if not .Query}}
+        <div class="info">
+            <p>Please enter a search query.</p>
+        </div>
+    {{else if not .Results.Items}}
+        <div class="info">
+            <p>No posts found for {{printf "%q" .Query}}</p>
+        </div>
+    {{else}}
+        <div class="search-results" role="feed">
+            {{range .Results.Items}}
+                {{template "post-card.tmpl" .}}
+            {{end}}
+        </div>
+    {{end}}
+{{end}}
+
+{{define "manga-results.tmpl"}}
+    <h2>Manga</h2>
+    <div class="error">
+        <h3>Manga Search</h3>
+        <p>Manga search will be implemented soon!</p>
+        <p>This will search through manga titles and descriptions.</p>
+    </div>
+{{end}}

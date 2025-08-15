@@ -3,6 +3,7 @@ package cockroach
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nicolasparada/go-db"
@@ -11,20 +12,33 @@ import (
 	"github.com/nicolasparada/nakama/types"
 )
 
+var userColumns = [...]string{
+	"users.id",
+	"users.email",
+	"users.username",
+	"users.avatar",
+	"users.followers_count",
+	"users.following_count",
+	"users.created_at",
+	"users.updated_at",
+}
+
+var userColumnsStr = strings.Join(userColumns[:], ", ")
+
 func (c *Cockroach) UpsertUser(ctx context.Context, in types.UpsertUser) (types.User, error) {
 	var out types.User
 
 	// TODO: check user uniqueness case-insensitively.
 
-	const q = `
+	query := `
 		INSERT INTO users (id, email, username)
 		VALUES (@user_id, LOWER(@email), @username)
 		ON CONFLICT (email) DO UPDATE
 		SET username = EXCLUDED.username, updated_at = NOW()
-		RETURNING *
+		RETURNING ` + userColumnsStr + `
 	`
 
-	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
+	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
 		"user_id":  id.Generate(),
 		"email":    in.Email,
 		"username": in.Username,
@@ -44,9 +58,9 @@ func (c *Cockroach) UpsertUser(ctx context.Context, in types.UpsertUser) (types.
 func (c *Cockroach) User(ctx context.Context, in types.RetrieveUser) (types.User, error) {
 	var out types.User
 
-	const q = `
+	query := `
 		SELECT 
-			users.*,
+			` + userColumnsStr + `,
 			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
 				JSON_BUILD_OBJECT(
 					'followsYou', EXISTS(SELECT 1 FROM follows WHERE follower_id = users.id AND followee_id = @logged_in_user_id),
@@ -64,7 +78,7 @@ func (c *Cockroach) User(ctx context.Context, in types.RetrieveUser) (types.User
 		WHERE users.id = @user_id
 	`
 
-	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
+	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
 		"user_id":           in.UserID,
 		"logged_in_user_id": in.LoggedInUserID(),
 	})
@@ -87,9 +101,9 @@ func (c *Cockroach) User(ctx context.Context, in types.RetrieveUser) (types.User
 func (c *Cockroach) UserFromUsername(ctx context.Context, in types.RetrieveUserFromUsername) (types.User, error) {
 	var out types.User
 
-	const q = `
+	query := `
 		SELECT 
-			users.*,
+			` + userColumnsStr + `,
 			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
 				JSON_BUILD_OBJECT(
 					'followsYou', EXISTS(SELECT 1 FROM follows WHERE follower_id = users.id AND followee_id = @logged_in_user_id),
@@ -107,7 +121,7 @@ func (c *Cockroach) UserFromUsername(ctx context.Context, in types.RetrieveUserF
 		WHERE LOWER(users.username) = LOWER(@username)
 	`
 
-	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
+	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
 		"username":          in.Username,
 		"logged_in_user_id": in.LoggedInUserID(),
 	})
@@ -204,4 +218,52 @@ func (c *Cockroach) UpdateUserAvatar(ctx context.Context, in types.UpdateUserAva
 	}
 
 	return nil
+}
+
+func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (types.Page[types.User], error) {
+	var out types.Page[types.User]
+
+	query := `
+		SELECT 
+			` + userColumnsStr + `,
+			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
+				JSON_BUILD_OBJECT(
+					'followsYou', EXISTS(SELECT 1 FROM follows WHERE follower_id = users.id AND followee_id = @logged_in_user_id),
+					'followedByYou', EXISTS(SELECT 1 FROM follows WHERE follower_id = @logged_in_user_id AND followee_id = users.id),
+					'isMe', users.id = @logged_in_user_id
+				)
+			ELSE
+				JSON_BUILD_OBJECT(
+					'followsYou', false,
+					'followedByYou', false,
+					'isMe', false
+				)
+			END AS relationship
+		FROM users
+		WHERE (
+			LOWER(users.username) LIKE LOWER('%' || @query || '%')
+			OR
+			similarity(users.username, @query) > 0.1
+		)
+		ORDER BY
+			CASE WHEN LOWER(users.username) LIKE LOWER('%' || @query || '%') THEN 1 ELSE 2 END,
+			similarity(users.username, @query) DESC,
+			followers_count DESC, 
+			username
+	`
+
+	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
+		"query":             in.Query,
+		"logged_in_user_id": in.LoggedInUserID(),
+	})
+	if err != nil {
+		return out, fmt.Errorf("sql search users: %w", err)
+	}
+
+	out.Items, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.User])
+	if err != nil {
+		return out, fmt.Errorf("sql collect searched users: %w", err)
+	}
+
+	return out, nil
 }

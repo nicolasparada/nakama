@@ -118,6 +118,10 @@ func (svc *Service) Post(ctx context.Context, postID string) (types.Post, error)
 	return out, nil
 }
 
+func (svc *Service) SearchPosts(ctx context.Context, in types.SearchPosts) (types.Page[types.Post], error) {
+	return svc.Cockroach.SearchPosts(ctx, in)
+}
+
 func newAttachmentList(images []ffmpeg.Image) []types.Attachment {
 	now := time.Now()
 	id := id.Generate()

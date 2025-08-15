@@ -63,6 +63,7 @@ func (h *Handler) init() {
 	mux.HandleFunc("POST /publications/{publicationID}/chapters", h.createChapter)
 	mux.HandleFunc("GET /notifications", h.notifications)
 	mux.HandleFunc("POST /notifications/{notificationID}/read", h.readNotification)
+	mux.HandleFunc("GET /search", h.search)
 	mux.Handle("GET /static/", staticHandler())
 	mux.HandleFunc("GET /", h.notFound)
 

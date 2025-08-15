@@ -10,16 +10,16 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR NOT NULL PRIMARY KEY,
     email VARCHAR NOT NULL,
     username VARCHAR NOT NULL,
+    avatar JSONB,
     followers_count INT NOT NULL DEFAULT 0, -- updated by [follows_count_trigger]
     following_count INT NOT NULL DEFAULT 0, -- updated by [follows_count_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
 );
 
-ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar JSONB;
-
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (username);
+CREATE INDEX IF NOT EXISTS users_username_trgm_idx ON users USING GIN(username gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS follows (
     follower_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
@@ -78,7 +78,7 @@ CREATE TRIGGER follows_count_trigger
 CREATE TABLE IF NOT EXISTS posts (
     id VARCHAR NOT NULL PRIMARY KEY,
     user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
-    content TEXT NOT NULL,
+    content TEXT NOT NULL, -- Can be empty string, not nullable
     is_r18 BOOLEAN NOT NULL DEFAULT FALSE,
     attachments JSONB,
     comments_count INT NOT NULL DEFAULT 0, -- updated by [comments_count_trigger]
@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 CREATE INDEX IF NOT EXISTS posts_user_id_idx ON posts (user_id);
+CREATE INDEX IF NOT EXISTS posts_content_trgm_idx ON posts USING GIN(content gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS comments (
     id VARCHAR NOT NULL PRIMARY KEY,
