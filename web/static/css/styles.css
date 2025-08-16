@@ -846,3 +846,9 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     backdrop-filter: blur(8px);
     min-width: max-content;
 }
+
+.reaction-item.reacted {
+    background-color: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}

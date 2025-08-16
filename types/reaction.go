@@ -15,7 +15,13 @@ type Reaction struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-type ReactionsSummary map[string]uint64
+type ReactionsSummary []ReactionCounter
+
+type ReactionCounter struct {
+	Emoji   string `json:"emoji"`
+	Count   uint64 `json:"count"`
+	Reacted bool   `json:"reacted"`
+}
 
 type ToggleReaction struct {
 	PostID string `json:"post_id"`

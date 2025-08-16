@@ -80,10 +80,14 @@
 
             {{if .Reactions}}
                 <div class="reaction-summary">
-                    {{range $emoji, $count := .Reactions}}
+                    {{range .Reactions}}
                         <form method="post" action="/posts/{{$.ID}}/toggle-reaction" class="reaction-summary-form">
-                            <button type="submit" name="emoji" value="{{$emoji}}" class="reaction-item" title="{{$count}} {{$emoji}} reactions - Click to toggle">
-                                {{$emoji}} {{$count}}
+                            <button type="submit" name="emoji" value="{{.Emoji}}" 
+                                    class="reaction-item{{if .Reacted}} reacted{{end}}" 
+                                    title="{{.Count}} {{.Emoji}} reactions - Click to {{if .Reacted}}remove{{else}}add{{end}}"
+                                    aria-label="{{.Count}} {{.Emoji}} reactions, {{if .Reacted}}you reacted, click to remove{{else}}click to add your reaction{{end}}"
+                                    {{if .Reacted}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>
+                                {{.Emoji}} {{.Count}}
                             </button>
                         </form>
                     {{end}}

@@ -90,8 +90,12 @@ func (svc *Service) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 	return out, nil
 }
 
-func (svc *Service) Posts(ctx context.Context) (types.Page[types.Post], error) {
-	out, err := svc.Cockroach.Posts(ctx)
+func (svc *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
+	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
+		in.SetLoggedInUserID(u.ID)
+	}
+
+	out, err := svc.Cockroach.Posts(ctx, in)
 	if err != nil {
 		return out, err
 	}
@@ -101,14 +105,14 @@ func (svc *Service) Posts(ctx context.Context) (types.Page[types.Post], error) {
 	return out, nil
 }
 
-func (svc *Service) Post(ctx context.Context, postID string) (types.Post, error) {
+func (svc *Service) Post(ctx context.Context, in types.RetrievePost) (types.Post, error) {
 	var out types.Post
 
-	if !id.Valid(postID) {
-		return out, errs.NewInvalidArgumentError("PostID", "Invalid post ID")
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
 
-	out, err := svc.Cockroach.Post(ctx, postID)
+	out, err := svc.Cockroach.Post(ctx, in)
 	if err != nil {
 		return out, err
 	}

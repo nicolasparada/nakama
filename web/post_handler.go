@@ -26,7 +26,7 @@ func (h *Handler) showHome(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var err error
-		feed, err = h.Service.Posts(ctx)
+		feed, err = h.Service.Posts(ctx, types.ListPosts{})
 		if err != nil {
 			h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch general feed: %w", err))
 			return
@@ -89,7 +89,7 @@ func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
 	g.Go(func() error {
 		var err error
 
-		post, err = h.Service.Post(ctx, postID)
+		post, err = h.Service.Post(ctx, types.RetrievePost{PostID: postID})
 		if err != nil {
 			return fmt.Errorf("fetch post: %w", err)
 		}

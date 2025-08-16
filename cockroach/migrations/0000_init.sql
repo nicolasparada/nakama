@@ -167,20 +167,24 @@ BEGIN
     WHERE post_id = target_post_id;
 
     IF reaction_count = 0 THEN
-        reaction_summary := '{}'::jsonb;
+        reaction_summary := '[]'::jsonb;
     ELSE
-        SELECT jsonb_object_agg(emoji, count)
+        SELECT jsonb_agg(
+            jsonb_build_object(
+                'emoji', emoji,
+                'count', count
+            ) ORDER BY count DESC, emoji ASC
+        )
         INTO reaction_summary
         FROM (
             SELECT emoji, COUNT(*)::int as count
             FROM reactions 
             WHERE post_id = target_post_id
             GROUP BY emoji
-            ORDER BY COUNT(*) DESC, emoji ASC
         ) reaction_counts;
         
         IF reaction_summary IS NULL THEN
-            reaction_summary := '{}'::jsonb;
+            reaction_summary := '[]'::jsonb;
         END IF;
     END IF;
 

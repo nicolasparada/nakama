@@ -5,6 +5,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nicolasparada/nakama/id"
 	"github.com/nicolasparada/nakama/preview"
 	"github.com/nicolasparada/nakama/validator"
 )
@@ -88,6 +89,52 @@ func (in ListFeed) UserID() string {
 	return in.userID
 }
 
+type ListPosts struct {
+	loggedInUserID *string
+}
+
+func (in *ListPosts) SetLoggedInUserID(userID string) {
+	in.loggedInUserID = &userID
+}
+
+func (in ListPosts) LoggedInUserID() *string {
+	return in.loggedInUserID
+}
+
 type SearchPosts struct {
 	Query string
+
+	loggedInUserID *string
+}
+
+func (in *SearchPosts) SetLoggedInUserID(userID string) {
+	in.loggedInUserID = &userID
+}
+
+func (in SearchPosts) LoggedInUserID() *string {
+	return in.loggedInUserID
+}
+
+type RetrievePost struct {
+	PostID string
+
+	loggedInUserID *string
+}
+
+func (in *RetrievePost) SetLoggedInUserID(userID string) {
+	in.loggedInUserID = &userID
+}
+
+func (in RetrievePost) LoggedInUserID() *string {
+	return in.loggedInUserID
+}
+
+func (in *RetrievePost) Validate() error {
+	v := validator.New()
+
+	if !id.Valid(in.PostID) {
+		v.AddError("PostID", "Invalid post ID")
+	}
+
+	return v.AsError()
 }

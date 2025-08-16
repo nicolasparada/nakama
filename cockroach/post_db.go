@@ -24,6 +24,94 @@ var postColumns = [...]string{
 
 var postColumnsStr = strings.Join(postColumns[:], ", ")
 
+func (c *Cockroach) enhancePostsWithUserReactions(ctx context.Context, posts []types.Post, userID *string) error {
+	if userID == nil || len(posts) == 0 {
+		return nil
+	}
+
+	postIDs := make([]string, len(posts))
+	for i, post := range posts {
+		postIDs[i] = post.ID
+	}
+
+	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, postIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range posts {
+		posts[i].Reactions = c.addReactedFieldToReactions(posts[i].Reactions, userReactions[posts[i].ID])
+	}
+
+	return nil
+}
+
+func (c *Cockroach) enhancePostWithUserReactions(ctx context.Context, post *types.Post, userID *string) error {
+	if userID == nil {
+		return nil
+	}
+
+	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, []string{post.ID})
+	if err != nil {
+		return err
+	}
+
+	post.Reactions = c.addReactedFieldToReactions(post.Reactions, userReactions[post.ID])
+	return nil
+}
+
+func (c *Cockroach) getUserReactionsForPosts(ctx context.Context, userID string, postIDs []string) (map[string]map[string]bool, error) {
+	if len(postIDs) == 0 {
+		return make(map[string]map[string]bool), nil
+	}
+
+	query := `
+		SELECT post_id, emoji 
+		FROM reactions 
+		WHERE user_id = @user_id AND post_id = ANY(@post_ids)
+	`
+
+	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{
+		"user_id":  userID,
+		"post_ids": postIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sql select user reactions: %w", err)
+	}
+
+	type reactionRow struct {
+		PostID string `db:"post_id"`
+		Emoji  string `db:"emoji"`
+	}
+
+	reactions, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[reactionRow])
+	if err != nil {
+		return nil, fmt.Errorf("sql collect user reactions: %w", err)
+	}
+
+	userReactions := make(map[string]map[string]bool)
+	for _, reaction := range reactions {
+		if userReactions[reaction.PostID] == nil {
+			userReactions[reaction.PostID] = make(map[string]bool)
+		}
+		userReactions[reaction.PostID][reaction.Emoji] = true
+	}
+
+	return userReactions, nil
+}
+
+func (c *Cockroach) addReactedFieldToReactions(reactions types.ReactionsSummary, userReactions map[string]bool) types.ReactionsSummary {
+	if userReactions == nil {
+		userReactions = make(map[string]bool)
+	}
+
+	for i := range reactions {
+		reactions[i].Reacted = userReactions[reactions[i].Emoji]
+	}
+
+	return reactions
+}
+
 func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.Created, error) {
 	var out types.Created
 	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
@@ -111,10 +199,15 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 		return out, fmt.Errorf("sql collect feed: %w", err)
 	}
 
+	userID := in.UserID()
+	if err := c.enhancePostsWithUserReactions(ctx, out.Items, &userID); err != nil {
+		return out, fmt.Errorf("enhance posts with user reactions: %w", err)
+	}
+
 	return out, nil
 }
 
-func (c *Cockroach) Posts(ctx context.Context) (types.Page[types.Post], error) {
+func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
 
 	query := `
@@ -136,10 +229,14 @@ func (c *Cockroach) Posts(ctx context.Context) (types.Page[types.Post], error) {
 		return out, fmt.Errorf("sql collect posts: %w", err)
 	}
 
+	if err := c.enhancePostsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
+		return out, fmt.Errorf("enhance posts with user reactions: %w", err)
+	}
+
 	return out, nil
 }
 
-func (c *Cockroach) Post(ctx context.Context, postID string) (types.Post, error) {
+func (c *Cockroach) Post(ctx context.Context, in types.RetrievePost) (types.Post, error) {
 	var out types.Post
 
 	query := `
@@ -152,7 +249,7 @@ func (c *Cockroach) Post(ctx context.Context, postID string) (types.Post, error)
 	`
 
 	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{
-		"post_id": postID,
+		"post_id": in.PostID,
 	})
 	if err != nil {
 		return out, fmt.Errorf("sql select post: %w", err)
@@ -161,6 +258,10 @@ func (c *Cockroach) Post(ctx context.Context, postID string) (types.Post, error)
 	out, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[types.Post])
 	if err != nil {
 		return out, fmt.Errorf("sql collect post: %w", err)
+	}
+
+	if err := c.enhancePostWithUserReactions(ctx, &out, in.LoggedInUserID()); err != nil {
+		return out, fmt.Errorf("enhance post with user reactions: %w", err)
 	}
 
 	return out, nil
@@ -215,6 +316,10 @@ func (c *Cockroach) SearchPosts(ctx context.Context, in types.SearchPosts) (type
 	out.Items, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.Post])
 	if err != nil {
 		return out, fmt.Errorf("sql collect searched posts: %w", err)
+	}
+
+	if err := c.enhancePostsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
+		return out, fmt.Errorf("enhance posts with user reactions: %w", err)
 	}
 
 	return out, nil
