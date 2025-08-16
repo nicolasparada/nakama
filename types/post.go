@@ -90,6 +90,8 @@ func (in ListFeed) UserID() string {
 }
 
 type ListPosts struct {
+	Username *string
+
 	loggedInUserID *string
 }
 
@@ -99,6 +101,24 @@ func (in *ListPosts) SetLoggedInUserID(userID string) {
 
 func (in ListPosts) LoggedInUserID() *string {
 	return in.loggedInUserID
+}
+
+func (in *ListPosts) Validate() error {
+	v := validator.New()
+
+	if in.Username != nil {
+		if *in.Username == "" {
+			v.AddError("Username", "Username is required")
+		}
+		if !reUsername.MatchString(*in.Username) {
+			v.AddError("Username", "Username can only contain letters, numbers, and underscores")
+		}
+		if utf8.RuneCountInString(*in.Username) > 21 {
+			v.AddError("Username", "Username must be at most 21 characters")
+		}
+	}
+
+	return v.AsError()
 }
 
 type SearchPosts struct {

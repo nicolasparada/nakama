@@ -91,6 +91,12 @@ func (svc *Service) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 }
 
 func (svc *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
+	var out types.Page[types.Post]
+
+	if err := in.Validate(); err != nil {
+		return out, err
+	}
+
 	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
 		in.SetLoggedInUserID(u.ID)
 	}

@@ -35,5 +35,18 @@
             <a href="/u/{{.User.Username}}/edit" role="button">Edit Profile</a>
         {{end}}
     {{end}}
+
+    <h2>Posts</h2>
+    {{if not .Posts.Items}}
+        <div class="info">
+            <p>No posts available</p>
+        </div>
+    {{else}}
+        <div role="feed">
+            {{range .Posts.Items}}
+                {{template "post-card.tmpl" .}}
+            {{end}}
+        </div>
+    {{end}}
 </main>
 {{end}}

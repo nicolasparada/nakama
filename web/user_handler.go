@@ -5,22 +5,50 @@ import (
 	"net/http"
 
 	"github.com/nicolasparada/nakama/types"
+	"golang.org/x/sync/errgroup"
 )
 
 func (h *Handler) showUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	username := r.PathValue("username")
 
-	user, err := h.Service.UserFromUsername(ctx, types.RetrieveUserFromUsername{
-		Username: username,
+	var (
+		user  types.User
+		posts types.Page[types.Post]
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		var err error
+		user, err = h.Service.UserFromUsername(gctx, types.RetrieveUserFromUsername{
+			Username: username,
+		})
+		if err != nil {
+			return fmt.Errorf("fetch user from username: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		h.renderWithError(w, r, "user.tmpl", nil, fmt.Errorf("fetch user from username: %w", err))
+
+	g.Go(func() error {
+		var err error
+		posts, err = h.Service.Posts(gctx, types.ListPosts{
+			Username: &username,
+		})
+		if err != nil {
+			return fmt.Errorf("fetch user posts: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		h.renderErrorPage(w, r, fmt.Errorf("fetch user and posts: %w", err))
 		return
 	}
 
 	h.render(w, r, "user.tmpl", map[string]any{
-		"User": user,
+		"User":  user,
+		"Posts": posts,
 	}, http.StatusOK)
 }
 

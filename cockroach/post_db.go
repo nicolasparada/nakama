@@ -215,11 +215,20 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 			` + postColumnsStr + `,
 			to_json(users) AS user
 		FROM posts
-		INNER JOIN users ON posts.user_id = users.id
-		ORDER BY posts.id DESC
-	`
+		INNER JOIN users ON posts.user_id = users.id`
 
-	rows, err := c.db.Query(ctx, query)
+	args := pgx.NamedArgs{}
+
+	if in.Username != nil {
+		query += `
+		WHERE users.username = @username`
+		args["username"] = *in.Username
+	}
+
+	query += `
+		ORDER BY posts.id DESC`
+
+	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
 		return out, fmt.Errorf("sql select posts: %w", err)
 	}
