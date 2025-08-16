@@ -18,6 +18,8 @@
     /* Semantic colors */
     --primary: oklch(0.65 0.25 45);         /* Primary brand color - orange */
     --primary-hover: oklch(0.70 0.25 45);   /* Primary hover state */
+    --primary-bg: oklch(from var(--primary) l c h / 0.1); /* Primary background tint */
+    --primary-border: oklch(from var(--primary) l c h / 0.3); /* Primary border tint */
     --secondary: oklch(0.60 0.02 270);      /* Secondary actions */
     --secondary-hover: oklch(0.65 0.02 270); /* Secondary hover state */
     
@@ -848,7 +850,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 }
 
 .reaction-item.reacted {
-    background-color: var(--primary);
-    color: white;
-    border-color: var(--primary);
+    background-color: var(--primary-bg);
+    color: var(--primary);
+    border-color: var(--primary-border);
 }
