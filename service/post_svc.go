@@ -122,6 +122,18 @@ func (svc *Service) SearchPosts(ctx context.Context, in types.SearchPosts) (type
 	return svc.Cockroach.SearchPosts(ctx, in)
 }
 
+func (svc *Service) ToggleReaction(ctx context.Context, in types.ToggleReaction) error {
+	loggedInUser, loggedIn := auth.UserFromContext(ctx)
+	if !loggedIn {
+		return errs.Unauthenticated
+	}
+
+	in.SetLoggedInUserID(loggedInUser.ID)
+
+	_, err := svc.Cockroach.ToggleReaction(ctx, in)
+	return err
+}
+
 func newAttachmentList(images []ffmpeg.Image) []types.Attachment {
 	now := time.Now()
 	id := id.Generate()

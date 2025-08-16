@@ -17,6 +17,7 @@ var postColumns = [...]string{
 	"posts.is_r18",
 	"posts.attachments",
 	"posts.comments_count",
+	"posts.reactions",
 	"posts.created_at",
 	"posts.updated_at",
 }
@@ -217,4 +218,68 @@ func (c *Cockroach) SearchPosts(ctx context.Context, in types.SearchPosts) (type
 	}
 
 	return out, nil
+}
+
+func (c *Cockroach) ToggleReaction(ctx context.Context, in types.ToggleReaction) (inserted bool, err error) {
+	return inserted, c.db.RunTx(ctx, func(ctx context.Context) error {
+		exists, err := c.reactionExists(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		if exists {
+			return c.deleteReaction(ctx, in)
+		}
+
+		inserted = true
+		return c.insertReaction(ctx, in)
+	})
+}
+
+func (c *Cockroach) reactionExists(ctx context.Context, in types.ToggleReaction) (bool, error) {
+	var exists bool
+	err := c.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM reactions 
+			WHERE user_id = @user_id AND post_id = @post_id AND emoji = @emoji
+		)
+	`, pgx.StrictNamedArgs{
+		"user_id": in.LoggedInUserID(),
+		"post_id": in.PostID,
+		"emoji":   in.Emoji,
+	}).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("sql check reaction exists: %w", err)
+	}
+	return exists, nil
+}
+
+func (c *Cockroach) insertReaction(ctx context.Context, in types.ToggleReaction) error {
+	_, err := c.db.Exec(ctx, `
+		INSERT INTO reactions (user_id, post_id, emoji) 
+		VALUES (@user_id, @post_id, @emoji)
+	`, pgx.StrictNamedArgs{
+		"user_id": in.LoggedInUserID(),
+		"post_id": in.PostID,
+		"emoji":   in.Emoji,
+	})
+	if err != nil {
+		return fmt.Errorf("sql insert reaction: %w", err)
+	}
+	return nil
+}
+
+func (c *Cockroach) deleteReaction(ctx context.Context, in types.ToggleReaction) error {
+	_, err := c.db.Exec(ctx, `
+		DELETE FROM reactions 
+		WHERE user_id = @user_id AND post_id = @post_id AND emoji = @emoji
+	`, pgx.StrictNamedArgs{
+		"user_id": in.LoggedInUserID(),
+		"post_id": in.PostID,
+		"emoji":   in.Emoji,
+	})
+	if err != nil {
+		return fmt.Errorf("sql delete reaction: %w", err)
+	}
+	return nil
 }

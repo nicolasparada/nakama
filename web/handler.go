@@ -64,6 +64,7 @@ func (h *Handler) init() {
 	mux.HandleFunc("GET /notifications", h.notifications)
 	mux.HandleFunc("POST /notifications/{notificationID}/read", h.readNotification)
 	mux.HandleFunc("GET /search", h.search)
+	mux.HandleFunc("POST /posts/{postID}/toggle-reaction", h.toggleReaction)
 	mux.Handle("GET /static/", staticHandler())
 	mux.HandleFunc("GET /", h.notFound)
 

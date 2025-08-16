@@ -171,7 +171,8 @@ button, input[type=file]::file-selector-button, [role=button] {
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: var(--space-sm) var(--space-md);
+    padding: 0 var(--space-md);
+    height: var(--space-2xl);
     transition: background-color 0.2s ease, border-color 0.2s ease;
 
     &:hover {
@@ -765,4 +766,83 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
             color: var(--text-muted);
         }
     }
+}
+
+.post-reactions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.reaction-summary {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.reaction-picker {
+    position: relative;
+}
+
+.reaction-toggle {
+    display: none;
+}
+
+.reaction-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: transparent;
+}
+
+.reaction-toggle:checked ~ .reaction-overlay {
+    display: block;
+}
+
+.reaction-add-btn {
+    position: relative;
+    min-height: 1lh;
+    z-index: 1001; /* Above the overlay */
+}
+
+.reaction-toggle:checked ~ .reaction-add-btn {
+    background: var(--surface-3);
+    border-color: var(--primary);
+    color: var(--text);
+}
+
+.reaction-dropdown {
+    position: absolute;
+    top: calc(100% + var(--space-xs));
+    left: 0;
+    z-index: 1000;
+    
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s ease;
+    pointer-events: none;
+}
+
+.reaction-toggle:checked ~ .reaction-add-btn ~ .reaction-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.reaction-options {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    grid-template-rows: repeat(4, auto);
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.3),
+        0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(8px);
+    min-width: max-content;
 }

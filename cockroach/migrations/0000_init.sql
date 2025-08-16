@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS posts (
     content TEXT NOT NULL, -- Can be empty string, not nullable
     is_r18 BOOLEAN NOT NULL DEFAULT FALSE,
     attachments JSONB,
+    reactions JSONB, -- updated by [reactions_update_trigger]
     comments_count INT NOT NULL DEFAULT 0, -- updated by [comments_count_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
@@ -133,6 +134,71 @@ CREATE TRIGGER comments_count_trigger
 
 CREATE INDEX IF NOT EXISTS comments_user_id_idx ON comments (user_id);
 CREATE INDEX IF NOT EXISTS comments_post_id_idx ON comments (post_id);
+
+CREATE TABLE IF NOT EXISTS reactions (
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    post_id VARCHAR NOT NULL REFERENCES posts ON DELETE CASCADE ON UPDATE CASCADE,
+    emoji VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, post_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS reactions_post_id_idx ON reactions (post_id);
+CREATE INDEX IF NOT EXISTS reactions_user_id_idx ON reactions (user_id);
+CREATE INDEX IF NOT EXISTS reactions_emoji_idx ON reactions (emoji);
+
+DROP TRIGGER IF EXISTS reactions_update_trigger ON reactions;
+
+CREATE OR REPLACE FUNCTION update_post_reactions()
+RETURNS TRIGGER AS $$
+DECLARE
+    target_post_id VARCHAR;
+    reaction_summary JSONB;
+    reaction_count INTEGER;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        target_post_id := (NEW).post_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        target_post_id := (OLD).post_id;
+    END IF;
+
+    SELECT COUNT(*) INTO reaction_count
+    FROM reactions 
+    WHERE post_id = target_post_id;
+
+    IF reaction_count = 0 THEN
+        reaction_summary := '{}'::jsonb;
+    ELSE
+        SELECT jsonb_object_agg(emoji, count)
+        INTO reaction_summary
+        FROM (
+            SELECT emoji, COUNT(*)::int as count
+            FROM reactions 
+            WHERE post_id = target_post_id
+            GROUP BY emoji
+            ORDER BY COUNT(*) DESC, emoji ASC
+        ) reaction_counts;
+        
+        IF reaction_summary IS NULL THEN
+            reaction_summary := '{}'::jsonb;
+        END IF;
+    END IF;
+
+    UPDATE posts 
+    SET reactions = reaction_summary
+    WHERE id = target_post_id;
+
+    IF TG_OP = 'INSERT' THEN
+        RETURN (NEW);
+    ELSE
+        RETURN (OLD);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER reactions_update_trigger
+    AFTER INSERT OR DELETE ON reactions
+    FOR EACH ROW EXECUTE FUNCTION update_post_reactions();
 
 CREATE TABLE IF NOT EXISTS publications (
     id VARCHAR NOT NULL PRIMARY KEY,

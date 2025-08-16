@@ -115,3 +115,34 @@ func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
 		"Comments": comments,
 	}, http.StatusOK)
 }
+
+func (h *Handler) toggleReaction(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if err := r.ParseForm(); err != nil {
+		h.redirectBackWithError(w, r, fmt.Errorf("parse form: %w", err))
+		return
+	}
+
+	ctx := r.Context()
+	postID := r.PathValue("postID")
+	emoji := r.FormValue("emoji")
+
+	// Debug logging
+	if emoji == "" {
+		h.redirectBackWithError(w, r, fmt.Errorf("emoji parameter is empty"))
+		return
+	}
+
+	in := types.ToggleReaction{
+		PostID: postID,
+		Emoji:  emoji,
+	}
+	err := h.Service.ToggleReaction(ctx, in)
+	if err != nil {
+		h.redirectBackWithError(w, r, fmt.Errorf("toggle reaction: %w", err))
+		return
+	}
+
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+}
