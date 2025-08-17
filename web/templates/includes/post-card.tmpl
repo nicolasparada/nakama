@@ -41,7 +41,7 @@
     {{if .Attachments}}
         <div class="post-attachments">
             {{range .Attachments}}
-                <img src="http://localhost:9000/post-attachments/{{.Path}}" alt="Attachment" width="{{.Width}}" height="{{.Height}}">
+                <img src='{{minio "post-attachments" .Path}}' alt="Attachment" width="{{.Width}}" height="{{.Height}}">
             {{end}}
         </div>
     {{end}}

@@ -382,7 +382,6 @@ body {
         grid-area: main;
         padding: var(--space-lg);
         background-color: var(--surface-0);
-        overflow: auto;
     }
 }
 

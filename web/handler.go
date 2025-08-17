@@ -21,6 +21,7 @@ type Handler struct {
 	Service       *service.Service
 	ErrorLogger   *slog.Logger
 	SesssionStore scs.Store
+	MinioURL      string
 
 	renderer *tmplrenderer.Renderer
 	sess     *scs.SessionManager
@@ -29,6 +30,7 @@ type Handler struct {
 }
 
 func (h *Handler) init() {
+	funcMap["minio"] = h.buildMinioURL
 	h.renderer = &tmplrenderer.Renderer{
 		FS:             templatesFS,
 		BaseDir:        "templates",

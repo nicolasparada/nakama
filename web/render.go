@@ -29,6 +29,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 	loggedInUser, loggedIn := auth.UserFromContext(ctx)
 	data["LoggedInUser"] = loggedInUser
 	data["LoggedIn"] = loggedIn
+	data["MinioURL"] = h.MinioURL
 
 	if h.sess.Exists(ctx, "error") {
 		errorVal := h.sess.Pop(ctx, "error")
@@ -296,4 +297,15 @@ func isPartOfMentionEmail(escapedText, fullMatch string) bool {
 	}
 
 	return false
+}
+
+func (h *Handler) buildMinioURL(bucket, path string) string {
+	if bucket == "" || path == "" {
+		return ""
+	}
+	base := strings.TrimSuffix(h.MinioURL, "/")
+	bucket = strings.TrimPrefix(strings.TrimSuffix(bucket, "/"), "/")
+	path = strings.TrimPrefix(path, "/")
+
+	return fmt.Sprintf("%s/%s/%s", base, bucket, path)
 }

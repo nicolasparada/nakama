@@ -1,5 +1,5 @@
 {{if .Avatar}}
-    <img src="http://localhost:9000/avatars/{{.Avatar.Path}}" class="avatar" alt="User Avatar" width="{{.Avatar.Width}}" height="{{.Avatar.Height}}">
+    <img src='{{minio "avatars" .Avatar.Path}}' class="avatar" alt="User Avatar" width="{{.Avatar.Width}}" height="{{.Avatar.Height}}">
 {{else}}
     <div class="avatar-initial" data-initial="{{slice .Username 0 1}}"></div>
 {{end}}

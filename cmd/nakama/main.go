@@ -119,6 +119,7 @@ func run() error {
 		Service:       svc,
 		ErrorLogger:   errLogger,
 		SesssionStore: pgxstore.New(dbPool),
+		MinioURL:      buildMinioURL(cfg.MinioEndpoint, cfg.MinioSecure),
 	}
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
@@ -131,4 +132,13 @@ func run() error {
 	}
 
 	return nil
+}
+
+func buildMinioURL(endpoint string, secure bool) string {
+	minioURL := "http"
+	if secure {
+		minioURL += "s"
+	}
+	minioURL += "://" + endpoint
+	return minioURL
 }
