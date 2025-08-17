@@ -215,18 +215,34 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 			` + postColumnsStr + `,
 			to_json(users) AS user
 		FROM posts
-		INNER JOIN users ON posts.user_id = users.id`
+		INNER JOIN users ON posts.user_id = users.id
+	`
 
 	args := pgx.NamedArgs{}
+	var filters []string
 
 	if in.Username != nil {
-		query += `
-		WHERE users.username = @username`
+		filters = append(filters, "users.username = @username")
 		args["username"] = *in.Username
 	}
 
-	query += `
-		ORDER BY posts.id DESC`
+	if in.SearchQuery != nil {
+		filters = append(filters, "(posts.content ILIKE '%' || @search_query || '%' OR similarity(posts.content, @search_query) > 0.1)")
+		args["search_query"] = *in.SearchQuery
+	}
+
+	query += where(filters)
+
+	if in.SearchQuery != nil {
+		query += `
+			ORDER BY 
+			CASE WHEN posts.content ILIKE '%' || @search_query || '%' THEN 1 ELSE 2 END,
+			similarity(posts.content, @search_query) DESC,
+			posts.created_at DESC
+		`
+	} else {
+		query += " ORDER BY posts.id DESC"
+	}
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
@@ -293,45 +309,6 @@ func (c *Cockroach) FanoutPost(ctx context.Context, in types.FanoutPost) error {
 	}
 
 	return nil
-}
-
-func (c *Cockroach) SearchPosts(ctx context.Context, in types.SearchPosts) (types.Page[types.Post], error) {
-	var out types.Page[types.Post]
-
-	query := `
-		SELECT 
-			` + postColumnsStr + `,
-			to_json(users) AS user
-		FROM posts
-		INNER JOIN users ON posts.user_id = users.id
-		WHERE (
-			posts.content ILIKE '%' || @query || '%'
-			OR
-			similarity(posts.content, @query) > 0.1
-		)
-		ORDER BY 
-			CASE WHEN posts.content ILIKE '%' || @query || '%' THEN 1 ELSE 2 END,
-			similarity(posts.content, @query) DESC,
-			posts.created_at DESC
-	`
-
-	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
-		"query": in.Query,
-	})
-	if err != nil {
-		return out, fmt.Errorf("sql search posts: %w", err)
-	}
-
-	out.Items, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.Post])
-	if err != nil {
-		return out, fmt.Errorf("sql collect searched posts: %w", err)
-	}
-
-	if err := c.enhancePostsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
-		return out, fmt.Errorf("enhance posts with user reactions: %w", err)
-	}
-
-	return out, nil
 }
 
 func (c *Cockroach) ToggleReaction(ctx context.Context, in types.ToggleReaction) (inserted bool, err error) {

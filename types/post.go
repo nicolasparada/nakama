@@ -90,7 +90,8 @@ func (in ListFeed) UserID() string {
 }
 
 type ListPosts struct {
-	Username *string
+	Username    *string
+	SearchQuery *string
 
 	loggedInUserID *string
 }

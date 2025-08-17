@@ -778,7 +778,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 
 .reaction-summary {
     display: flex;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
 }
 
 .reaction-picker {

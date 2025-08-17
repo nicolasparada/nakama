@@ -128,10 +128,6 @@ func (svc *Service) Post(ctx context.Context, in types.RetrievePost) (types.Post
 	return out, nil
 }
 
-func (svc *Service) SearchPosts(ctx context.Context, in types.SearchPosts) (types.Page[types.Post], error) {
-	return svc.Cockroach.SearchPosts(ctx, in)
-}
-
 func (svc *Service) ToggleReaction(ctx context.Context, in types.ToggleReaction) error {
 	loggedInUser, loggedIn := auth.UserFromContext(ctx)
 	if !loggedIn {

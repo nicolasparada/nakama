@@ -35,8 +35,8 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 
 	case "posts":
 		var err error
-		results, err = h.Service.SearchPosts(ctx, types.SearchPosts{
-			Query: query,
+		results, err = h.Service.Posts(ctx, types.ListPosts{
+			SearchQuery: &query,
 		})
 		if err != nil {
 			h.renderErrorPage(w, r, fmt.Errorf("search posts: %w", err))
