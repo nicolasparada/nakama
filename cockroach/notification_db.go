@@ -20,7 +20,8 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 				json_agg(
 					json_build_object(
 						'id', users.id,
-						'username', users.username
+						'username', users.username,
+						'avatar', users.avatar
 					) ORDER BY array_position(notifications.actor_user_ids, users.id)
 				) FILTER (WHERE users.id IS NOT NULL),
 				'[]'::json

@@ -1,5 +1,5 @@
 {{if .Avatar}}
     <img src='{{minio "avatars" .Avatar.Path}}' class="avatar" alt="User Avatar" width="{{.Avatar.Width}}" height="{{.Avatar.Height}}">
 {{else}}
-    <div class="avatar-initial" data-initial="{{slice .Username 0 1}}"></div>
+    <span class="avatar-initial" data-initial="{{slice .Username 0 1}}"></span>
 {{end}}

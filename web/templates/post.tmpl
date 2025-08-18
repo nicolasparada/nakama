@@ -2,10 +2,7 @@
 
 {{define "content"}}
 <main class="container">
-    <article>
-        <p>{{.Post.Content}}</p>
-        <p><small>Posted by <a href="/u/{{.Post.User.Username}}">{{.Post.User.Username}}</a> at <a href="/p/{{.Post.ID}}"><time datetime='{{.Post.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.Post.CreatedAt.Format "2006-01-02 15:04:05"}}</time></a></small></p>
-    </article>
+    {{template "post-card.tmpl" .Post}}
 
     <h2>Comments</h2>
 
@@ -32,9 +29,16 @@
     {{else}}
         <div role="feed">
             {{range .Comments.Items}}
-                <article>
-                    <p>{{.Content | linkify}}</p>
-                    <p><small>Commented on by <a href="/u/{{.User.Username}}">{{.User.Username}}</a> at <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time></small></p>
+                <article class="card comment">
+                    <a href="/u/{{.User.Username}}" class="comment-avatar">
+                        {{template "avatar.tmpl" .User}}
+                    </a>
+                    
+                    <a href="/u/{{.User.Username}}" class="comment-username">{{.User.Username}}</a>
+                    
+                    <time class="comment-time" datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+                    
+                    <p class="comment-content">{{.Content | linkify}}</p>
                 </article>
             {{end}}
         </div>

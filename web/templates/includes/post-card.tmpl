@@ -3,14 +3,15 @@
         {{template "avatar.tmpl" .User}}
     </a>
 
-    <div class="post-header">
-        <a href="/u/{{.User.Username}}" class="post-username">{{.User.Username}}</a>
-        <a href="/p/{{.ID}}" class="post-time">
-            <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
-        </a>
-    </div>
+    <a href="/u/{{.User.Username}}" class="post-username">{{.User.Username}}</a>
 
-    <p class="post-content">{{.Content | linkify}}</p>
+    <a href="/p/{{.ID}}" class="post-time">
+        <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+    </a>
+
+    {{if .Content}}
+        <p class="post-content">{{.Content | linkify}}</p>
+    {{end}}
 
     {{if not .Previews.IsEmpty}}
         <div class="post-previews">

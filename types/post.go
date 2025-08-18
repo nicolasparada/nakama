@@ -2,6 +2,7 @@ package types
 
 import (
 	"io"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -30,7 +31,7 @@ func (p *Post) SetPreviews(previews preview.Results) {
 	p.previews = previews
 }
 
-func (p *Post) Previews() preview.Results {
+func (p Post) Previews() preview.Results {
 	return p.previews
 }
 
@@ -62,9 +63,12 @@ func (in CreatePost) ProcessedAttachments() []Attachment {
 func (in *CreatePost) Validate() error {
 	v := validator.New()
 
-	if in.Content == "" {
+	in.Content = strings.TrimSpace(in.Content)
+
+	if in.Content == "" && len(in.Attachments) == 0 {
 		v.AddError("Content", "Content cannot be empty")
 	}
+
 	if utf8.RuneCountInString(in.Content) > 500 {
 		v.AddError("Content", "Content cannot exceed 500 characters")
 	}

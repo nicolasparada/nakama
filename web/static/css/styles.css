@@ -267,6 +267,7 @@ textarea {
 }
 
 img {
+    display: block;
     max-width: 100%;
     height: auto;
 }
@@ -426,11 +427,39 @@ div:has(>label):has(>input[type=checkbox]) {
     gap: var(--space-sm);
 }
 
-.notification-read {
-    background-color: var(--surface-2);
-    opacity: 0.6;
-    text-decoration: line-through;
+.notification {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--space-md);
+
+    p {
+        margin: 0;
+
+        .avatar, .avatar-initial {
+            display: inline-block;
+            font-size: var(--font-size-xs);
+            --size: 1rem;
+        }
+    }
+
+    form {
+        display: contents;
+    }
+
+    time {
+        grid-column: 2;
+        color: var(--text-muted);
+        font-size: var(--font-size-sm);
+        text-align: right;
+    }
+
+    &.notification-read {
+        background-color: var(--surface-2);
+        opacity: 0.6;
+        text-decoration: line-through;
+    }
 }
+
 
 input[type=checkbox] {
     appearance: none;
@@ -517,6 +546,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 
 .avatar-initial {
     --size: 3rem;
+    display: block;
     width: var(--size);
     height: var(--size);
     position: relative;
@@ -526,7 +556,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     &::after {
         content: attr(data-initial);
         font-family: 'Nunito', sans-serif;
-        font-weight: bold;
+        font-weight: 600;
         color: var(--text-inverse);
         text-transform: uppercase;
         position: absolute;
@@ -539,39 +569,28 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
 
 .post {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
     gap: var(--space-md);
 
-    .post-avatar {
-        grid-column: 1;
-        grid-row: 1 / -1; /* Span from first to last row */
+    .post-username {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 600;
+        align-self: center;
     }
 
-    .post-header {
-        grid-column: 2;
-        display: flex;
-        align-items: center;
-        height: 3rem; /* same as avatar */
-
-        .post-username {
-            font-family: 'Nunito', sans-serif;
-            font-weight: bold;
-        }
-
-        .post-time {
-            margin-left: auto;
-            font-size: var(--font-size-sm);
-            color: var(--text-muted);
-        }
+    .post-time {
+        font-size: var(--font-size-sm);
+        color: var(--text-muted);
+        align-self: center;
     }
 
     .post-content {
-        grid-column: 2;
+        grid-column: 2 / span 3;
         margin: 0;
     }
 
     .post-previews {
-        grid-column: 2;
+        grid-column: 2 / span 3;
         display: flex;
         flex-direction: column;
         gap: var(--space-sm);
@@ -608,7 +627,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 
     .post-attachments {
-        grid-column: 2;
+        grid-column: 2 / span 3;
         display: flex;
         align-items: start;
         flex-wrap: nowrap;
@@ -627,7 +646,7 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 
     .post-controls {
-        grid-column: 2;
+        grid-column: 2 / span 3;
         display: flex;
         align-items: center;
         gap: var(--space-sm);
@@ -852,4 +871,27 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     background-color: var(--primary-bg);
     color: var(--primary);
     border-color: var(--primary-border);
+}
+
+.comment {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--space-xs) var(--space-md);
+
+    .comment-username {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 600;
+        align-self: center;
+    }
+
+    .comment-time {
+        font-size: var(--font-size-sm);
+        color: var(--text-muted);
+        align-self: center;
+    }
+
+    .comment-content {
+        grid-column: 2 / span 3;
+        margin: 0;
+    }
 }
