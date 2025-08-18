@@ -17,12 +17,6 @@
             <textarea name="description" id="description" placeholder="Enter {{.Kind.String}} description" required></textarea>
         </div>
 
-        {{with .Error}}
-        <div class="error">
-            <p>{{.}}</p>
-        </div>
-        {{end}}
-
         <button>Create {{strings.Title .Kind.String}}</button>
     </form>
 </main>

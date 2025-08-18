@@ -29,3 +29,27 @@ func (h *Handler) createComment(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
 }
+
+func (h *Handler) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if err := r.ParseForm(); err != nil {
+		h.redirectBackWithError(w, r, fmt.Errorf("parse form: %w", err))
+		return
+	}
+
+	ctx := r.Context()
+	commentID := r.PathValue("commentID")
+	emoji := r.FormValue("emoji")
+	in := types.ToggleCommentReaction{
+		CommentID: commentID,
+		Emoji:     emoji,
+	}
+	err := h.Service.ToggleCommentReaction(ctx, in)
+	if err != nil {
+		h.redirectBackWithError(w, r, fmt.Errorf("toggle comment reaction: %w", err))
+		return
+	}
+
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+}

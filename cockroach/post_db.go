@@ -17,100 +17,12 @@ var postColumns = [...]string{
 	"posts.is_r18",
 	"posts.attachments",
 	"posts.comments_count",
-	"posts.reactions_summary",
+	"posts.reaction_counters",
 	"posts.created_at",
 	"posts.updated_at",
 }
 
 var postColumnsStr = strings.Join(postColumns[:], ", ")
-
-func (c *Cockroach) enhancePostsWithUserReactions(ctx context.Context, posts []types.Post, userID *string) error {
-	if userID == nil || len(posts) == 0 {
-		return nil
-	}
-
-	postIDs := make([]string, len(posts))
-	for i, post := range posts {
-		postIDs[i] = post.ID
-	}
-
-	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, postIDs)
-	if err != nil {
-		return err
-	}
-
-	for i := range posts {
-		posts[i].ReactionsSummary = c.addReactedFieldToReactions(posts[i].ReactionsSummary, userReactions[posts[i].ID])
-	}
-
-	return nil
-}
-
-func (c *Cockroach) enhancePostWithUserReactions(ctx context.Context, post *types.Post, userID *string) error {
-	if userID == nil {
-		return nil
-	}
-
-	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, []string{post.ID})
-	if err != nil {
-		return err
-	}
-
-	post.ReactionsSummary = c.addReactedFieldToReactions(post.ReactionsSummary, userReactions[post.ID])
-	return nil
-}
-
-func (c *Cockroach) getUserReactionsForPosts(ctx context.Context, userID string, postIDs []string) (map[string]map[string]bool, error) {
-	if len(postIDs) == 0 {
-		return make(map[string]map[string]bool), nil
-	}
-
-	query := `
-		SELECT post_id, emoji 
-		FROM reactions 
-		WHERE user_id = @user_id AND post_id = ANY(@post_ids)
-	`
-
-	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{
-		"user_id":  userID,
-		"post_ids": postIDs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("sql select user reactions: %w", err)
-	}
-
-	type reactionRow struct {
-		PostID string `db:"post_id"`
-		Emoji  string `db:"emoji"`
-	}
-
-	reactions, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[reactionRow])
-	if err != nil {
-		return nil, fmt.Errorf("sql collect user reactions: %w", err)
-	}
-
-	userReactions := make(map[string]map[string]bool)
-	for _, reaction := range reactions {
-		if userReactions[reaction.PostID] == nil {
-			userReactions[reaction.PostID] = make(map[string]bool)
-		}
-		userReactions[reaction.PostID][reaction.Emoji] = true
-	}
-
-	return userReactions, nil
-}
-
-func (c *Cockroach) addReactedFieldToReactions(reactions types.ReactionsSummary, userReactions map[string]bool) types.ReactionsSummary {
-	if userReactions == nil {
-		userReactions = make(map[string]bool)
-	}
-
-	for i := range reactions {
-		reactions[i].Reacted = userReactions[reactions[i].Emoji]
-	}
-
-	return reactions
-}
 
 func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.Created, error) {
 	var out types.Created
@@ -325,6 +237,94 @@ func (c *Cockroach) ToggleReaction(ctx context.Context, in types.ToggleReaction)
 		inserted = true
 		return c.insertReaction(ctx, in)
 	})
+}
+
+func (c *Cockroach) enhancePostsWithUserReactions(ctx context.Context, posts []types.Post, userID *string) error {
+	if userID == nil || len(posts) == 0 {
+		return nil
+	}
+
+	postIDs := make([]string, len(posts))
+	for i, post := range posts {
+		postIDs[i] = post.ID
+	}
+
+	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, postIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range posts {
+		posts[i].ReactionCounters = c.addReactedFieldToReactions(posts[i].ReactionCounters, userReactions[posts[i].ID])
+	}
+
+	return nil
+}
+
+func (c *Cockroach) enhancePostWithUserReactions(ctx context.Context, post *types.Post, userID *string) error {
+	if userID == nil {
+		return nil
+	}
+
+	userReactions, err := c.getUserReactionsForPosts(ctx, *userID, []string{post.ID})
+	if err != nil {
+		return err
+	}
+
+	post.ReactionCounters = c.addReactedFieldToReactions(post.ReactionCounters, userReactions[post.ID])
+	return nil
+}
+
+func (c *Cockroach) getUserReactionsForPosts(ctx context.Context, userID string, postIDs []string) (map[string]map[string]bool, error) {
+	if len(postIDs) == 0 {
+		return make(map[string]map[string]bool), nil
+	}
+
+	query := `
+		SELECT post_id, emoji 
+		FROM reactions 
+		WHERE user_id = @user_id AND post_id = ANY(@post_ids)
+	`
+
+	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{
+		"user_id":  userID,
+		"post_ids": postIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sql select user reactions: %w", err)
+	}
+
+	type reactionRow struct {
+		PostID string `db:"post_id"`
+		Emoji  string `db:"emoji"`
+	}
+
+	reactions, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[reactionRow])
+	if err != nil {
+		return nil, fmt.Errorf("sql collect user reactions: %w", err)
+	}
+
+	userReactions := make(map[string]map[string]bool)
+	for _, reaction := range reactions {
+		if userReactions[reaction.PostID] == nil {
+			userReactions[reaction.PostID] = make(map[string]bool)
+		}
+		userReactions[reaction.PostID][reaction.Emoji] = true
+	}
+
+	return userReactions, nil
+}
+
+func (c *Cockroach) addReactedFieldToReactions(reactions types.ReactionCounters, userReactions map[string]bool) types.ReactionCounters {
+	if userReactions == nil {
+		userReactions = make(map[string]bool)
+	}
+
+	for i := range reactions {
+		reactions[i].Reacted = userReactions[reactions[i].Emoji]
+	}
+
+	return reactions
 }
 
 func (c *Cockroach) reactionExists(ctx context.Context, in types.ToggleReaction) (bool, error) {

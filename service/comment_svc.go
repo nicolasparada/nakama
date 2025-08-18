@@ -5,7 +5,6 @@ import (
 
 	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/errs"
-	"github.com/nicolasparada/nakama/id"
 	"github.com/nicolasparada/nakama/types"
 )
 
@@ -42,12 +41,32 @@ func (svc *Service) CreateComment(ctx context.Context, in types.CreateComment) (
 	return out, nil
 }
 
-func (svc *Service) Comments(ctx context.Context, postID string) (types.Page[types.Comment], error) {
+func (svc *Service) Comments(ctx context.Context, in types.ListComments) (types.Page[types.Comment], error) {
 	var out types.Page[types.Comment]
 
-	if !id.Valid(postID) {
-		return out, errs.NewInvalidArgumentError("PostID", "Invalid post ID")
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
 
-	return svc.Cockroach.Comments(ctx, postID)
+	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
+		in.SetLoggedInUserID(u.ID)
+	}
+
+	return svc.Cockroach.Comments(ctx, in)
+}
+
+func (svc *Service) ToggleCommentReaction(ctx context.Context, in types.ToggleCommentReaction) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+
+	loggedInUser, loggedIn := auth.UserFromContext(ctx)
+	if !loggedIn {
+		return errs.Unauthenticated
+	}
+
+	in.SetLoggedInUserID(loggedInUser.ID)
+
+	_, err := svc.Cockroach.ToggleCommentReaction(ctx, in)
+	return err
 }

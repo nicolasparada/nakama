@@ -17,6 +17,12 @@
     </style>
 </head>
 <body>
+    {{if .Error}}
+    <div class="error">
+        <b>Error:</b>
+        <p>{{.Error}}</p>
+    </div>
+    {{end}}
     {{template "header.tmpl" .}}
     {{block "content" .}}{{end}}
 </body>

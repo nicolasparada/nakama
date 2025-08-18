@@ -9,12 +9,13 @@ import (
 )
 
 type Comment struct {
-	ID        string    `db:"id"`
-	UserID    string    `db:"user_id"`
-	PostID    string    `db:"post_id"`
-	Content   string    `db:"content"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID               string           `db:"id"`
+	UserID           string           `db:"user_id"`
+	PostID           string           `db:"post_id"`
+	Content          string           `db:"content"`
+	ReactionCounters ReactionCounters `db:"reaction_counters"`
+	CreatedAt        time.Time        `db:"created_at"`
+	UpdatedAt        time.Time        `db:"updated_at"`
 
 	User *User `db:"user,omitempty"`
 }
@@ -45,6 +46,30 @@ func (in *CreateComment) Validate() error {
 	}
 	if utf8.RuneCountInString(in.Content) > 500 {
 		v.AddError("Content", "Content cannot exceed 500 characters")
+	}
+
+	return v.AsError()
+}
+
+type ListComments struct {
+	PostID string
+
+	loggedInUserID *string
+}
+
+func (in *ListComments) SetLoggedInUserID(userID string) {
+	in.loggedInUserID = &userID
+}
+
+func (in ListComments) LoggedInUserID() *string {
+	return in.loggedInUserID
+}
+
+func (in *ListComments) Validate() error {
+	v := validator.New()
+
+	if !id.Valid(in.PostID) {
+		v.AddError("PostID", "PostID must be a valid ID")
 	}
 
 	return v.AsError()

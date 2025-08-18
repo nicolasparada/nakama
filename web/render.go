@@ -64,8 +64,20 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 	}
 }
 
+var allowedNotFound = map[string]bool{
+	"/favicon.ico":                      true,
+	"/apple-touch-icon-precomposed.png": true,
+	"/apple-touch-icon.png":             true,
+}
+
+func isAllowedNotFound(path string) bool {
+	return allowedNotFound[path]
+}
+
 func (h *Handler) renderErrorPage(w http.ResponseWriter, r *http.Request, err error) {
-	h.ErrorLogger.Error("got error", "req_method", r.Method, "req_url", r.URL.String(), "err", err)
+	if !isAllowedNotFound(r.URL.Path) {
+		h.ErrorLogger.Error("got error", "req_method", r.Method, "req_url", r.URL.String(), "err", err)
+	}
 	h.render(w, r, "error.tmpl", map[string]any{
 		"Error": maskError(err),
 	}, http.StatusInternalServerError)

@@ -18,7 +18,7 @@ type Post struct {
 	IsR18            bool             `db:"is_r18"`
 	Attachments      []Attachment     `db:"attachments"`
 	CommentsCount    uint64           `db:"comments_count"`
-	ReactionsSummary ReactionsSummary `db:"reactions_summary"`
+	ReactionCounters ReactionCounters `db:"reaction_counters"`
 	CreatedAt        time.Time        `db:"created_at"`
 	UpdatedAt        time.Time        `db:"updated_at"`
 

@@ -98,7 +98,7 @@ func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
 
 	g.Go(func() error {
 		var err error
-		comments, err = h.Service.Comments(gctx, postID)
+		comments, err = h.Service.Comments(gctx, types.ListComments{PostID: postID})
 		if err != nil {
 			return fmt.Errorf("fetch comments: %w", err)
 		}
@@ -127,13 +127,6 @@ func (h *Handler) toggleReaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	postID := r.PathValue("postID")
 	emoji := r.FormValue("emoji")
-
-	// Debug logging
-	if emoji == "" {
-		h.redirectBackWithError(w, r, fmt.Errorf("emoji parameter is empty"))
-		return
-	}
-
 	in := types.ToggleReaction{
 		PostID: postID,
 		Emoji:  emoji,

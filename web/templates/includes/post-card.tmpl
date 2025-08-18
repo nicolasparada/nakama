@@ -1,21 +1,21 @@
 <article class="card post">
-    <a href="/u/{{.User.Username}}" class="post-avatar">
-        {{template "avatar.tmpl" .User}}
+    <a href="/u/{{.Post.User.Username}}" class="post-avatar">
+        {{template "avatar.tmpl" .Post.User}}
     </a>
 
-    <a href="/u/{{.User.Username}}" class="post-username">{{.User.Username}}</a>
+    <a href="/u/{{.Post.User.Username}}" class="post-username">{{.Post.User.Username}}</a>
 
-    <a href="/p/{{.ID}}" class="post-time">
-        <time datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+    <a href="/p/{{.Post.ID}}" class="post-time">
+        <time datetime='{{.Post.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.Post.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
     </a>
 
-    {{if .Content}}
-        <p class="post-content">{{.Content | linkify}}</p>
+    {{if .Post.Content}}
+        <p class="post-content">{{.Post.Content | linkify}}</p>
     {{end}}
 
-    {{if not .Previews.IsEmpty}}
+    {{if not .Post.Previews.IsEmpty}}
         <div class="post-previews">
-            {{range .Previews}}
+            {{range .Post.Previews}}
                 {{if not .Data.IsEmpty}}
                     <div class="post-preview">
                         <h4>{{.Data.SiteName}}</h4>
@@ -39,66 +39,25 @@
         </div>
     {{end}}
 
-    {{if .Attachments}}
+    {{if .Post.Attachments}}
         <div class="post-attachments">
-            {{range .Attachments}}
+            {{range .Post.Attachments}}
                 <img src='{{minio "post-attachments" .Path}}' alt="Attachment" width="{{.Width}}" height="{{.Height}}">
             {{end}}
         </div>
     {{end}}
 
     <div class="post-controls">
-        <div class="post-reactions">            
-            <div class="reaction-picker">
-                <input type="checkbox" id="reaction-toggle-{{.ID}}" class="reaction-toggle">
+        {{template "reactions.tmpl" (dict
+            "LoggedIn" $.LoggedIn
+            "ID" .Post.ID
+            "ReactionCounters" .Post.ReactionCounters
+            "Action" (printf "/posts/%s/toggle-reaction" .Post.ID)
+        )}}
 
-                <label for="reaction-toggle-{{.ID}}" class="reaction-overlay" aria-hidden="true"></label>
-
-                <label for="reaction-toggle-{{.ID}}" class="reaction-add-btn" role="button" title="Add reaction" aria-label="Add reaction" aria-expanded="false" aria-haspopup="menu">
-                    <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M8.5 7C8.22386 7 8 6.77614 8 6.5C8 6.22386 8.22386 6 8.5 6C8.77614 6 9 6.22386 9 6.5C9 6.77614 8.77614 7 8.5 7Z" fill="#000000" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-fill: #000000; --darkreader-inline-stroke: #000000;" data-darkreader-inline-fill="" data-darkreader-inline-stroke=""></path><path d="M15.5 7C15.2239 7 15 6.77614 15 6.5C15 6.22386 15.2239 6 15.5 6C15.7761 6 16 6.22386 16 6.5C16 6.77614 15.7761 7 15.5 7Z" fill="#000000" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-fill: #000000; --darkreader-inline-stroke: #000000;" data-darkreader-inline-fill="" data-darkreader-inline-stroke=""></path><path d="M10 11H14M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
-                </label>
-                
-                <div class="reaction-dropdown" role="menu" aria-labelledby="reaction-toggle-{{.ID}}" aria-hidden="true">
-                    <form method="post" action="/posts/{{.ID}}/toggle-reaction" class="reaction-options" role="grid" aria-label="Select a reaction">
-                        <button type="submit" name="emoji" value="👍" class="reaction-option" role="gridcell" title="Thumbs up" aria-label="Add thumbs up reaction">👍</button>
-                        <button type="submit" name="emoji" value="❤️" class="reaction-option" role="gridcell" title="Love" aria-label="Add love reaction">❤️</button>
-                        <button type="submit" name="emoji" value="😄" class="reaction-option" role="gridcell" title="Laugh" aria-label="Add laugh reaction">😄</button>
-                        
-                        <button type="submit" name="emoji" value="😮" class="reaction-option" role="gridcell" title="Wow" aria-label="Add wow reaction">😮</button>
-                        <button type="submit" name="emoji" value="😢" class="reaction-option" role="gridcell" title="Sad" aria-label="Add sad reaction">😢</button>
-                        <button type="submit" name="emoji" value="😡" class="reaction-option" role="gridcell" title="Angry" aria-label="Add angry reaction">😡</button>
-                        
-                        <button type="submit" name="emoji" value="🔥" class="reaction-option" role="gridcell" title="Fire" aria-label="Add fire reaction">🔥</button>
-                        <button type="submit" name="emoji" value="💯" class="reaction-option" role="gridcell" title="100" aria-label="Add 100 percent reaction">💯</button>
-                        <button type="submit" name="emoji" value="🎉" class="reaction-option" role="gridcell" title="Party" aria-label="Add party reaction">🎉</button>
-                        
-                        <button type="submit" name="emoji" value="👏" class="reaction-option" role="gridcell" title="Clap" aria-label="Add clap reaction">👏</button>
-                        <button type="submit" name="emoji" value="🤔" class="reaction-option" role="gridcell" title="Thinking" aria-label="Add thinking reaction">🤔</button>
-                        <button type="submit" name="emoji" value="🙏" class="reaction-option" role="gridcell" title="Pray" aria-label="Add pray reaction">🙏</button>
-                    </form>
-                </div>
-            </div>
-
-            {{if .ReactionsSummary}}
-                <div class="reaction-summary">
-                    {{range .ReactionsSummary}}
-                        <form method="post" action="/posts/{{$.ID}}/toggle-reaction" class="reaction-summary-form">
-                            <button type="submit" name="emoji" value="{{.Emoji}}" 
-                                    class="reaction-item{{if .Reacted}} reacted{{end}}" 
-                                    title="{{.Count}} {{.Emoji}} reactions - Click to {{if .Reacted}}remove{{else}}add{{end}}"
-                                    aria-label="{{.Count}} {{.Emoji}} reactions, {{if .Reacted}}you reacted, click to remove{{else}}click to add your reaction{{end}}"
-                                    {{if .Reacted}}aria-pressed="true"{{else}}aria-pressed="false"{{end}}>
-                                {{.Emoji}} {{.Count}}
-                            </button>
-                        </form>
-                    {{end}}
-                </div>
-            {{end}}
-        </div>
-
-        <a href="/p/{{.ID}}" role="button" class="post-comments-count" aria-label="{{.CommentsCount}} comments" title="{{.CommentsCount}} comments">
+        <a href="/p/{{.Post.ID}}" role="button" class="post-comments-count" aria-label="{{.Post.CommentsCount}} comments" title="{{.Post.CommentsCount}} comments">
             <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M7 12L17 12" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M7 8L13 8" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M3 20.2895V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V15C21 16.1046 20.1046 17 19 17H7.96125C7.35368 17 6.77906 17.2762 6.39951 17.7506L4.06852 20.6643C3.71421 21.1072 3 20.8567 3 20.2895Z" stroke="#000000" stroke-width="1.5" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
-            <span>{{.CommentsCount}}</span>
+            <span>{{.Post.CommentsCount}}</span>
         </a>
     </div>
 </article>

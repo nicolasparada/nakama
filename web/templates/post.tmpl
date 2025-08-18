@@ -2,7 +2,10 @@
 
 {{define "content"}}
 <main class="container">
-    {{template "post-card.tmpl" .Post}}
+    {{template "post-card.tmpl" (dict
+        "Post" .Post
+        "LoggedIn" .LoggedIn
+    )}}
 
     <h2>Comments</h2>
 
@@ -11,12 +14,6 @@
         <div>
             <textarea name="content" placeholder="Say something..." aria-label="Content" required></textarea>
         </div>
-
-        {{with .Error}}
-        <div class="error">
-            <p>{{.}}</p>
-        </div>
-        {{end}}
 
         <button>Comment</button>
     </form>
@@ -29,17 +26,10 @@
     {{else}}
         <div role="feed">
             {{range .Comments.Items}}
-                <article class="card comment">
-                    <a href="/u/{{.User.Username}}" class="comment-avatar">
-                        {{template "avatar.tmpl" .User}}
-                    </a>
-                    
-                    <a href="/u/{{.User.Username}}" class="comment-username">{{.User.Username}}</a>
-                    
-                    <time class="comment-time" datetime='{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
-                    
-                    <p class="comment-content">{{.Content | linkify}}</p>
-                </article>
+                {{template "comment-card.tmpl" (dict
+                    "Comment" .
+                    "LoggedIn" $.LoggedIn
+                )}}
             {{end}}
         </div>
     {{end}}

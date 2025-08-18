@@ -1,0 +1,20 @@
+<article class="card comment">
+    <a href="/u/{{.Comment.User.Username}}" class="comment-avatar">
+        {{template "avatar.tmpl" .Comment.User}}
+    </a>
+
+    <a href="/u/{{.Comment.User.Username}}" class="comment-username">{{.Comment.User.Username}}</a>
+
+    <time class="comment-time" datetime='{{.Comment.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}'>{{.Comment.CreatedAt.Format "2006-01-02 15:04:05"}}</time>
+
+    <p class="comment-content">{{.Comment.Content | linkify}}</p>
+
+    <div class="comment-controls">
+        {{template "reactions.tmpl" (dict
+            "LoggedIn" $.LoggedIn
+            "ID" .Comment.ID
+            "ReactionCounters" .Comment.ReactionCounters
+            "Action" (printf "/comments/%s/toggle-reaction" .Comment.ID)
+        )}}
+    </div>
+</article>

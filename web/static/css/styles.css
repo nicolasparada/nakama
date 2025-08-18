@@ -788,13 +788,13 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     }
 }
 
-.post-reactions {
+.reactions {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
 }
 
-.reaction-summary {
+.reaction-counters {
     display: flex;
     gap: var(--space-sm);
 }
@@ -873,6 +873,26 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     border-color: var(--primary-border);
 }
 
+span.reaction-item {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--surface-2);
+    border-radius: var(--radius-md);
+    padding: 0 var(--space-md);
+    height: var(--space-2xl);
+    cursor: default;
+    user-select: none;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
 .comment {
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -893,5 +913,9 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
     .comment-content {
         grid-column: 2 / span 3;
         margin: 0;
+    }
+
+    .comment-controls {
+        grid-column: 2 / span 3;
     }
 }

@@ -27,14 +27,6 @@
                 <span>Post</span>
             </button>
         </div>
-
-        {{with .Error}}
-        <div class="error">
-            <b>Error:</b>
-            <p>{{.}}</p>
-        </div>
-        {{end}}
-
     </form>
 
     <br>
@@ -47,7 +39,10 @@
     {{else}}
         <div role="feed">
             {{range .Feed.Items}}
-                {{template "post-card.tmpl" .}}
+                {{template "post-card.tmpl" (dict
+                    "Post" .
+                    "LoggedIn" $.LoggedIn
+                )}}
             {{end}}
         </div>
     {{end}}

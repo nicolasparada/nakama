@@ -118,6 +118,10 @@ func (svc *Service) Post(ctx context.Context, in types.RetrievePost) (types.Post
 		return out, err
 	}
 
+	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
+		in.SetLoggedInUserID(u.ID)
+	}
+
 	out, err := svc.Cockroach.Post(ctx, in)
 	if err != nil {
 		return out, err
@@ -129,6 +133,10 @@ func (svc *Service) Post(ctx context.Context, in types.RetrievePost) (types.Post
 }
 
 func (svc *Service) ToggleReaction(ctx context.Context, in types.ToggleReaction) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+
 	loggedInUser, loggedIn := auth.UserFromContext(ctx)
 	if !loggedIn {
 		return errs.Unauthenticated
