@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS posts (
     content TEXT NOT NULL, -- Can be empty string, not nullable
     is_r18 BOOLEAN NOT NULL DEFAULT FALSE,
     attachments JSONB,
-    reactions JSONB, -- updated by [reactions_update_trigger]
+    reactions_summary JSONB, -- updated by [reactions_update_trigger]
     comments_count INT NOT NULL DEFAULT 0, -- updated by [comments_count_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
@@ -189,7 +189,7 @@ BEGIN
     END IF;
 
     UPDATE posts 
-    SET reactions = reaction_summary
+    SET reactions_summary = reaction_summary
     WHERE id = target_post_id;
 
     IF TG_OP = 'INSERT' THEN

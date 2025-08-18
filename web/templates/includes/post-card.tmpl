@@ -79,9 +79,9 @@
                 </div>
             </div>
 
-            {{if .Reactions}}
+            {{if .ReactionsSummary}}
                 <div class="reaction-summary">
-                    {{range .Reactions}}
+                    {{range .ReactionsSummary}}
                         <form method="post" action="/posts/{{$.ID}}/toggle-reaction" class="reaction-summary-form">
                             <button type="submit" name="emoji" value="{{.Emoji}}" 
                                     class="reaction-item{{if .Reacted}} reacted{{end}}" 

@@ -12,15 +12,15 @@ import (
 )
 
 type Post struct {
-	ID            string           `db:"id"`
-	UserID        string           `db:"user_id"`
-	Content       string           `db:"content"`
-	IsR18         bool             `db:"is_r18"`
-	Attachments   []Attachment     `db:"attachments"`
-	CommentsCount uint64           `db:"comments_count"`
-	Reactions     ReactionsSummary `db:"reactions"`
-	CreatedAt     time.Time        `db:"created_at"`
-	UpdatedAt     time.Time        `db:"updated_at"`
+	ID               string           `db:"id"`
+	UserID           string           `db:"user_id"`
+	Content          string           `db:"content"`
+	IsR18            bool             `db:"is_r18"`
+	Attachments      []Attachment     `db:"attachments"`
+	CommentsCount    uint64           `db:"comments_count"`
+	ReactionsSummary ReactionsSummary `db:"reactions_summary"`
+	CreatedAt        time.Time        `db:"created_at"`
+	UpdatedAt        time.Time        `db:"updated_at"`
 
 	User *User `db:"user,omitempty"`
 

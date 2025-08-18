@@ -17,7 +17,7 @@ var postColumns = [...]string{
 	"posts.is_r18",
 	"posts.attachments",
 	"posts.comments_count",
-	"posts.reactions",
+	"posts.reactions_summary",
 	"posts.created_at",
 	"posts.updated_at",
 }
@@ -40,7 +40,7 @@ func (c *Cockroach) enhancePostsWithUserReactions(ctx context.Context, posts []t
 	}
 
 	for i := range posts {
-		posts[i].Reactions = c.addReactedFieldToReactions(posts[i].Reactions, userReactions[posts[i].ID])
+		posts[i].ReactionsSummary = c.addReactedFieldToReactions(posts[i].ReactionsSummary, userReactions[posts[i].ID])
 	}
 
 	return nil
@@ -56,7 +56,7 @@ func (c *Cockroach) enhancePostWithUserReactions(ctx context.Context, post *type
 		return err
 	}
 
-	post.Reactions = c.addReactedFieldToReactions(post.Reactions, userReactions[post.ID])
+	post.ReactionsSummary = c.addReactedFieldToReactions(post.ReactionsSummary, userReactions[post.ID])
 	return nil
 }
 
