@@ -10,7 +10,6 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	tmplrenderer "github.com/nicolasparada/go-tmpl-renderer"
-	"github.com/nicolasparada/nakama/errs"
 	"github.com/nicolasparada/nakama/service"
 )
 
@@ -82,5 +81,5 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) notFound(w http.ResponseWriter, r *http.Request) {
-	h.renderErrorPage(w, r, errs.NewNotFoundError("page not found"))
+	h.renderErrorPage(w, r, errPageNotFound)
 }

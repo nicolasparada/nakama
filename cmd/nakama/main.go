@@ -84,7 +84,7 @@ func run() error {
 	bucketsStart := time.Now()
 	infoLogger.Info("creating minio buckets")
 
-	if err := minio.CreateReadOnlyBuckets(context.Background(), "post-attachments", "avatars"); err != nil {
+	if err := minio.CreateReadOnlyBuckets(context.Background(), "post-attachments", "comment-attachments", "avatars"); err != nil {
 		return fmt.Errorf("create minio bucket: %w", err)
 	}
 

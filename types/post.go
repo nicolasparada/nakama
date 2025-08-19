@@ -36,12 +36,12 @@ func (p Post) Previews() preview.Results {
 }
 
 type CreatePost struct {
-	userID      string
-	Content     string
-	IsR18       bool
-	Attachments []io.ReadSeeker
+	userID  string
+	Content string
+	IsR18   bool
+	Files   []io.ReadSeeker
 
-	processedAttachments []Attachment
+	attachments []Attachment
 }
 
 func (in *CreatePost) SetUserID(userID string) {
@@ -52,12 +52,12 @@ func (in CreatePost) UserID() string {
 	return in.userID
 }
 
-func (in *CreatePost) SetProcessedAttachments(attachments []Attachment) {
-	in.processedAttachments = attachments
+func (in *CreatePost) SetAttachments(attachments []Attachment) {
+	in.attachments = attachments
 }
 
-func (in CreatePost) ProcessedAttachments() []Attachment {
-	return in.processedAttachments
+func (in CreatePost) Attachments() []Attachment {
+	return in.attachments
 }
 
 func (in *CreatePost) Validate() error {
@@ -65,7 +65,7 @@ func (in *CreatePost) Validate() error {
 
 	in.Content = strings.TrimSpace(in.Content)
 
-	if in.Content == "" && len(in.Attachments) == 0 {
+	if in.Content == "" && len(in.Files) == 0 {
 		v.AddError("Content", "Content cannot be empty")
 	}
 

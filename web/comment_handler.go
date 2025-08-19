@@ -1,7 +1,9 @@
 package web
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/nicolasparada/nakama/types"
@@ -10,17 +12,33 @@ import (
 func (h *Handler) createComment(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	if err := r.ParseForm(); err != nil {
+	if err := r.ParseMultipartForm(storeInMemoryUntil); err != nil {
 		h.redirectBackWithError(w, r, fmt.Errorf("parse form: %w", err))
 		return
+	}
+
+	defer r.MultipartForm.RemoveAll()
+
+	var file io.ReadSeeker
+
+	f, _, err := r.FormFile("attachment")
+	if err != nil && !errors.Is(err, http.ErrMissingFile) {
+		h.redirectBackWithError(w, r, fmt.Errorf("read form attachment: %w", err))
+		return
+	}
+
+	if err == nil {
+		defer f.Close()
+		file = f
 	}
 
 	ctx := r.Context()
 	in := types.CreateComment{
 		PostID:  r.PathValue("postID"),
 		Content: r.PostFormValue("content"),
+		File:    file,
 	}
-	_, err := h.Service.CreateComment(ctx, in)
+	_, err = h.Service.CreateComment(ctx, in)
 	if err != nil {
 		// TODO: save old form values to repopulate the form.
 		h.redirectBackWithError(w, r, fmt.Errorf("create comment: %w", err))

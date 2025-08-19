@@ -17,6 +17,7 @@ var commentColumns = [...]string{
 	"comments.user_id",
 	"comments.post_id",
 	"comments.content",
+	"comments.attachment",
 	"comments.reaction_counters",
 	"comments.created_at",
 	"comments.updated_at",
@@ -28,8 +29,8 @@ func (c *Cockroach) CreateComment(ctx context.Context, in types.CreateComment) (
 	var out types.Created
 
 	const q = `
-		INSERT INTO comments (id, user_id, post_id, content)
-		VALUES (@comment_id, @user_id, @post_id, @content)
+		INSERT INTO comments (id, user_id, post_id, content, attachment)
+		VALUES (@comment_id, @user_id, @post_id, @content, @attachment)
 		RETURNING id, created_at
 	`
 
@@ -38,6 +39,7 @@ func (c *Cockroach) CreateComment(ctx context.Context, in types.CreateComment) (
 		"user_id":    in.UserID(),
 		"post_id":    in.PostID,
 		"content":    in.Content,
+		"attachment": in.Attachment(),
 	})
 	if db.IsForeignKeyViolationError(err, "post_id") {
 		return out, errs.NewNotFoundError("post not found")

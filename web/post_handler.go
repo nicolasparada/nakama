@@ -48,7 +48,7 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 
 	defer r.MultipartForm.RemoveAll()
 
-	var attachments []io.ReadSeeker
+	var files []io.ReadSeeker
 	for _, fileHeader := range r.MultipartForm.File["attachments"] {
 		f, err := fileHeader.Open()
 		if err != nil {
@@ -58,14 +58,14 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 
 		defer f.Close()
 
-		attachments = append(attachments, f)
+		files = append(files, f)
 	}
 
 	ctx := r.Context()
 	in := types.CreatePost{
-		Content:     r.PostFormValue("content"),
-		IsR18:       r.PostFormValue("is_r18") == "on",
-		Attachments: attachments,
+		Content: r.PostFormValue("content"),
+		IsR18:   r.PostFormValue("is_r18") == "on",
+		Files:   files,
 	}
 	_, err := h.Service.CreatePost(ctx, in)
 	if err != nil {
@@ -106,7 +106,7 @@ func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err := g.Wait(); err != nil {
-		h.renderWithError(w, r, "post.tmpl", nil, err)
+		h.renderErrorPage(w, r, err)
 		return
 	}
 

@@ -7,7 +7,7 @@
     <form action="/search" method="get" class="search-form">
         <input type="hidden" name="tab" value="{{.Tab}}">
         <div>
-            <input type="text" name="q" placeholder="Search something..." autocomplete="off" value="{{.Query}}" required autofocus>
+            <input type="search" name="q" placeholder="Search something..." autocomplete="off" spellcheck="false" value="{{.Query}}" required autofocus>
         </div>
 
         <button>
@@ -117,7 +117,10 @@
     {{else}}
         <div class="search-results" role="feed">
             {{range .Results.Items}}
-                {{template "post-card.tmpl" .}}
+                {{template "post-card.tmpl" (dict
+                    "Post" .
+                    "LoggedIn" $.LoggedIn
+                )}}
             {{end}}
         </div>
     {{end}}

@@ -28,25 +28,25 @@ func (svc *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.
 
 	in.SetUserID(loggedInUser.ID)
 
-	images, err := ffmpeg.ResizeImages(ctx, 2_000, in.Attachments)
+	images, err := ffmpeg.ResizeImages(ctx, 2_000, in.Files)
 	if err != nil {
 		return out, fmt.Errorf("resize images: %w", err)
 	}
 
-	in.SetProcessedAttachments(newAttachmentList(images))
+	in.SetAttachments(newAttachmens(images))
 
-	cleanup, err := svc.Minio.UploadMany(ctx, "post-attachments", in.ProcessedAttachments())
+	cleanupFiles, err := svc.Minio.UploadMany(ctx, "post-attachments", in.Attachments())
 	if err != nil {
 		return out, err
 	}
 
 	out, err = svc.Cockroach.CreatePost(ctx, in)
 	if err != nil {
-		go cleanup()
+		go cleanupFiles()
 		return out, err
 	}
 
-	// cache early
+	// cache preview early
 	_ = svc.Preview.Fetch(svc.baseCtx, extractURLs(in.Content))
 
 	svc.background(func(ctx context.Context) error {
@@ -148,7 +148,7 @@ func (svc *Service) ToggleReaction(ctx context.Context, in types.ToggleReaction)
 	return err
 }
 
-func newAttachmentList(images []ffmpeg.Image) []types.Attachment {
+func newAttachmens(images []ffmpeg.Image) []types.Attachment {
 	now := time.Now()
 	id := id.Generate()
 

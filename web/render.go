@@ -20,6 +20,8 @@ import (
 	"mvdan.cc/xurls/v2"
 )
 
+var errPageNotFound = errs.NewNotFoundError("page not found")
+
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data map[string]any, statusCode int) {
 	if data == nil {
 		data = map[string]any{}
@@ -75,7 +77,7 @@ func isAllowedNotFound(path string) bool {
 }
 
 func (h *Handler) renderErrorPage(w http.ResponseWriter, r *http.Request, err error) {
-	if !isAllowedNotFound(r.URL.Path) {
+	if !isAllowedNotFound(r.URL.Path) && !errors.Is(err, errPageNotFound) {
 		h.ErrorLogger.Error("got error", "req_method", r.Method, "req_url", r.URL.String(), "err", err)
 	}
 	h.render(w, r, "error.tmpl", map[string]any{

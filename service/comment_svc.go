@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nicolasparada/nakama/auth"
 	"github.com/nicolasparada/nakama/errs"
+	"github.com/nicolasparada/nakama/ffmpeg"
 	"github.com/nicolasparada/nakama/types"
 )
 
@@ -22,8 +24,27 @@ func (svc *Service) CreateComment(ctx context.Context, in types.CreateComment) (
 
 	in.SetUserID(loggedInUser.ID)
 
+	var cleanupFile func()
+
+	if in.File != nil {
+		image, err := ffmpeg.ResizeImage(ctx, 2_000, in.File)
+		if err != nil {
+			return out, fmt.Errorf("resize image: %w", err)
+		}
+
+		in.SetAttachment(newAttachment(image))
+
+		cleanupFile, err = svc.Minio.Upload(ctx, "comment-attachments", *in.Attachment())
+		if err != nil {
+			return out, err
+		}
+	}
+
 	out, err := svc.Cockroach.CreateComment(ctx, in)
 	if err != nil {
+		if cleanupFile != nil {
+			go cleanupFile()
+		}
 		return out, err
 	}
 

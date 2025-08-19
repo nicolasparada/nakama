@@ -54,7 +54,7 @@ func (c *Cockroach) createPost(ctx context.Context, in types.CreatePost) (types.
 		"user_id":     in.UserID(),
 		"content":     in.Content,
 		"is_r18":      in.IsR18,
-		"attachments": in.ProcessedAttachments(),
+		"attachments": in.Attachments(),
 	})
 	if err != nil {
 		return out, fmt.Errorf("sql insert post: %w", err)

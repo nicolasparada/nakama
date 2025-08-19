@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS comments (
     user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
     post_id VARCHAR NOT NULL REFERENCES posts ON DELETE CASCADE ON UPDATE CASCADE,
     content TEXT NOT NULL,
+    attachment JSONB,
     reaction_counters JSONB, -- updated by [comment_reactions_update_trigger]
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
