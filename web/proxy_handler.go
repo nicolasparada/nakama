@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
@@ -42,25 +43,10 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
 				newreq.Header.Set("User-Agent", "")
 			}
 
-			// Remove the Cookie, Referer, and Authorization headers
 			newreq.Header.Del("Cookie")
-			newreq.Header.Del("Referer")
 			newreq.Header.Del("Authorization")
-
-			// Forward cache headers for conditional requests
-			if inm := r.Header.Get("If-None-Match"); inm != "" {
-				newreq.Header.Set("If-None-Match", inm)
-			}
-			if ims := r.Header.Get("If-Modified-Since"); ims != "" {
-				newreq.Header.Set("If-Modified-Since", ims)
-			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// Remove the WWW-Authenticate header to prevent the browser from showing the basic auth pop-up dialog.
-			if resp.Header.Get("Www-Authenticate") != "" {
-				resp.Header.Del("Www-Authenticate")
-			}
-
 			ct := resp.Header.Get("Content-Type")
 			if !strings.HasPrefix(ct, "image/") {
 				resp.Body.Close()
@@ -69,6 +55,20 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
 				resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
 				resp.Body = http.NoBody
 			}
+
+			// Remove the WWW-Authenticate header to prevent the browser from showing the basic auth pop-up dialog.
+			if resp.Header.Get("Www-Authenticate") != "" {
+				resp.Header.Del("Www-Authenticate")
+			}
+
+			// Set caching headers
+			dur := time.Hour * 24
+			resp.Header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(dur.Seconds())))
+			resp.Header.Set("Pragma", "public")
+			resp.Header.Set("Expires", fmt.Sprintf("%d", time.Now().Add(dur).Unix()))
+
+			// Prevent setting cookies in the user's browser.
+			resp.Header.Del("Set-Cookie")
 
 			return nil
 		},

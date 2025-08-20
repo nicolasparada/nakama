@@ -53,10 +53,7 @@ func (svc *Service) Close() error {
 }
 
 func (svc *Service) background(fn func(ctx context.Context) error) {
-	svc.wg.Add(1)
-	go func() {
-		defer svc.wg.Done()
-
+	svc.wg.Go(func() {
 		defer func() {
 			if rcv := recover(); rcv != nil {
 				select {
@@ -75,5 +72,5 @@ func (svc *Service) background(fn func(ctx context.Context) error) {
 			default:
 			}
 		}
-	}()
+	})
 }

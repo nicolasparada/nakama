@@ -83,7 +83,9 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 
 	resp, err := f.client.Do(req)
 	if err != nil {
-		f.cacheErr.Add(urlStr, struct{}{})
+		if !errors.Is(err, context.Canceled) {
+			f.cacheErr.Add(urlStr, struct{}{})
+		}
 		return empty, fmt.Errorf("http get: %w", err)
 	}
 

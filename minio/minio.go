@@ -57,11 +57,7 @@ func (m *Minio) UploadMany(ctx context.Context, bucket string, files []types.Att
 		var wg sync.WaitGroup
 
 		for _, fn := range cleanupFuncs {
-			wg.Add(1)
-			go func(fn func()) {
-				defer wg.Done()
-				fn()
-			}(fn)
+			wg.Go(fn)
 		}
 
 		wg.Wait()
@@ -84,10 +80,7 @@ func (m *Minio) Upload(ctx context.Context, bucket string, file types.Attachment
 	}
 
 	return func() {
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
-
+		m.wg.Go(func() {
 			defer func() {
 				if rcv := recover(); rcv != nil {
 					select {
@@ -109,7 +102,7 @@ func (m *Minio) Upload(ctx context.Context, bucket string, file types.Attachment
 				default:
 				}
 			}
-		}()
+		})
 	}, nil
 }
 

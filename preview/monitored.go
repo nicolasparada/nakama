@@ -2,6 +2,7 @@ package preview
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -55,10 +56,7 @@ func (m *Monitored) Fetch(ctx context.Context, urls []string) Results {
 	results := make(Results, len(urls))
 
 	for i, url := range urls {
-		wg.Add(1)
-		go func(i int, url string) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			defer func() {
 				if rcv := recover(); rcv != nil {
 					select {
@@ -69,7 +67,7 @@ func (m *Monitored) Fetch(ctx context.Context, urls []string) Results {
 			}()
 
 			data, err := m.fetcher.Get(ctx, url)
-			if err != nil {
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, ErrBackoff) {
 				select {
 				case m.errs <- fmt.Errorf("failed to fetch preview %s: %w", url, err):
 				default:
@@ -77,7 +75,7 @@ func (m *Monitored) Fetch(ctx context.Context, urls []string) Results {
 			}
 
 			results[i] = Result{URL: url, Data: data, Err: err}
-		}(i, url)
+		})
 	}
 
 	wg.Wait()
