@@ -19,17 +19,44 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 			COALESCE(
 				json_agg(
 					json_build_object(
-						'id', users.id,
-						'username', users.username,
-						'avatar', users.avatar
-					) ORDER BY array_position(notifications.actor_user_ids, users.id)
-				) FILTER (WHERE users.id IS NOT NULL),
+						'id', actor_users.id,
+						'username', actor_users.username,
+						'avatar', actor_users.avatar
+					) ORDER BY array_position(notifications.actor_user_ids, actor_users.id)
+				) FILTER (WHERE actor_users.id IS NOT NULL),
 				'[]'::json
-			) AS actors
+			) AS actors,
+			CASE 
+				WHEN notifications.notifiable_kind = 'post' AND posts.id IS NOT NULL 
+				THEN json_build_object(
+					'id', posts.id,
+					'userID', posts.user_id,
+					'content', posts.content,
+					'isR18', posts.is_r18,
+					'attachments', posts.attachments,
+					'relationship', json_build_object(
+						'isMine', posts.user_id = @user_id
+					)
+				)
+				ELSE NULL 
+			END AS post,
+			CASE 
+				WHEN notifications.notifiable_kind = 'comment' AND comments.id IS NOT NULL 
+				THEN json_build_object(
+					'id', comments.id,
+					'userID', comments.user_id,
+					'postID', comments.post_id,
+					'content', comments.content,
+					'attachment', comments.attachment
+				)
+				ELSE NULL 
+			END AS comment
 		FROM notifications
-		LEFT JOIN users ON users.id = ANY(notifications.actor_user_ids)
+		LEFT JOIN users actor_users ON actor_users.id = ANY(notifications.actor_user_ids)
+		LEFT JOIN posts ON notifications.notifiable_kind = 'post' AND posts.id = notifications.notifiable_id
+		LEFT JOIN comments ON notifications.notifiable_kind = 'comment' AND comments.id = notifications.notifiable_id
 		WHERE notifications.user_id = @user_id
-		GROUP BY notifications.id
+		GROUP BY notifications.id, posts.id, comments.id
 		ORDER BY notifications.id DESC
 	`
 
@@ -119,17 +146,18 @@ func (c *Cockroach) createMentionNotifications(ctx context.Context, in types.Cre
 			@notifiable_id,
 			@actor_user_ids
 		FROM users
-		WHERE users.username = ANY(@usernames)
+		WHERE users.username = ANY(@usernames) AND users.id != @actor_user_id
 		RETURNING id, created_at
 	`
 
 	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
-		"kind":            types.NotificationKindPostMention,
+		"kind":            in.Kind,
 		"notifiable_kind": in.NotifiableKind,
 		"notifiable_id":   in.NotifiableID,
 		// This should be filled by a trigger,
 		// but this avoids the immediate NOT NULL constraint
 		// on actor_user_ids
+		"actor_user_id":  in.ActorUserID,
 		"actor_user_ids": []string{in.ActorUserID},
 		"usernames":      in.Usernames,
 	})
@@ -140,6 +168,50 @@ func (c *Cockroach) createMentionNotifications(ctx context.Context, in types.Cre
 	out, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.Created])
 	if err != nil {
 		return out, fmt.Errorf("sql collect inserted mention notifications: %w", err)
+	}
+
+	return out, nil
+}
+
+func (c *Cockroach) FanoutCommentNotifications(ctx context.Context, in types.FanoutCommentNotifications) error {
+	return c.db.RunTx(ctx, func(ctx context.Context) error {
+		createdList, err := c.fanoutCommentNotifications(ctx, in)
+		if err != nil {
+			return fmt.Errorf("sql fanout comment notifications: %w", err)
+		}
+
+		return c.upsertManyNotificationsActor(ctx, createdList, in.ActorUserID)
+	})
+}
+
+func (c *Cockroach) fanoutCommentNotifications(ctx context.Context, in types.FanoutCommentNotifications) ([]types.Created, error) {
+	var out []types.Created
+
+	const q = `
+		INSERT INTO notifications (id, user_id, kind, notifiable_kind, notifiable_id, actor_user_ids)
+		SELECT uuid_to_ulid(gen_random_ulid()), post_subscriptions.user_id, @kind, @notifiable_kind, @notifiable_id, @actor_user_ids
+		FROM post_subscriptions
+		WHERE post_subscriptions.post_id = (
+			SELECT comments.post_id FROM comments WHERE comments.id = @comment_id
+		) AND post_subscriptions.user_id != @actor_user_id
+		RETURNING id, created_at
+	`
+
+	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
+		"kind":            types.NotificationKindComment,
+		"notifiable_kind": types.NotifiableKindComment,
+		"notifiable_id":   in.CommentID,
+		"actor_user_id":   in.ActorUserID,
+		"actor_user_ids":  []string{in.ActorUserID},
+		"comment_id":      in.CommentID,
+	})
+	if err != nil {
+		return out, fmt.Errorf("sql insert comment notifications: %w", err)
+	}
+
+	out, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.Created])
+	if err != nil {
+		return out, fmt.Errorf("sql collect inserted comment notifications: %w", err)
 	}
 
 	return out, nil

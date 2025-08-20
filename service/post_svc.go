@@ -60,6 +60,7 @@ func (svc *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.
 		svc.background(func(ctx context.Context) error {
 			return svc.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
 				ActorUserID:    loggedInUser.ID,
+				Kind:           types.NotificationKindPostMention,
 				NotifiableKind: types.NotifiableKindPost,
 				NotifiableID:   out.ID,
 				Usernames:      mentions,

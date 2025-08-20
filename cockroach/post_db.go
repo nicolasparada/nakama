@@ -28,8 +28,14 @@ func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.
 	var out types.Created
 	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
 		var err error
-		out, err = c.createPost(ctx, in)
-		if err != nil {
+		if out, err = c.createPost(ctx, in); err != nil {
+			return err
+		}
+
+		if err := c.upsertPostSubscription(ctx, types.UpsertPostSubscription{
+			UserID: in.UserID(),
+			PostID: out.ID,
+		}); err != nil {
 			return err
 		}
 
@@ -85,13 +91,34 @@ func (c *Cockroach) createFeedItem(ctx context.Context, in types.FanoutPost) err
 	return nil
 }
 
+func (c *Cockroach) upsertPostSubscription(ctx context.Context, in types.UpsertPostSubscription) error {
+	const q = `
+		INSERT INTO post_subscriptions (user_id, post_id)
+		VALUES (@user_id, @post_id)
+		ON CONFLICT (user_id, post_id) DO NOTHING
+	`
+
+	_, err := c.db.Exec(ctx, q, pgx.NamedArgs{
+		"user_id": in.UserID,
+		"post_id": in.PostID,
+	})
+	if err != nil {
+		return fmt.Errorf("sql upsert post subscription: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
 
 	query := `
 		SELECT
 			` + postColumnsStr + `,
-			to_json(users) AS user
+			to_json(users) AS user,
+			json_build_object(
+				'isMine', posts.user_id = @user_id
+			) AS relationship
 		FROM feed
 		INNER JOIN posts ON feed.post_id = posts.id
 		INNER JOIN users ON posts.user_id = users.id
@@ -122,15 +149,10 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
 
-	query := `
-		SELECT 
-			` + postColumnsStr + `,
-			to_json(users) AS user
-		FROM posts
-		INNER JOIN users ON posts.user_id = users.id
-	`
+	args := pgx.NamedArgs{
+		"logged_in_user_id": in.LoggedInUserID(),
+	}
 
-	args := pgx.NamedArgs{}
 	var filters []string
 
 	if in.Username != nil {
@@ -143,7 +165,22 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 		args["search_query"] = *in.SearchQuery
 	}
 
-	query += where(filters)
+	query := `
+		SELECT 
+			` + postColumnsStr + `,
+			to_json(users) AS user,
+			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
+				json_build_object(
+					'isMine', users.id = @logged_in_user_id
+				)
+			ELSE
+				json_build_object(
+					'isMine', false
+				)
+			END AS relationship
+		FROM posts
+		INNER JOIN users ON posts.user_id = users.id
+	` + where(filters)
 
 	if in.SearchQuery != nil {
 		query += `
@@ -179,14 +216,24 @@ func (c *Cockroach) Post(ctx context.Context, in types.RetrievePost) (types.Post
 	query := `
 		SELECT
 			` + postColumnsStr + `,
-			to_json(users) AS user
+			to_json(users) AS user,
+			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
+				json_build_object(
+					'isMine', users.id = @logged_in_user_id
+				)
+			ELSE
+				json_build_object(
+					'isMine', false
+				)
+			END AS relationship
 		FROM posts
 		INNER JOIN users ON posts.user_id = users.id
 		WHERE posts.id = @post_id
 	`
 
 	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{
-		"post_id": in.PostID,
+		"post_id":           in.PostID,
+		"logged_in_user_id": in.LoggedInUserID(),
 	})
 	if err != nil {
 		return out, fmt.Errorf("sql select post: %w", err)

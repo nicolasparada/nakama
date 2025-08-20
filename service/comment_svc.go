@@ -52,12 +52,20 @@ func (svc *Service) CreateComment(ctx context.Context, in types.CreateComment) (
 		svc.background(func(ctx context.Context) error {
 			return svc.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
 				ActorUserID:    loggedInUser.ID,
+				Kind:           types.NotificationKindCommentMention,
 				NotifiableKind: types.NotifiableKindComment,
 				NotifiableID:   out.ID,
 				Usernames:      mentions,
 			})
 		})
 	}
+
+	svc.background(func(ctx context.Context) error {
+		return svc.Cockroach.FanoutCommentNotifications(ctx, types.FanoutCommentNotifications{
+			ActorUserID: loggedInUser.ID,
+			CommentID:   out.ID,
+		})
+	})
 
 	return out, nil
 }

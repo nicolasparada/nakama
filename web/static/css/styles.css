@@ -121,6 +121,10 @@ label {
     white-space: nowrap;
 }
 
+p {
+    margin: 0;
+}
+
 a {
     color: var(--text);
     text-decoration: none;
@@ -421,40 +425,6 @@ div:has(>label):has(>input[type=checkbox]) {
     align-items: center;
     gap: var(--space-sm);
 }
-
-.notification {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: var(--space-md);
-
-    p {
-        margin: 0;
-
-        .avatar, .avatar-initial {
-            display: inline-block;
-            font-size: var(--font-size-xs);
-            --size: 1rem;
-        }
-    }
-
-    form {
-        display: contents;
-    }
-
-    time {
-        grid-column: 2;
-        color: var(--text-muted);
-        font-size: var(--font-size-sm);
-        text-align: right;
-    }
-
-    &.notification-read {
-        background-color: var(--surface-2);
-        opacity: 0.6;
-        text-decoration: line-through;
-    }
-}
-
 
 input[type=checkbox] {
     appearance: none;
@@ -1095,6 +1065,68 @@ span.reaction-item {
         100% {
             opacity: 0;
             visibility: hidden;
+        }
+    }
+}
+
+.notification {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--space-md);
+
+    .notification-avatar {
+        grid-column: 1;
+    }
+
+    .notification-message {
+        font-family: 'Nunito', sans-serif;
+        grid-column: 2;
+        align-self: center;
+    }
+
+    .notification-mark-read {
+        grid-column: 3;
+    }
+
+    .post-preview-link,
+    .comment-preview-link {
+        grid-column: 2 / span 3;
+        display: block;
+        color: inherit;
+
+        &:hover {
+            text-decoration: none;
+        }
+    }
+
+    .post-preview-content,
+    .comment-preview-content {
+        border: 1px solid var(--border);
+        background-color: var(--surface-2);
+        border-radius: var(--radius-lg);
+        padding: var(--space-lg);
+    }
+
+    .notification-time {
+        grid-column: 2;
+        align-self: end;
+        color: var(--text-muted);
+        font-size: var(--font-size-sm);
+    }
+
+    img {
+        max-height: 8rem;
+        width: auto;
+        border-radius: var(--radius-lg);
+    }
+
+    &.notification-read {
+        opacity: .6;
+        filter: saturate(.6);
+        color: var(--text-muted);
+
+        a {
+            color: var(--text-muted);
         }
     }
 }

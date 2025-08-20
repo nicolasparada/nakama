@@ -17,6 +17,9 @@ type Notification struct {
 
 	// Actors only includes the last 2 actors max.
 	Actors *[]User `db:"actors,omitempty"`
+
+	Post    *Post    `db:"post,omitempty"`
+	Comment *Comment `db:"comment,omitempty"`
 }
 
 func (n Notification) Read() bool {
@@ -33,6 +36,7 @@ const (
 	NotificationKindFollow         NotificationKind = "follow"
 	NotificationKindPostMention    NotificationKind = "post_mention"
 	NotificationKindCommentMention NotificationKind = "comment_mention"
+	NotificationKindComment        NotificationKind = "comment"
 )
 
 type NotifiableKind string
@@ -80,7 +84,13 @@ func (in ReadNotification) UserID() string {
 
 type CreateMentionNotifications struct {
 	ActorUserID    string
+	Kind           NotificationKind
 	NotifiableKind NotifiableKind
 	NotifiableID   string
 	Usernames      []string
+}
+
+type FanoutCommentNotifications struct {
+	ActorUserID string
+	CommentID   string
 }

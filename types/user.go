@@ -25,13 +25,13 @@ type User struct {
 	CreatedAt      time.Time   `db:"created_at"`
 	UpdatedAt      time.Time   `db:"updated_at"`
 
-	Relationship *UserRelationship `db:"relationship"`
+	Relationship *UserRelationship `db:"relationship,omitempty"`
 }
 
 type UserRelationship struct {
-	FollowsYou    bool `db:"follows_you"`     // Does this user follow the authenticated user? (for "follows you" badge)
-	FollowedByYou bool `db:"followed_by_you"` // Does the authenticated user follow this user? (explicit state)
-	IsMe          bool `db:"is_me"`           // Is this user the authenticated user? (for edit buttons, hiding follow buttons)
+	FollowsYou    bool // Does this user follow the authenticated user? (for "follows you" badge)
+	FollowedByYou bool // Does the authenticated user follow this user? (explicit state)
+	IsMe          bool // Is this user the authenticated user? (for edit buttons, hiding follow buttons)
 }
 
 type UpsertUser struct {

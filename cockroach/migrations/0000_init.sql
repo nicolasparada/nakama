@@ -372,3 +372,13 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER comment_reactions_update_trigger
     AFTER INSERT OR DELETE ON comment_reactions
     FOR EACH ROW EXECUTE FUNCTION update_comment_reaction_counters();
+
+CREATE TABLE IF NOT EXISTS post_subscriptions (
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    post_id VARCHAR NOT NULL REFERENCES posts ON DELETE CASCADE ON UPDATE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, post_id)
+);
+
+CREATE INDEX IF NOT EXISTS post_subscriptions_user_id_idx ON post_subscriptions (user_id);
+CREATE INDEX IF NOT EXISTS post_subscriptions_post_id_idx ON post_subscriptions (post_id);

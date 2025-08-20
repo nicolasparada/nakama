@@ -22,7 +22,8 @@ type Post struct {
 	CreatedAt        time.Time        `db:"created_at"`
 	UpdatedAt        time.Time        `db:"updated_at"`
 
-	User *User `db:"user,omitempty"`
+	User         *User             `db:"user,omitempty"`
+	Relationship *PostRelationship `db:"relationship,omitempty"`
 
 	previews preview.Results
 }
@@ -33,6 +34,10 @@ func (p *Post) SetPreviews(previews preview.Results) {
 
 func (p Post) Previews() preview.Results {
 	return p.previews
+}
+
+type PostRelationship struct {
+	IsMine bool
 }
 
 type CreatePost struct {
@@ -162,4 +167,9 @@ func (in *RetrievePost) Validate() error {
 	}
 
 	return v.AsError()
+}
+
+type UpsertPostSubscription struct {
+	UserID string
+	PostID string
 }

@@ -28,6 +28,22 @@ var commentColumnsStr = strings.Join(commentColumns[:], ", ")
 func (c *Cockroach) CreateComment(ctx context.Context, in types.CreateComment) (types.Created, error) {
 	var out types.Created
 
+	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
+		var err error
+		if out, err = c.createComment(ctx, in); err != nil {
+			return err
+		}
+
+		return c.upsertPostSubscription(ctx, types.UpsertPostSubscription{
+			UserID: in.UserID(),
+			PostID: in.PostID,
+		})
+	})
+}
+
+func (c *Cockroach) createComment(ctx context.Context, in types.CreateComment) (types.Created, error) {
+	var out types.Created
+
 	const q = `
 		INSERT INTO comments (id, user_id, post_id, content, attachment)
 		VALUES (@comment_id, @user_id, @post_id, @content, @attachment)
