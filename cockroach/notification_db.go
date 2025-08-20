@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/nicolasparada/nakama/id"
 	"github.com/nicolasparada/nakama/types"
 )
 
@@ -271,14 +270,13 @@ func (c *Cockroach) createFollowNotification(ctx context.Context, in types.Creat
 
 	const q = `
 		INSERT INTO notifications (id, user_id, kind, actor_user_ids)
-		VALUES (@notification_id, @user_id, @kind, @actor_user_ids)
+		VALUES (uuid_to_ulid(gen_random_ulid()), @user_id, @kind, @actor_user_ids)
 		RETURNING id, created_at
 	`
 
 	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
-		"notification_id": id.Generate(),
-		"user_id":         in.UserID,
-		"kind":            types.NotificationKindFollow,
+		"user_id": in.UserID,
+		"kind":    types.NotificationKindFollow,
 		// This should be filled by a trigger,
 		// but this avoids the immediate NOT NULL constraint
 		// on actor_user_ids

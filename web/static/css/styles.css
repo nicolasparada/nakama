@@ -357,6 +357,7 @@ body {
                 gap: var(--space-lg);
                 border: 1px solid transparent;
                 display: flex;
+                align-items: center;
     
                 &:hover {
                     color: var(--text);
@@ -369,6 +370,7 @@ body {
     
             button, [role=button] {
                 display: flex;
+                align-items: center;
                 width: 100%;
                 gap: var(--space-lg) !important;
                 color: var(--text-muted);
@@ -386,6 +388,12 @@ body {
                     stroke: var(--text-muted);
                 }
             }
+        }
+
+        .avatar,
+        .avatar-initial {
+            --size: var(--space-lg);
+            font-size: var(--font-size-xs);
         }
     }
 
