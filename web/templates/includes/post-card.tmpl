@@ -29,7 +29,7 @@
                         {{if .Data.Images}}
                             <div class="post-preview-images">
                                 {{range .Data.Images}}
-                                    <img src="{{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
+                                    <img src="/proxy?url={{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
                                 {{end}}
                             </div>
                         {{end}}

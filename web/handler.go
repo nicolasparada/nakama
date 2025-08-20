@@ -67,6 +67,7 @@ func (h *Handler) init() {
 	mux.HandleFunc("GET /search", h.search)
 	mux.HandleFunc("POST /posts/{postID}/toggle-reaction", h.toggleReaction)
 	mux.HandleFunc("POST /comments/{commentID}/toggle-reaction", h.toggleCommentReaction)
+	mux.HandleFunc("GET /proxy", h.proxy)
 	mux.Handle("GET /static/", staticHandler())
 	mux.HandleFunc("GET /", h.notFound)
 

@@ -4,12 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/gen2brain/avif"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/nicolasparada/nakama/opengraph"
+	"golang.org/x/image/webp"
 )
 
 // ErrBackoff is returned when a previous fetch/parse failed recently and retries are being throttled.
@@ -70,7 +79,7 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 
 	// Use a bot-friendly UA that still works with most sites including X.com
 	req.Header.Set("User-Agent", "Twitterbot/1.0")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/*;q=0.8,*/*;q=0.5")
 
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -92,6 +101,26 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 
 	limited := io.LimitReader(resp.Body, f.maxBytes)
 
+	contentType := resp.Header.Get("Content-Type")
+	if ct, _, err := mime.ParseMediaType(contentType); err == nil && strings.HasPrefix(ct, "image/") {
+		og := opengraph.OpenGraph{
+			Title:    extractImageNameFromURL(urlStr),
+			URL:      urlStr,
+			Type:     "image",
+			SiteName: extractHostFromURL(urlStr),
+			Images: []opengraph.Image{{
+				URL:  urlStr,
+				Type: ct,
+			}},
+		}
+		if w, h, err := getImageResolution(limited, ct); err == nil {
+			og.Images[0].Width = w
+			og.Images[0].Height = h
+		}
+		f.cacheOK.Add(urlStr, og)
+		return og, nil
+	}
+
 	og, parseErr := opengraph.Parse(limited, urlStr)
 	if parseErr != nil {
 		f.cacheErr.Add(urlStr, struct{}{})
@@ -100,4 +129,57 @@ func (f *Fetcher) Get(ctx context.Context, urlStr string) (opengraph.OpenGraph, 
 
 	f.cacheOK.Add(urlStr, og)
 	return og, nil
+}
+
+func extractImageNameFromURL(urlStr string) string {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(u.Path)
+}
+
+func extractHostFromURL(urlStr string) string {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func getImageResolution(r io.Reader, contentType string) (uint32, uint32, error) {
+	switch contentType {
+	case "image/jpeg":
+		img, err := jpeg.Decode(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("decode jpeg: %w", err)
+		}
+		return uint32(img.Bounds().Dx()), uint32(img.Bounds().Dy()), nil
+	case "image/png":
+		img, err := png.Decode(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("decode png: %w", err)
+		}
+		return uint32(img.Bounds().Dx()), uint32(img.Bounds().Dy()), nil
+	case "image/gif":
+		img, err := gif.Decode(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("decode gif: %w", err)
+		}
+		return uint32(img.Bounds().Dx()), uint32(img.Bounds().Dy()), nil
+	case "image/webp":
+		img, err := webp.Decode(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("decode webp: %w", err)
+		}
+		return uint32(img.Bounds().Dx()), uint32(img.Bounds().Dy()), nil
+	case "image/avif":
+		img, err := avif.Decode(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("decode avif: %w", err)
+		}
+		return uint32(img.Bounds().Dx()), uint32(img.Bounds().Dy()), nil
+	default:
+		return 0, 0, fmt.Errorf("unsupported image type: %s", contentType)
+	}
 }
