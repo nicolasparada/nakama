@@ -16,19 +16,29 @@ func (h *Handler) showHome(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 
+	pageArgs, err := parsePageArgs(q)
+	if err != nil {
+		h.renderErrorPage(w, r, fmt.Errorf("parse page args: %w", err))
+		return
+	}
+
 	var feed types.Page[types.Post]
 	if _, loggedIn := auth.UserFromContext(ctx); loggedIn && q.Get("feed") != "global" {
 		var err error
-		feed, err = h.Service.Feed(ctx, types.ListFeed{})
+		feed, err = h.Service.Feed(ctx, types.ListFeed{
+			PageArgs: pageArgs,
+		})
 		if err != nil {
-			h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch user feed: %w", err))
+			h.renderErrorPage(w, r, fmt.Errorf("fetch user feed: %w", err))
 			return
 		}
 	} else {
 		var err error
-		feed, err = h.Service.Posts(ctx, types.ListPosts{})
+		feed, err = h.Service.Posts(ctx, types.ListPosts{
+			PageArgs: pageArgs,
+		})
 		if err != nil {
-			h.renderWithError(w, r, "home.tmpl", nil, fmt.Errorf("fetch general feed: %w", err))
+			h.renderErrorPage(w, r, fmt.Errorf("fetch global posts: %w", err))
 			return
 		}
 	}
@@ -77,6 +87,12 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
+	pageArgs, err := parsePageArgs(r.URL.Query())
+	if err != nil {
+		h.renderErrorPage(w, r, fmt.Errorf("parse page args: %w", err))
+		return
+	}
+
 	ctx := r.Context()
 	postID := r.PathValue("postID")
 
@@ -98,7 +114,10 @@ func (h *Handler) showPost(w http.ResponseWriter, r *http.Request) {
 
 	g.Go(func() error {
 		var err error
-		comments, err = h.Service.Comments(gctx, types.ListComments{PostID: postID})
+		comments, err = h.Service.Comments(gctx, types.ListComments{
+			PostID:   postID,
+			PageArgs: pageArgs,
+		})
 		if err != nil {
 			return fmt.Errorf("fetch comments: %w", err)
 		}

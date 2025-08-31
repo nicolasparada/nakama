@@ -220,8 +220,8 @@ func (c *Cockroach) UpdateUserAvatar(ctx context.Context, in types.UpdateUserAva
 	return nil
 }
 
-func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (types.Page[types.User], error) {
-	var out types.Page[types.User]
+func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (types.SimplePage[types.User], error) {
+	var out types.SimplePage[types.User]
 
 	query := `
 		SELECT 
@@ -251,11 +251,14 @@ func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (type
 			followers_count DESC, 
 			username
 	`
-
-	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
+	args := pgx.StrictNamedArgs{
 		"query":             in.Query,
 		"logged_in_user_id": in.LoggedInUserID(),
-	})
+	}
+
+	query = addLimitAndOffset(query, args, in.PageArgs)
+
+	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
 		return out, fmt.Errorf("sql search users: %w", err)
 	}
@@ -264,6 +267,8 @@ func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (type
 	if err != nil {
 		return out, fmt.Errorf("sql collect searched users: %w", err)
 	}
+
+	applySimplePageInfo(&out, in.PageArgs)
 
 	return out, nil
 }

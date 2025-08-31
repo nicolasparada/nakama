@@ -115,7 +115,7 @@ func (svc *Service) UploadAvatar(ctx context.Context, r io.ReadSeeker) error {
 	return nil
 }
 
-func (svc *Service) SearchUsers(ctx context.Context, in types.SearchUsers) (types.Page[types.User], error) {
+func (svc *Service) SearchUsers(ctx context.Context, in types.SearchUsers) (types.SimplePage[types.User], error) {
 	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
 		in.SetLoggedInUserID(u.ID)
 	}

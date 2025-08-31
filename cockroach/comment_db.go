@@ -83,10 +83,14 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 		FROM comments
 		INNER JOIN users ON comments.user_id = users.id
 		WHERE comments.post_id = @post_id
-		ORDER BY comments.id DESC
 	`
+	args := pgx.StrictNamedArgs{"post_id": in.PostID}
 
-	rows, err := c.db.Query(ctx, query, pgx.NamedArgs{"post_id": in.PostID})
+	query = addPageFilter(query, "comments", args, in.PageArgs)
+	query = addPageOrder(query, "comments", in.PageArgs)
+	query = addLimit(query, args, in.PageArgs)
+
+	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
 		return out, fmt.Errorf("sql select comments: %w", err)
 	}
@@ -95,6 +99,8 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	if err != nil {
 		return out, fmt.Errorf("sql collect comments: %w", err)
 	}
+
+	applyPageInfo(&out, in.PageArgs, func(c types.Comment) string { return c.ID })
 
 	if err := c.enhanceCommentsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
 		return out, fmt.Errorf("enhance comments with user reactions: %w", err)

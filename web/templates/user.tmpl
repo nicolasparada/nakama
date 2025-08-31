@@ -42,6 +42,11 @@
             <p>No posts available</p>
         </div>
     {{else}}
+        {{template "load-prev.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Posts.PageInfo
+        )}}
+
         <div role="feed">
             {{range .Posts.Items}}
                 {{template "post-card.tmpl" (dict
@@ -50,6 +55,11 @@
                 )}}
             {{end}}
         </div>
+
+        {{template "load-more.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Posts.PageInfo
+        )}}
     {{end}}
 </main>
 {{end}}

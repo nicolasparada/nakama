@@ -58,6 +58,8 @@ type CreateFollowNotification struct {
 }
 
 type ListNotifications struct {
+	PageArgs PageArgs
+
 	userID string
 }
 

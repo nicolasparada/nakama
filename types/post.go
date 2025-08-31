@@ -87,6 +87,8 @@ type FanoutPost struct {
 }
 
 type ListFeed struct {
+	PageArgs PageArgs
+
 	userID string
 }
 
@@ -99,8 +101,8 @@ func (in ListFeed) UserID() string {
 }
 
 type ListPosts struct {
-	Username    *string
-	SearchQuery *string
+	Username *string
+	PageArgs PageArgs
 
 	loggedInUserID *string
 }
@@ -132,7 +134,8 @@ func (in *ListPosts) Validate() error {
 }
 
 type SearchPosts struct {
-	Query string
+	Query    string
+	PageArgs SimplePageArgs
 
 	loggedInUserID *string
 }
@@ -143,6 +146,18 @@ func (in *SearchPosts) SetLoggedInUserID(userID string) {
 
 func (in SearchPosts) LoggedInUserID() *string {
 	return in.loggedInUserID
+}
+
+func (in *SearchPosts) Validate() error {
+	v := validator.New()
+
+	in.Query = strings.TrimSpace(in.Query)
+
+	if in.Query == "" {
+		v.AddError("Query", "Query cannot be empty")
+	}
+
+	return v.AsError()
 }
 
 type RetrievePost struct {

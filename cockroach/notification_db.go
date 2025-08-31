@@ -12,7 +12,7 @@ import (
 func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotifications) (types.Page[types.Notification], error) {
 	var out types.Page[types.Notification]
 
-	const q = `
+	query := `
 		SELECT 
 			notifications.*,
 			COALESCE(
@@ -55,13 +55,21 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 		LEFT JOIN posts ON notifications.notifiable_kind = 'post' AND posts.id = notifications.notifiable_id
 		LEFT JOIN comments ON notifications.notifiable_kind = 'comment' AND comments.id = notifications.notifiable_id
 		WHERE notifications.user_id = @user_id
+	`
+	args := pgx.StrictNamedArgs{
+		"user_id": in.UserID(),
+	}
+
+	query = addPageFilter(query, "notifications", args, in.PageArgs)
+
+	query += `
 		GROUP BY notifications.id, posts.id, comments.id
-		ORDER BY notifications.id DESC
 	`
 
-	rows, err := c.db.Query(ctx, q, pgx.StrictNamedArgs{
-		"user_id": in.UserID(),
-	})
+	query = addPageOrder(query, "notifications", in.PageArgs)
+	query = addLimit(query, args, in.PageArgs)
+
+	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
 		return out, fmt.Errorf("sql select notifications: %w", err)
 	}
@@ -70,6 +78,8 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	if err != nil {
 		return out, fmt.Errorf("sql collect notifications: %w", err)
 	}
+
+	applyPageInfo(&out, in.PageArgs, func(n types.Notification) string { return n.ID })
 
 	return out, nil
 }

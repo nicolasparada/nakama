@@ -68,7 +68,8 @@ func (in *CreateComment) Validate() error {
 }
 
 type ListComments struct {
-	PostID string
+	PostID   string
+	PageArgs PageArgs
 
 	loggedInUserID *string
 }

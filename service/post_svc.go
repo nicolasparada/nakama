@@ -112,6 +112,27 @@ func (svc *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 	return out, nil
 }
 
+func (svc *Service) SearchPosts(ctx context.Context, in types.SearchPosts) (types.SimplePage[types.Post], error) {
+	var out types.SimplePage[types.Post]
+
+	if err := in.Validate(); err != nil {
+		return out, err
+	}
+
+	if u, loggedIn := auth.UserFromContext(ctx); loggedIn {
+		in.SetLoggedInUserID(u.ID)
+	}
+
+	out, err := svc.Cockroach.SearchPosts(ctx, in)
+	if err != nil {
+		return out, err
+	}
+
+	svc.setSimplePostsPreviews(ctx, out)
+
+	return out, nil
+}
+
 func (svc *Service) Post(ctx context.Context, in types.RetrievePost) (types.Post, error) {
 	var out types.Post
 
@@ -187,6 +208,13 @@ func newAttachment(image ffmpeg.Image) types.Attachment {
 }
 
 func (svc *Service) setPostsPreviews(ctx context.Context, posts types.Page[types.Post]) {
+	for i, post := range posts.Items {
+		results := svc.Preview.Fetch(ctx, extractURLs(post.Content))
+		posts.Items[i].SetPreviews(results)
+	}
+}
+
+func (svc *Service) setSimplePostsPreviews(ctx context.Context, posts types.SimplePage[types.Post]) {
 	for i, post := range posts.Items {
 		results := svc.Preview.Fetch(ctx, extractURLs(post.Content))
 		posts.Items[i].SetPreviews(results)

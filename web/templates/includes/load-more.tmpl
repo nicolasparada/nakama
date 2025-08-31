@@ -1,0 +1,7 @@
+{{if .PageInfo.HasNextPage}}
+    <div class="load-more">
+        <a href='{{url.WithQuery .URL (dict
+            "after" .PageInfo.EndCursor
+        )}}' role="button">Load more</a>
+    </div>
+{{end}}

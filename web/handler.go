@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
 	tmplrenderer "github.com/nicolasparada/go-tmpl-renderer"
+	"github.com/nicolasparada/nakama/errs"
+	"github.com/nicolasparada/nakama/ptr"
 	"github.com/nicolasparada/nakama/service"
+	"github.com/nicolasparada/nakama/types"
 )
 
 //go:embed templates/includes/*.tmpl templates/*.tmpl
@@ -83,4 +88,56 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) notFound(w http.ResponseWriter, r *http.Request) {
 	h.renderErrorPage(w, r, errPageNotFound)
+}
+
+func parsePageArgs(q url.Values) (types.PageArgs, error) {
+	var out types.PageArgs
+
+	if q.Has("after") {
+		out.After = ptr.From(q.Get("after"))
+	}
+
+	if q.Has("before") {
+		out.Before = ptr.From(q.Get("before"))
+	}
+
+	if q.Has("first") {
+		n, err := strconv.ParseUint(q.Get("first"), 10, 32)
+		if err != nil {
+			return out, errs.NewInvalidArgumentError("First", "Invalid first pagination value")
+		}
+		out.First = ptr.From(uint32(n))
+	}
+
+	if q.Has("last") {
+		n, err := strconv.ParseUint(q.Get("last"), 10, 32)
+		if err != nil {
+			return out, errs.NewInvalidArgumentError("Last", "Invalid last pagination value")
+		}
+		out.Last = ptr.From(uint32(n))
+	}
+
+	return out, nil
+}
+
+func parseSimplePageArgs(q url.Values) (types.SimplePageArgs, error) {
+	var out types.SimplePageArgs
+
+	if q.Has("page") {
+		n, err := strconv.ParseUint(q.Get("page"), 10, 32)
+		if err != nil {
+			return out, errs.NewInvalidArgumentError("Page", "Invalid page value")
+		}
+		out.Page = ptr.From(uint32(n))
+	}
+
+	if q.Has("perPage") {
+		n, err := strconv.ParseUint(q.Get("perPage"), 10, 32)
+		if err != nil {
+			return out, errs.NewInvalidArgumentError("PerPage", "Invalid perPage value")
+		}
+		out.PerPage = ptr.From(uint32(n))
+	}
+
+	return out, nil
 }

@@ -193,6 +193,11 @@ button, input[type=file]::file-selector-button, [role=button] {
     }
 }
 
+[role=button] {
+    display: inline-flex;
+    align-items: center;
+}
+
 a[role=button]:hover {
     text-decoration: none;
 }
@@ -633,6 +638,49 @@ form div:has(>label):not(:has(>input[type=checkbox])) {
         align-items: center;
         gap: var(--space-sm);
         width: 100%;
+    }
+
+}
+
+.r18-wrapper {
+    position: relative;
+
+    .r18-checkbox {
+        display: none;
+
+        &:checked ~ .r18-label {
+            display: none;
+        }
+    }
+
+    .r18-label {
+        position: absolute;
+        inset: 0;
+        background-color: oklch(0 0 0 / 0.6);
+        backdrop-filter: blur(var(--blur-strong)) saturate(.5);
+        border-radius: var(--radius-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-lg);
+        transition: background-color 0.2s ease;
+
+        svg {
+            width: var(--space-2xl);
+            height: var(--space-2xl);
+        }
+
+        span {
+            color: var(--text-muted);
+            font-size: var(--font-size-xs);
+        }
+
+        &:hover {
+            background-color: oklch(0 0 0 / 0.7);
+            cursor: zoom-in;
+        }
     }
 }
 
@@ -1137,4 +1185,16 @@ span.reaction-item {
             color: var(--text-muted);
         }
     }
+}
+
+.load-prev {
+    padding: var(--space-md);
+    text-align: center;
+    margin-top: var(--space-md);
+}
+
+.load-more {
+    padding: var(--space-md);
+    text-align: center;
+    margin-bottom: var(--space-2xl);
 }

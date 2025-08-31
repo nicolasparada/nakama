@@ -123,12 +123,16 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 		INNER JOIN posts ON feed.post_id = posts.id
 		INNER JOIN users ON posts.user_id = users.id
 		WHERE feed.user_id = @user_id
-		ORDER BY posts.id DESC
 	`
-
-	rows, err := c.db.Query(ctx, query, pgx.StrictNamedArgs{
+	args := pgx.StrictNamedArgs{
 		"user_id": in.UserID(),
-	})
+	}
+
+	query = addPageFilter(query, "posts", args, in.PageArgs)
+	query = addPageOrder(query, "posts", in.PageArgs)
+	query = addLimit(query, args, in.PageArgs)
+
+	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
 		return out, fmt.Errorf("sql select feed: %w", err)
 	}
@@ -137,6 +141,8 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 	if err != nil {
 		return out, fmt.Errorf("sql collect feed: %w", err)
 	}
+
+	applyPageInfo(&out, in.PageArgs, func(p types.Post) string { return p.ID })
 
 	userID := in.UserID()
 	if err := c.enhancePostsWithUserReactions(ctx, out.Items, &userID); err != nil {
@@ -148,22 +154,6 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 
 func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
-
-	args := pgx.NamedArgs{
-		"logged_in_user_id": in.LoggedInUserID(),
-	}
-
-	var filters []string
-
-	if in.Username != nil {
-		filters = append(filters, "users.username = @username")
-		args["username"] = *in.Username
-	}
-
-	if in.SearchQuery != nil {
-		filters = append(filters, "(posts.content ILIKE '%' || @search_query || '%' OR similarity(posts.content, @search_query) > 0.1)")
-		args["search_query"] = *in.SearchQuery
-	}
 
 	query := `
 		SELECT 
@@ -180,18 +170,19 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 			END AS relationship
 		FROM posts
 		INNER JOIN users ON posts.user_id = users.id
-	` + where(filters)
-
-	if in.SearchQuery != nil {
-		query += `
-			ORDER BY 
-			CASE WHEN posts.content ILIKE '%' || @search_query || '%' THEN 1 ELSE 2 END,
-			similarity(posts.content, @search_query) DESC,
-			posts.created_at DESC
-		`
-	} else {
-		query += " ORDER BY posts.id DESC"
+	`
+	args := pgx.StrictNamedArgs{
+		"logged_in_user_id": in.LoggedInUserID(),
 	}
+
+	if in.Username != nil {
+		query = addWhere(query, "users.username = @username")
+		args["username"] = *in.Username
+	}
+
+	query = addPageFilter(query, "posts", args, in.PageArgs)
+	query = addPageOrder(query, "posts", in.PageArgs)
+	query = addLimit(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
@@ -202,6 +193,59 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 	if err != nil {
 		return out, fmt.Errorf("sql collect posts: %w", err)
 	}
+
+	applyPageInfo(&out, in.PageArgs, func(p types.Post) string { return p.ID })
+
+	if err := c.enhancePostsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
+		return out, fmt.Errorf("enhance posts with user reactions: %w", err)
+	}
+
+	return out, nil
+}
+
+func (c *Cockroach) SearchPosts(ctx context.Context, in types.SearchPosts) (types.SimplePage[types.Post], error) {
+	var out types.SimplePage[types.Post]
+
+	query := `
+		SELECT 
+			` + postColumnsStr + `,
+			to_json(users) AS user,
+			CASE WHEN @logged_in_user_id::VARCHAR IS NOT NULL THEN
+				json_build_object(
+					'isMine', users.id = @logged_in_user_id
+				)
+			ELSE
+				json_build_object(
+					'isMine', false
+				)
+			END AS relationship
+		FROM posts
+		INNER JOIN users ON posts.user_id = users.id
+		WHERE
+			posts.content ILIKE '%' || @search_query || '%' OR similarity(posts.content, @search_query) > 0.1
+		ORDER BY 
+		CASE WHEN posts.content ILIKE '%' || @search_query || '%' THEN 1 ELSE 2 END,
+		similarity(posts.content, @search_query) DESC,
+		posts.id DESC
+	`
+	args := pgx.StrictNamedArgs{
+		"logged_in_user_id": in.LoggedInUserID(),
+		"search_query":      in.Query,
+	}
+
+	query = addLimitAndOffset(query, args, in.PageArgs)
+
+	rows, err := c.db.Query(ctx, query, args)
+	if err != nil {
+		return out, fmt.Errorf("sql select searched posts: %w", err)
+	}
+
+	out.Items, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[types.Post])
+	if err != nil {
+		return out, fmt.Errorf("sql collect searched posts: %w", err)
+	}
+
+	applySimplePageInfo(&out, in.PageArgs)
 
 	if err := c.enhancePostsWithUserReactions(ctx, out.Items, in.LoggedInUserID()); err != nil {
 		return out, fmt.Errorf("enhance posts with user reactions: %w", err)

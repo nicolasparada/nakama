@@ -11,6 +11,13 @@ import (
 func (h *Handler) showUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	username := r.PathValue("username")
+	q := r.URL.Query()
+
+	pageArgs, err := parsePageArgs(q)
+	if err != nil {
+		h.renderErrorPage(w, r, fmt.Errorf("parse page args: %w", err))
+		return
+	}
 
 	var (
 		user  types.User
@@ -34,6 +41,7 @@ func (h *Handler) showUser(w http.ResponseWriter, r *http.Request) {
 		var err error
 		posts, err = h.Service.Posts(gctx, types.ListPosts{
 			Username: &username,
+			PageArgs: pageArgs,
 		})
 		if err != nil {
 			return fmt.Errorf("fetch user posts: %w", err)

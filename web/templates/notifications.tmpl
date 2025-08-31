@@ -5,8 +5,15 @@
     <h1>Notifications</h1>
 
     {{if not .Notifications.Items}}
-        <p>No notifications available</p>
+        <div class="info">
+            <p>No notifications available</p>
+        </div>
     {{else}}
+        {{template "load-prev.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Notifications.PageInfo
+        )}}
+
         <div role="feed">
             {{range .Notifications.Items}}
                 <article class="card notification {{if .Read}} notification-read{{end}}" data-notification-kind="{{.Kind.String}}">
@@ -47,6 +54,11 @@
                 </article>
             {{end}}
         </div>
+
+        {{template "load-more.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Notifications.PageInfo
+        )}}
     {{end}}
 </main>
 {{end}}

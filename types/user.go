@@ -161,7 +161,9 @@ type UpdateUserAvatar struct {
 }
 
 type SearchUsers struct {
-	Query          string
+	Query    string
+	PageArgs SimplePageArgs
+
 	loggedInUserID *string
 }
 

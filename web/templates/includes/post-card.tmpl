@@ -13,6 +13,8 @@
         <p class="post-content">{{.Post.Content | linkify}}</p>
     {{end}}
 
+    {{- $post := .Post -}}
+
     {{if not .Post.Previews.IsEmpty}}
         <div class="post-previews">
             {{range .Post.Previews}}
@@ -28,8 +30,20 @@
 
                         {{if .Data.Images}}
                             <div class="post-preview-images">
-                                {{range .Data.Images}}
-                                    <img src="/proxy?url={{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
+                                {{range $index, $img := .Data.Images}}
+                                    {{$elID := printf "post-preview-%s-%s" $post.ID $index}}
+                                    {{if $post.IsR18}}
+                                        <div class="r18-wrapper">
+                                            <input type="checkbox" id="{{$elID}}" class="r18-checkbox" hidden>
+                                            <label for="{{$elID}}" class="r18-label">
+                                                <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M3 13C6.6 5 17.4 5 21 13" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M12 17C10.3431 17 9 15.6569 9 14C9 12.3431 10.3431 11 12 11C13.6569 11 15 12.3431 15 14C15 15.6569 13.6569 17 12 17Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+                                                <span>Reveal R-18 Content</span>
+                                            </label>
+                                    {{end}}
+                                    <img src="/proxy?url={{.URL}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}"{{if $post.IsR18}} class="r18-img"{{end}}>
+                                    {{if $post.IsR18}}
+                                        </div>
+                                    {{end}}
                                 {{end}}
                             </div>
                         {{end}}
@@ -41,8 +55,20 @@
 
     {{if .Post.Attachments}}
         <div class="post-attachments">
-            {{range .Post.Attachments}}
-                <img src='{{minio "post-attachments" .Path}}' alt="Attachment" width="{{.Width}}" height="{{.Height}}">
+            {{range $index, $attachment := .Post.Attachments}}
+                {{$elID := printf "post-attachment-%s-%s" $post.ID $index}}
+                {{if $post.IsR18}}
+                    <div class="r18-wrapper">
+                        <input type="checkbox" id="{{$elID}}" class="r18-checkbox" hidden>
+                        <label for="{{$elID}}" class="r18-label">
+                            <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000" style="--darkreader-inline-color: var(--darkreader-text-000000, #e8e6e3);" data-darkreader-inline-color=""><path d="M3 13C6.6 5 17.4 5 21 13" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path><path d="M12 17C10.3431 17 9 15.6569 9 14C9 12.3431 10.3431 11 12 11C13.6569 11 15 12.3431 15 14C15 15.6569 13.6569 17 12 17Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="--darkreader-inline-stroke: #000000;" data-darkreader-inline-stroke=""></path></svg>
+                            <span>Reveal R-18 Content</span>
+                        </label>
+                {{end}}
+                <img src='{{minio "post-attachments" $attachment.Path}}' alt="Attachment" width="{{$attachment.Width}}" height="{{$attachment.Height}}"{{if $post.IsR18}} class="r18-img"{{end}}>
+                {{if $post.IsR18}}
+                    </div>
+                {{end}}
             {{end}}
         </div>
     {{end}}

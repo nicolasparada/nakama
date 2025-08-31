@@ -1,0 +1,7 @@
+{{if .PageInfo.HasPrevPage}}
+    <div class="load-prev">
+        <a href='{{url.WithQuery .URL (dict
+            "before" .PageInfo.StartCursor
+        )}}' role="button">Load previous</a>
+    </div>
+{{end}}

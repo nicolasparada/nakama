@@ -25,6 +25,11 @@
     {{if not .Comments.Items}}
         <p>No comments yet</p>
     {{else}}
+        {{template "load-prev.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Comments.PageInfo
+        )}}
+
         <div role="feed">
             {{range .Comments.Items}}
                 {{template "comment-card.tmpl" (dict
@@ -33,6 +38,11 @@
                 )}}
             {{end}}
         </div>
+
+        {{template "load-more.tmpl" (dict
+            "URL" .Request.URL
+            "PageInfo" .Comments.PageInfo
+        )}}
     {{end}}
 </main>
 {{end}}

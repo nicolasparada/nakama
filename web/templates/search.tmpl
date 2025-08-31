@@ -83,6 +83,14 @@
             <p>No users found for {{printf "%q" .Query}}</p>
         </div>
     {{else}}
+        {{if .Results.PageInfo.HasPrevPage}}
+            <div class="load-prev">
+                <a href='{{url.WithQuery .Request.URL (dict
+                    "page" .Results.PageInfo.PrevPage
+                )}}' role="button">Load previous</a>
+            </div>
+        {{end}}
+
         <div class="search-results" role="feed">
             {{range .Results.Items}}
                 <article class="card search-result">
@@ -101,6 +109,14 @@
                 </article>
             {{end}}
         </div>
+
+        {{if .Results.PageInfo.HasNextPage}}
+            <div class="load-more">
+                <a href='{{url.WithQuery .Request.URL (dict
+                    "page" .Results.PageInfo.NextPage
+                )}}' role="button">Load more</a>
+            </div>
+        {{end}}
     {{end}}
 {{end}}
 
@@ -115,6 +131,14 @@
             <p>No posts found for {{printf "%q" .Query}}</p>
         </div>
     {{else}}
+        {{if .Results.PageInfo.HasPrevPage}}
+            <div class="load-prev">
+                <a href='{{url.WithQuery .Request.URL (dict
+                    "page" .Results.PageInfo.PrevPage
+                )}}' role="button">Load previous</a>
+            </div>
+        {{end}}
+
         <div class="search-results" role="feed">
             {{range .Results.Items}}
                 {{template "post-card.tmpl" (dict
@@ -123,6 +147,14 @@
                 )}}
             {{end}}
         </div>
+
+        {{if .Results.PageInfo.HasNextPage}}
+            <div class="load-more">
+                <a href='{{url.WithQuery .Request.URL (dict
+                    "page" .Results.PageInfo.NextPage
+                )}}' role="button">Load more</a>
+            </div>
+        {{end}}
     {{end}}
 {{end}}
 

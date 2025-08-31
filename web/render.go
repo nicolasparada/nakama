@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 	"syscall"
@@ -32,6 +34,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, da
 	data["LoggedInUser"] = loggedInUser
 	data["LoggedIn"] = loggedIn
 	data["MinioURL"] = h.MinioURL
+	data["Request"] = r
 
 	if h.sess.Exists(ctx, "error") {
 		errorVal := h.sess.Pop(ctx, "error")
@@ -158,6 +161,9 @@ var funcMap = template.FuncMap{
 	"strings": func() stringsModule {
 		return stringsModule{}
 	},
+	"url": func() urlModule {
+		return urlModule{}
+	},
 	"plus":    plus,
 	"linkify": linkify,
 }
@@ -166,6 +172,59 @@ type stringsModule struct{}
 
 func (s stringsModule) Title(str string) string {
 	return cases.Title(language.English).String(str)
+}
+
+type urlModule struct{}
+
+func (m urlModule) WithQuery(baseURL *url.URL, dict map[string]any) template.URL {
+	u := cloneURL(baseURL)
+	q := u.Query()
+	for key, value := range dict {
+		q.Set(key, stringify(value))
+	}
+	if _, ok := dict["before"]; ok && q.Has("after") {
+		q.Del("after")
+	}
+	if _, ok := dict["after"]; ok && q.Has("before") {
+		q.Del("before")
+	}
+	u.RawQuery = q.Encode()
+	return template.URL(u.String())
+}
+
+func stringify(x any) string {
+	val := reflect.ValueOf(x)
+	if val.Kind() == reflect.Pointer {
+		if val.IsNil() {
+			return "null"
+		}
+
+		x = val.Elem().Interface()
+	}
+
+	switch v := x.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+func cloneURL(u *url.URL) *url.URL {
+	if u == nil {
+		return nil
+	}
+	u2 := new(url.URL)
+	*u2 = *u
+	if u.User != nil {
+		u2.User = new(url.Userinfo)
+		*u2.User = *u.User
+	}
+	return u2
 }
 
 func plus(args ...any) (any, error) {
