@@ -1,13 +1,13 @@
 module github.com/nakamauwu/nakama
 
-go 1.24.6
+go 1.25.3
 
 tool github.com/matryer/moq
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
-	github.com/cockroachdb/cockroach-go/v2 v2.4.1
-	github.com/coreos/go-oidc/v3 v3.15.0
+	github.com/cockroachdb/cockroach-go/v2 v2.4.2
+	github.com/coreos/go-oidc/v3 v3.16.0
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-kit/log v0.2.1
 	github.com/go-mail/mail v2.3.1+incompatible
@@ -21,11 +21,11 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/matryer/way v0.0.0-20180416093233-9632d0c407b0
 	github.com/minio/minio-go/v7 v7.0.95
-	github.com/nats-io/nats.go v1.44.0
+	github.com/nats-io/nats.go v1.47.0
 	github.com/ory/dockertest/v3 v3.12.0
-	github.com/prometheus/client_golang v1.23.0
-	github.com/resend/resend-go/v2 v2.22.0
-	golang.org/x/oauth2 v0.30.0
+	github.com/prometheus/client_golang v1.23.2
+	github.com/resend/resend-go/v2 v2.28.0
+	golang.org/x/oauth2 v0.32.0
 	golang.org/x/sync v0.16.0
 )
 
@@ -45,7 +45,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/eknkc/basex v1.0.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.1.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
@@ -56,7 +56,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/matryer/moq v0.5.3 // indirect
+	github.com/matryer/moq v0.6.0 // indirect
 	github.com/minio/crc64nvme v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -67,14 +67,14 @@ require (
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
-	github.com/onsi/gomega v1.38.0 // indirect
+	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/opencontainers/runc v1.2.3 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.65.0 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
@@ -82,14 +82,15 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
-	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.26.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	golang.org/x/mod v0.27.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/tools v0.36.0 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mail.v2 v2.3.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
