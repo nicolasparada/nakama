@@ -263,7 +263,10 @@ function markNotificationAsRead(notificationID) {
 const now = new Date()
 const isHalloween = now.getMonth() + 1 === 10 && now.getDate() === 31
 if (isHalloween) {
-    document.documentElement.classList.add("halloween")
+    import("./halloween.js").then(({ initHalloween }) => {
+        initHalloween()
+    })
+    // document.documentElement.classList.add("halloween")
 }
 
 const isChristmas = now.getMonth() + 1 === 12
