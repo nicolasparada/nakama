@@ -7,21 +7,21 @@
     },
     "module": "main.js",
     "devDependencies": {
-        "vite": "^6.3.0"
+        "vite": "^7.1.0"
     },
     "dependencies": {
         "@nicolasparada/store": "~0.4.0",
         "@textcomplete/core": "~0.1.0",
         "@textcomplete/textarea": "~0.1.0",
         "dialog-polyfill": "~0.5.0",
-        "emoji-picker-element": "^1.26.0",
+        "emoji-picker-element": "^1.27.0",
         "fetch-jsonp": "^1.3.0",
-        "haunted": "^5.0.0",
+        "haunted": "^6.1.0",
         "linkify-plugin-hashtag": "^4.3.0",
         "linkify-plugin-mention": "^4.3.0",
         "linkify-string": "^4.3.0",
         "linkifyjs": "^4.3.0",
-        "lit": "^2.8.0",
+        "lit": "^3.3.0",
         "lit-translate": "^2.0.0",
         "medium-zoom": "^1.1.0"
     }
