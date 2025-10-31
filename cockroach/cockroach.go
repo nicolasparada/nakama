@@ -56,7 +56,7 @@ func addPageOrder(query, table string, pageArgs types.PageArgs) string {
 	return query
 }
 
-func addLimit(query string, queryArgs pgx.StrictNamedArgs, pageArgs types.PageArgs) string {
+func addPageLimit(query string, queryArgs pgx.StrictNamedArgs, pageArgs types.PageArgs) string {
 	if pageArgs.IsBackwards() {
 		query += " LIMIT COALESCE(@last, 10) + 1"
 		queryArgs["last"] = pageArgs.Last
@@ -67,7 +67,7 @@ func addLimit(query string, queryArgs pgx.StrictNamedArgs, pageArgs types.PageAr
 	return query
 }
 
-func addLimitAndOffset(query string, queryArgs pgx.StrictNamedArgs, pageArgs types.SimplePageArgs) string {
+func addSimplePageLimitAndOffset(query string, queryArgs pgx.StrictNamedArgs, pageArgs types.SimplePageArgs) string {
 	if pageArgs.PerPage == nil {
 		pageArgs.PerPage = ptr.From(uint32(10))
 	}

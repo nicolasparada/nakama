@@ -382,3 +382,31 @@ CREATE TABLE IF NOT EXISTS post_subscriptions (
 
 CREATE INDEX IF NOT EXISTS post_subscriptions_user_id_idx ON post_subscriptions (user_id);
 CREATE INDEX IF NOT EXISTS post_subscriptions_post_id_idx ON post_subscriptions (post_id);
+
+CREATE TABLE IF NOT EXISTS chats (
+    id VARCHAR NOT NULL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id VARCHAR NOT NULL PRIMARY KEY,
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    chat_id VARCHAR NOT NULL REFERENCES chats ON DELETE CASCADE ON UPDATE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW()
+);
+
+CREATE TABLE IF NOT EXISTS participants (
+    user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE,
+    chat_id VARCHAR NOT NULL REFERENCES chats ON DELETE CASCADE ON UPDATE CASCADE,
+    other_user_id VARCHAR NOT NULL REFERENCES users ON DELETE CASCADE ON UPDATE CASCADE, -- for naming the chat.
+    status VARCHAR NOT NULL, -- active, pending, blocked
+    has_unread BOOLEAN NOT NULL DEFAULT FALSE,
+    last_read_at TIMESTAMPTZ,
+    last_activity_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+    PRIMARY KEY (user_id, chat_id)
+);
+

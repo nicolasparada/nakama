@@ -29,6 +29,11 @@
                     {{end}}
                 </button>
             </form>
+
+            <form method="get" action="/chats/redirect">
+                <input type="hidden" name="user_id" value="{{.User.ID}}">
+                <button>Message</button>
+            </form>
         {{end}}
         
         {{if .User.Relationship.IsMe}}

@@ -130,7 +130,7 @@ func (c *Cockroach) Feed(ctx context.Context, in types.ListFeed) (types.Page[typ
 
 	query = addPageFilter(query, "posts", args, in.PageArgs)
 	query = addPageOrder(query, "posts", in.PageArgs)
-	query = addLimit(query, args, in.PageArgs)
+	query = addPageLimit(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
@@ -182,7 +182,7 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 
 	query = addPageFilter(query, "posts", args, in.PageArgs)
 	query = addPageOrder(query, "posts", in.PageArgs)
-	query = addLimit(query, args, in.PageArgs)
+	query = addPageLimit(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
@@ -233,7 +233,7 @@ func (c *Cockroach) SearchPosts(ctx context.Context, in types.SearchPosts) (type
 		"search_query":      in.Query,
 	}
 
-	query = addLimitAndOffset(query, args, in.PageArgs)
+	query = addSimplePageLimitAndOffset(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {

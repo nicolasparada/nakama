@@ -256,7 +256,7 @@ func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (type
 		"logged_in_user_id": in.LoggedInUserID(),
 	}
 
-	query = addLimitAndOffset(query, args, in.PageArgs)
+	query = addSimplePageLimitAndOffset(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
@@ -271,4 +271,24 @@ func (c *Cockroach) SearchUsers(ctx context.Context, in types.SearchUsers) (type
 	applySimplePageInfo(&out, in.PageArgs)
 
 	return out, nil
+}
+
+func (c *Cockroach) FollowingEachOther(ctx context.Context, followerID, followeeID string) (bool, error) {
+	var exists bool
+	const q = `
+		SELECT EXISTS (
+			SELECT 1 FROM follows f1
+			INNER JOIN follows f2 ON f1.follower_id = f2.followee_id AND f1.followee_id = f2.follower_id
+			WHERE f1.follower_id = @follower_id AND f1.followee_id = @followee_id
+		)
+	`
+	err := c.db.QueryRow(ctx, q, pgx.StrictNamedArgs{
+		"follower_id": followerID,
+		"followee_id": followeeID,
+	}).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("sql check mutual follow: %w", err)
+	}
+
+	return exists, nil
 }

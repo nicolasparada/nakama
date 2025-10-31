@@ -88,7 +88,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 
 	query = addPageFilter(query, "comments", args, in.PageArgs)
 	query = addPageOrder(query, "comments", in.PageArgs)
-	query = addLimit(query, args, in.PageArgs)
+	query = addPageLimit(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {

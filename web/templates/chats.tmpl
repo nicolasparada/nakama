@@ -1,0 +1,56 @@
+{{template "layout.tmpl" .}}
+
+{{define "content"}}
+<main class="container">
+    <h1>Messages</h1>
+
+    {{if not .Chats.Items}}
+        <div class="empty-state">
+            <p>No conversations yet. Start chatting with someone to see your messages here.</p>
+        </div>
+    {{else}}
+        <section class="chat-list" role="list" aria-label="Chat conversations">
+            {{range .Chats.Items}}
+                <article class="chat-list-item{{if .Participation.HasUnread}} chat-list-item-unread{{end}}" role="listitem">
+                    <a href="/chats/{{.ID}}" class="chat-list-link" aria-describedby="chat-{{.ID}}-meta">
+                        <div class="chat-list-avatar">
+                            {{template "avatar.tmpl" .Participation.OtherUser}}
+                            {{if .Participation.HasUnread}}
+                                <span class="chat-unread-indicator" aria-label="Unread messages"></span>
+                            {{end}}
+                        </div>
+                        
+                        <div class="chat-list-content">
+                            <div class="chat-list-header">
+                                <h2 class="chat-list-name">{{.Participation.OtherUser.Username}}</h2>
+                                {{$time := .Participation.UpdatedAt}}
+                                {{if .Participation.LastActivityAt}}
+                                    {{$time = .Participation.LastActivityAt}}
+                                {{end}}
+                                <time class="chat-list-time" datetime='{{$time.Format "2006-01-02T15:04:05Z07:00"}}' id="chat-{{.ID}}-meta">
+                                    {{$time.Format "Jan 2, 15:04"}}
+                                </time>
+                            </div>
+                            
+                            {{if or (eq .Participation.Status "pending_sender") (eq .Participation.Status "pending_receiver")}}
+                                <div class="chat-list-status">
+                                    <span class="chat-status-pending" aria-label="Pending conversation request">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                        {{if eq .Participation.Status "pending_sender"}}
+                                            Waiting for reply
+                                        {{else if eq .Participation.Status "pending_receiver"}}
+                                            Conversation request
+                                        {{end}}
+                                    </span>
+                                </div>
+                            {{end}}
+                        </div>
+                    </a>
+                </article>
+            {{end}}
+        </section>
+    {{end}}
+</main>
+{{end}}

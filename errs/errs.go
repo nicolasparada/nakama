@@ -1,6 +1,9 @@
 package errs
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	Unauthenticated = NewUnauthenticatedError("unauthenticated")
@@ -69,4 +72,29 @@ func (e *Error) Error() string {
 	}
 
 	return fmt.Sprintf("%s: %s", e.Kind, e.Message)
+}
+
+func IsErrorKind(err error, kind Kind) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Kind == kind
+}
+
+func IsInvalidArgument(err error) bool {
+	return IsErrorKind(err, KindInvalidArgument)
+}
+
+func IsNotFound(err error) bool {
+	return IsErrorKind(err, KindNotFound)
+}
+
+func IsAlreadyExists(err error) bool {
+	return IsErrorKind(err, KindAlreadyExists)
+}
+
+func IsPermissionDenied(err error) bool {
+	return IsErrorKind(err, KindPermissionDenied)
+}
+
+func IsUnauthenticated(err error) bool {
+	return IsErrorKind(err, KindUnauthenticated)
 }

@@ -67,7 +67,7 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	`
 
 	query = addPageOrder(query, "notifications", in.PageArgs)
-	query = addLimit(query, args, in.PageArgs)
+	query = addPageLimit(query, args, in.PageArgs)
 
 	rows, err := c.db.Query(ctx, query, args)
 	if err != nil {
