@@ -1,3 +1,8 @@
+@view-transition {
+    /* enables default cross-fade animation */
+    navigation: auto;
+}
+
 :root {
     /* Surface colors - layered backgrounds (dark theme) */
     --surface-0: oklch(0.15 0.005 270);     /* Base background - darkest */

@@ -67,7 +67,14 @@ func (c *Cockroach) CreateChat(ctx context.Context, in types.CreateChat) (types.
 			Content: in.Content,
 		}
 		createMessage.SetLoggedInUserID(in.LoggedInUserID())
-		if _, err := c.CreateMessage(ctx, createMessage); err != nil {
+
+		_, err = c.createMessage(ctx, createMessage)
+		if err != nil {
+			return err
+		}
+
+		// Mark as unread for the recipient
+		if err := c.markChatAsUnreadForRecipient(ctx, createMessage.ChatID, in.LoggedInUserID()); err != nil {
 			return err
 		}
 
@@ -146,7 +153,7 @@ func (c *Cockroach) CreateMessage(ctx context.Context, in types.CreateMessage) (
 		// If receiver is replying for the first time, activate the conversation
 		if senderStatus == types.ParticipantStatusPendingReceiver {
 			if err := c.activateParticipants(ctx, in.ChatID); err != nil {
-				return fmt.Errorf("activate conversation: %w", err)
+				return err
 			}
 		}
 
@@ -157,7 +164,7 @@ func (c *Cockroach) CreateMessage(ctx context.Context, in types.CreateMessage) (
 
 		// Mark as unread for the recipient
 		if err := c.markChatAsUnreadForRecipient(ctx, in.ChatID, in.LoggedInUserID()); err != nil {
-			return fmt.Errorf("mark as unread for recipient: %w", err)
+			return err
 		}
 
 		out = msg
