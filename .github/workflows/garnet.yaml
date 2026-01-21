@@ -1,0 +1,15 @@
+name: Garnet Security Scan
+
+on:
+    pull_request:
+        branches: [main]
+
+jobs:
+    monitor:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - name: Run Garnet Scanner
+              uses: garnet-org/action@v1
+              with:
+                  api_token: ${{ secrets.GARNET_API_TOKEN }}
