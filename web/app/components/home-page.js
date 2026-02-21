@@ -23,33 +23,64 @@ function HomePage() {
     const [mode, setMode] = useState(() => {
         return localStorage.getItem("home-page-mode") === "timeline" ? "timeline" : "posts"
     })
-    const [posts, setPosts] = useState([])
-    const [endCursor, setEndCursor] = useState(null)
+    const [posts, setPosts] = useState(/** @type {import("../types.js").Post[]|import("../types.js").TimelineItem[]} */([]))
+    const [endCursor, setEndCursor] = useState(/** @type {string|null} */(null))
     const [fetching, setFetching] = useState(posts.length === 0)
-    const [err, setErr] = useState(null)
+    const [err, setErr] = useState(/** @type {Error|null} */(null))
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMore, setNoMore] = useState(false)
     const [endReached, setEndReached] = useState(false)
-    const [queue, setQueue] = useState([])
-    const [toast, setToast] = useState(null)
+    const [queue, setQueue] = useState(/** @type {import("../types.js").Post[]|import("../types.js").TimelineItem[]} */([]))
+    const [toast, setToast] = useState(/** @type {import("./toast-item.js").Toast|null} */(null))
+    const postsRef = useRef(posts)
+    const queueRef = useRef(queue)
+
+    /**
+     * @param {import("../types.js").Post[]|import("../types.js").TimelineItem[]} items 
+     * @param {import("../types.js").TimelineItem} timelineItem 
+     * @returns {boolean}
+     */
+    const hasTimelineItem = (items, timelineItem) => {
+        return items.some(i =>
+            i.id === timelineItem.id
+            || (("timelineItemID" in i) && i.timelineItemID === timelineItem.timelineItemID)
+        )
+    }
+
+    /**
+     * @param {import("../types.js").Post[]} items 
+     * @param {import("../types.js").Post} post 
+     * @returns {boolean}
+     */
+    const hasPost = (items, post) => {
+        return items.some(i => i.id === post.id)
+    }
 
     const onTimelineItemCreated = ev => {
-        const payload = ev.detail
+        const payload = /** @type {import("../types.js").TimelineItem} */ (ev.detail)
         setPosts(pp => [payload, ...queue, ...pp])
         setQueue([])
     }
 
-    const onNewTimelineItemArrive = ti => {
-        setQueue(pp => [ti, ...pp])
+    const onNewTimelineItemArrive = (/** @type {import("../types.js").TimelineItem} */ timelineItem) => {
+        if (hasTimelineItem(postsRef.current, timelineItem) || hasTimelineItem(queueRef.current, timelineItem)) {
+            return
+        }
+
+        setQueue(pp => [timelineItem, ...pp])
     }
 
-    const onNewPostArrive = p => {
-        setQueue(pp => [p, ...pp])
+    const onNewPostArrive = (/** @type {import("../types.js").Post} */ post) => {
+        if (hasPost(postsRef.current, post) || hasPost(queueRef.current, post)) {
+            return
+        }
+        
+        setQueue(pp => [post, ...pp])
     }
 
     const onRemovedFromTimeline = ev => {
-        const payload = ev.detail
-        setPosts(pp => pp.filter(p => p.timelineItemID !== payload.timelineItemID))
+        const payload = /** @type {import("../types.js").TimelineItem} */ (ev.detail)
+        setPosts(pp => pp.filter(p => !("timelineItemID" in p) || p.timelineItemID !== payload.timelineItemID))
     }
 
     const onPostDeleted = ev => {
@@ -97,6 +128,14 @@ function HomePage() {
     useEffect(() => {
         localStorage.setItem("home-page-mode", mode)
     }, [mode])
+
+    useEffect(() => {
+        postsRef.current = posts
+    }, [posts])
+
+    useEffect(() => {
+        queueRef.current = queue
+    }, [queue])
 
     useEffect(() => {
         setPosts([])
@@ -148,10 +187,10 @@ function HomePage() {
                 </button>
             ` : null}
             <div role="tablist">
-                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${String(mode === "posts")} @click=${onPostsModeClick}>
+                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${mode === "posts" ? "true" : "false"} @click=${onPostsModeClick}>
                     ${translate("homePage.tabs.posts")}
                 </button>
-                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${String(mode === "timeline")} @click=${onTimelineModeClick}>
+                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${mode === "timeline" ? "true" : "false"} @click=${onTimelineModeClick}>
                     ${translate("homePage.tabs.timeline")}
                 </button>
             </div>

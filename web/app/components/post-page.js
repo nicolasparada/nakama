@@ -1,6 +1,6 @@
 import { Textcomplete } from "@textcomplete/core"
 import { TextareaEditor } from "@textcomplete/textarea"
-import { component, useEffect, useState } from "haunted"
+import { component, useEffect, useRef, useState } from "haunted"
 import { html } from "lit"
 import { createRef, ref } from "lit/directives/ref.js"
 import { repeat } from "lit/directives/repeat.js"
@@ -18,19 +18,25 @@ export default function ({ params }) {
 
 function PostPage({ postID }) {
     const [auth] = useStore(authStore)
-    const [post, setPost] = useState(null)
-    const [comments, setComments] = useState([])
-    const [commentsEndCursor, setCommentsEndCursor] = useState(null)
+    const [post, setPost] = useState(/** @type {import("../types.js").Post|null} */(null))
+    const [comments, setComments] = useState(/** @type {import("../types.js").Comment[]} */([]))
+    const [commentsEndCursor, setCommentsEndCursor] = useState(/** @type {string|null} */(null))
     const [fetching, setFetching] = useState(post === null)
-    const [postErr, setPostErr] = useState(null)
-    const [commentsErr, setCommentsErr] = useState(null)
+    const [postErr, setPostErr] = useState(/** @type {Error|null} */(null))
+    const [commentsErr, setCommentsErr] = useState(/** @type {Error|null} */(null))
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMoreComments, setNoMoreComments] = useState(false)
-    const [queue, setQueue] = useState([])
-    const [toast, setToast] = useState(null)
+    const [queue, setQueue] = useState(/** @type {import("../types.js").Comment[]} */([]))
+    const [toast, setToast] = useState(/** @type {import("./toast-item.js").Toast|null} */(null))
+    const commentsRef = useRef(comments)
+    const queueRef = useRef(queue)
+
+    const hasComment = (items, comment) => {
+        return items.some(i => i.id === comment.id)
+    }
 
     const onCommentCreated = ev => {
-        const payload = ev.detail
+        const payload = /** @type {import("../types.js").Comment} */ (ev.detail)
         setPost(p => ({
             ...p,
             commentsCount: p.commentsCount + 1,
@@ -39,7 +45,11 @@ function PostPage({ postID }) {
         setQueue([])
     }
 
-    const onNewCommentArrive = c => {
+    const onNewCommentArrive = (/** @type {import("../types.js").Comment} */ c) => {
+        if (hasComment(commentsRef.current, c) || hasComment(queueRef.current, c)) {
+            return
+        }
+
         setQueue(cc => [c, ...cc])
         setPost(p => ({
             ...p,
@@ -53,7 +63,7 @@ function PostPage({ postID }) {
     }
 
     const onCommentDeleted = ev => {
-        const payload = ev.detail
+        const payload = /** @type {import("../types.js").Comment} */ (ev.detail)
         setComments(cc => cc.filter(c => c.id !== payload.id))
         setPost(p => ({
             ...p,
@@ -87,6 +97,14 @@ function PostPage({ postID }) {
             setLoadingMore(false)
         })
     }
+
+    useEffect(() => {
+        commentsRef.current = comments
+    }, [comments])
+
+    useEffect(() => {
+        queueRef.current = queue
+    }, [queue])
 
     useEffect(() => {
         setFetching(true)

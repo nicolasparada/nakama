@@ -1,8 +1,15 @@
 import { component, useEffect, useState } from "haunted"
 import { html } from "lit"
 
+/**
+ * @typedef Toast
+ * @property {string} type
+ * @property {string} content
+ * @property {number=} timeout
+ */
+
 function ToastItem({ toast: initialToast }) {
-    const [toast, setToast] = useState(Object.assign({ type: "", content: "", timeout: 5000 }, initialToast))
+    const [toast, setToast] = useState(/** @type {Toast} */(Object.assign({ type: "", content: "", timeout: 5000 }, initialToast)))
     const [show, setShow] = useState(true)
 
     const onClick = () => {
