@@ -4,18 +4,18 @@ ARG VAPID_PUBLIC_KEY
 ENV VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
 ENV VITE_VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
 
-RUN apk add --update --no-cache git python3 make g++ nodejs npm ca-certificates
+RUN apk add --update --no-cache git nodejs npm ca-certificates
 RUN update-ca-certificates
 
-WORKDIR /go/src/github.com/nakamauwu/nakama
+WORKDIR /go/src/github.com/nicolasparada/nakama
 
 COPY . .
 
-WORKDIR /go/src/github.com/nakamauwu/nakama/web/app
+WORKDIR /go/src/github.com/nicolasparada/nakama/web/app
 RUN npm i
 RUN npm run build
 
-WORKDIR /go/src/github.com/nakamauwu/nakama
+WORKDIR /go/src/github.com/nicolasparada/nakama
 
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /go/bin/nakama ./cmd/nakama
