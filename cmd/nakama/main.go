@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-kit/log"
 	"github.com/gorilla/securecookie"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/nats-io/nats.go"
@@ -27,13 +27,13 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/endpoints"
 
-	"github.com/nakamauwu/nakama"
+	cockroachpkg "github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
 	natspubsub "github.com/nakamauwu/nakama/pubsub/nats"
+	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/storage"
 	fsstorage "github.com/nakamauwu/nakama/storage/fs"
 	s3storage "github.com/nakamauwu/nakama/storage/s3"
-	"github.com/nakamauwu/nakama/transport"
 	httptransport "github.com/nakamauwu/nakama/transport/http"
 )
 
@@ -127,21 +127,22 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		port = i
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	db, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("could not open db connection: %w", err)
 	}
 
 	defer db.Close()
 
-	if err = db.PingContext(ctx); err != nil {
+	if err = db.Ping(ctx); err != nil {
 		return fmt.Errorf("could not ping to db: %w", err)
 	}
 
+	cockroach := cockroachpkg.New(db)
+
 	if execSchema {
-		_, err := db.ExecContext(ctx, nakama.Schema)
-		if err != nil {
-			return fmt.Errorf("could not run schema: %w", err)
+		if err := cockroach.Migrate(ctx); err != nil {
+			return err
 		}
 	}
 
@@ -184,7 +185,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 			Region:     s3Region,
 			AccessKey:  s3AccessKey,
 			SecretKey:  s3SecretKey,
-			BucketList: []string{nakama.AvatarsBucket, nakama.CoversBucket, nakama.MediaBucket},
+			BucketList: []string{service.AvatarsBucket, service.CoversBucket, service.MediaBucket},
 		}
 		if err := s3.Setup(ctx); err != nil {
 			return fmt.Errorf("could not setup S3 storage: %w", err)
@@ -201,9 +202,10 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		store = &fsstorage.Store{Root: filepath.Join(wd, "web", "static", "img")}
 	}
 
-	var svc transport.Service = &nakama.Service{
+	svc := &service.Service{
 		Logger:           logger,
 		DB:               db,
+		Cockroach:        cockroach,
 		Sender:           sender,
 		Origin:           origin,
 		TokenKey:         tokenKey,
@@ -218,11 +220,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		VAPIDPublicKey:   vapidPublicKey,
 	}
 
-	var promHandler http.Handler
-	{
-		promHandler = promhttp.Handler()
-		svc = &transport.ServiceWithInstrumentation{Next: svc}
-	}
+	promHandler := promhttp.Handler()
 
 	var oauthProviders []httptransport.OauthProvider
 	if githubClientID != "" && githubClientSecret != "" {

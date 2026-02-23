@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"bytes"
@@ -9,40 +9,23 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
+	"github.com/nakamauwu/nakama/cockroach"
+	"github.com/nakamauwu/nakama/cursor"
+	"github.com/nakamauwu/nakama/textutil"
+	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
 // ErrInvalidNotificationID denotes an invalid notification id; that is not uuid.
-var ErrInvalidNotificationID = InvalidArgumentError("invalid notification ID")
-
-// Notification model.
-type Notification struct {
-	ID       string    `json:"id"`
-	UserID   string    `json:"-"`
-	Actors   []string  `json:"actors"`
-	Type     string    `json:"type"`
-	PostID   *string   `json:"postID,omitempty"`
-	Read     bool      `json:"read"`
-	IssuedAt time.Time `json:"issuedAt"`
-}
-
-type Notifications []Notification
-
-func (pp Notifications) EndCursor() *string {
-	if len(pp) == 0 {
-		return nil
-	}
-
-	last := pp[len(pp)-1]
-	return ptrString(encodeCursor(last.ID, last.IssuedAt))
-}
+var ErrInvalidNotificationID = errs.InvalidArgumentError("invalid notification ID")
 
 // Notifications from the authenticated user in descending order with backward pagination.
-func (s *Service) Notifications(ctx context.Context, last uint64, before *string) (Notifications, error) {
+func (s *Service) Notifications(ctx context.Context, last uint64, before *string) (types.Notifications, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, ErrUnauthenticated
+		return nil, errs.Unauthenticated
 	}
 
 	var beforeNotificationID string
@@ -50,8 +33,8 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 
 	if before != nil {
 		var err error
-		beforeNotificationID, beforeIssuedAt, err = decodeCursor(*before)
-		if err != nil || !reUUID.MatchString(beforeNotificationID) {
+		beforeNotificationID, beforeIssuedAt, err = cursor.Decode(*before)
+		if err != nil || !types.ValidUUIDv4(beforeNotificationID) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -74,7 +57,7 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 			)
 		{{ end }}
 		ORDER BY issued_at DESC
-		LIMIT @last`, map[string]interface{}{
+		LIMIT @last`, map[string]any{
 		"uid":                  uid,
 		"last":                 last,
 		"beforeNotificationID": beforeNotificationID,
@@ -84,16 +67,16 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 		return nil, fmt.Errorf("could not build notifications sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select notifications: %w", err)
 	}
 
 	defer rows.Close()
 
-	var nn Notifications
+	var nn types.Notifications
 	for rows.Next() {
-		var n Notification
+		var n types.Notification
 		var readAt *time.Time
 		if err = rows.Scan(&n.ID, pq.Array(&n.Actors), &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
 			return nil, fmt.Errorf("could not scan notification: %w", err)
@@ -111,16 +94,16 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 }
 
 // NotificationStream to receive notifications in realtime.
-func (s *Service) NotificationStream(ctx context.Context) (<-chan Notification, error) {
+func (s *Service) NotificationStream(ctx context.Context) (<-chan types.Notification, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, ErrUnauthenticated
+		return nil, errs.Unauthenticated
 	}
 
-	nn := make(chan Notification)
+	nn := make(chan types.Notification)
 	unsub, err := s.PubSub.Sub(notificationTopic(uid), func(data []byte) {
 		go func(r io.Reader) {
-			var n Notification
+			var n types.Notification
 			err := gob.NewDecoder(r).Decode(&n)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not gob decode notification: %w", err))
@@ -150,11 +133,11 @@ func (s *Service) NotificationStream(ctx context.Context) (<-chan Notification, 
 func (s *Service) HasUnreadNotifications(ctx context.Context) (bool, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return false, ErrUnauthenticated
+		return false, errs.Unauthenticated
 	}
 
 	var unread bool
-	if err := s.DB.QueryRowContext(ctx, `SELECT EXISTS (
+	if err := s.DB.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM notifications WHERE user_id = $1 AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
 	)`, uid).Scan(&unread); err != nil {
 		return false, fmt.Errorf("could not query select unread notifications existence: %w", err)
@@ -167,14 +150,14 @@ func (s *Service) HasUnreadNotifications(ctx context.Context) (bool, error) {
 func (s *Service) MarkNotificationAsRead(ctx context.Context, notificationID string) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
-	if !reUUID.MatchString(notificationID) {
+	if !types.ValidUUIDv4(notificationID) {
 		return ErrInvalidNotificationID
 	}
 
-	if _, err := s.DB.Exec(`
+	if _, err := s.DB.Exec(ctx, `
 		UPDATE notifications SET read_at = now()
 		WHERE id = $1 AND user_id = $2 AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')`, notificationID, uid); err != nil {
 		return fmt.Errorf("could not update and mark notification as read: %w", err)
@@ -187,10 +170,10 @@ func (s *Service) MarkNotificationAsRead(ctx context.Context, notificationID str
 func (s *Service) MarkNotificationsAsRead(ctx context.Context) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
-	if _, err := s.DB.Exec(`
+	if _, err := s.DB.Exec(ctx, `
 		UPDATE notifications SET read_at = now()
 		WHERE user_id = $1 AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
 	`, uid); err != nil {
@@ -202,13 +185,13 @@ func (s *Service) MarkNotificationsAsRead(ctx context.Context) error {
 
 func (s *Service) notifyFollow(followerID, followeeID string) {
 	ctx := context.Background()
-	var n Notification
+	var n types.Notification
 	var notified bool
 
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		var actor string
 		query := "SELECT username FROM users WHERE id = $1"
-		err := tx.QueryRowContext(ctx, query, followerID).Scan(&actor)
+		err := tx.QueryRow(ctx, query, followerID).Scan(&actor)
 		if err != nil {
 			return fmt.Errorf("could not query select follow notification actor: %w", err)
 		}
@@ -219,7 +202,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 				AND $2:::VARCHAR = ANY(actors)
 				AND type = 'follow'
 		)`
-		err = tx.QueryRowContext(ctx, query, followeeID, actor).Scan(&notified)
+		err = tx.QueryRow(ctx, query, followeeID, actor).Scan(&notified)
 		if err != nil {
 			return fmt.Errorf("could not query select follow notification existence: %w", err)
 		}
@@ -230,7 +213,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 
 		var nid string
 		query = "SELECT id FROM notifications WHERE user_id = $1 AND type = 'follow' AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')"
-		err = tx.QueryRowContext(ctx, query, followeeID).Scan(&nid)
+		err = tx.QueryRow(ctx, query, followeeID).Scan(&nid)
 		if err != nil && err != sql.ErrNoRows {
 			return fmt.Errorf("could not query select unread follow notification: %w", err)
 		}
@@ -240,7 +223,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 			query = `
 				INSERT INTO notifications (user_id, actors, type) VALUES ($1, $2, 'follow')
 				RETURNING id, issued_at`
-			row := tx.QueryRowContext(ctx, query, followeeID, pq.Array(actors))
+			row := tx.QueryRow(ctx, query, followeeID, pq.Array(actors))
 			err = row.Scan(&n.ID, &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not insert follow notification: %w", err)
@@ -254,7 +237,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 					issued_at = now()
 				WHERE id = $2
 				RETURNING actors, issued_at`
-			row := tx.QueryRowContext(ctx, query, actor, nid)
+			row := tx.QueryRow(ctx, query, actor, nid)
 			err = row.Scan(pq.Array(&n.Actors), &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not update follow notification: %w", err)
@@ -278,9 +261,9 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 	}
 }
 
-func (s *Service) notifyComment(c Comment) {
+func (s *Service) notifyComment(c types.Comment) {
 	actor := c.User.Username
-	rows, err := s.DB.Query(`
+	rows, err := s.DB.Query(context.Background(), `
 		INSERT INTO notifications (user_id, actors, type, post_id, read_at)
 		SELECT user_id, $1, 'comment', $2, '0001-01-01 00:00:00' FROM post_subscriptions
 		WHERE post_subscriptions.user_id != $3
@@ -302,7 +285,7 @@ func (s *Service) notifyComment(c Comment) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var n Notification
+		var n types.Notification
 		if err = rows.Scan(&n.ID, &n.UserID, pq.Array(&n.Actors), &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment notification: %w", err))
 			return
@@ -320,14 +303,14 @@ func (s *Service) notifyComment(c Comment) {
 	}
 }
 
-func (s *Service) notifyPostMention(p Post) {
-	mentions := collectMentions(p.Content)
+func (s *Service) notifyPostMention(p types.Post) {
+	mentions := textutil.CollectMentions(p.Content)
 	if len(mentions) == 0 {
 		return
 	}
 
 	actors := []string{p.User.Username}
-	rows, err := s.DB.Query(`
+	rows, err := s.DB.Query(context.Background(), `
 		INSERT INTO notifications (user_id, actors, type, post_id)
 		SELECT users.id, $1, 'post_mention', $2 FROM users
 		WHERE users.id != $3
@@ -346,7 +329,7 @@ func (s *Service) notifyPostMention(p Post) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var n Notification
+		var n types.Notification
 		if err = rows.Scan(&n.ID, &n.UserID, &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan post mention notification: %w", err))
 			return
@@ -365,14 +348,14 @@ func (s *Service) notifyPostMention(p Post) {
 	}
 }
 
-func (s *Service) notifyCommentMention(c Comment) {
-	mentions := collectMentions(c.Content)
+func (s *Service) notifyCommentMention(c types.Comment) {
+	mentions := textutil.CollectMentions(c.Content)
 	if len(mentions) == 0 {
 		return
 	}
 
 	actor := c.User.Username
-	rows, err := s.DB.Query(`
+	rows, err := s.DB.Query(context.Background(), `
 		INSERT INTO notifications (user_id, actors, type, post_id, read_at)
 		SELECT users.id, $1, 'comment_mention', $2, '0001-01-01 00:00:00' FROM users
 		WHERE users.id != $3
@@ -395,7 +378,7 @@ func (s *Service) notifyCommentMention(c Comment) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var n Notification
+		var n types.Notification
 		if err = rows.Scan(&n.ID, &n.UserID, pq.Array(&n.Actors), &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment mention notification: %w", err))
 			return
@@ -413,7 +396,7 @@ func (s *Service) notifyCommentMention(c Comment) {
 	}
 }
 
-func (s *Service) broadcastNotification(n Notification) {
+func (s *Service) broadcastNotification(n types.Notification) {
 	var b bytes.Buffer
 	err := gob.NewEncoder(&b).Encode(n)
 	if err != nil {

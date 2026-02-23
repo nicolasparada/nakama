@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"context"
@@ -10,19 +10,20 @@ import (
 
 	"github.com/nakamauwu/nakama/mailing"
 	"github.com/nakamauwu/nakama/testutil"
+	"github.com/nakamauwu/nakama/types"
 )
 
 func TestService_SendMagicLink(t *testing.T) {
 	ctx := context.Background()
 	t.Run("empty_email", func(t *testing.T) {
 		svc := &Service{}
-		err := svc.SendMagicLink(ctx, SendMagicLink{})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{})
 		testutil.WantEq(t, ErrInvalidEmail, err, "error")
 	})
 
 	t.Run("invalid_email", func(t *testing.T) {
 		svc := &Service{}
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: "nope"})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: "nope"})
 		testutil.WantEq(t, ErrInvalidEmail, err, "error")
 	})
 
@@ -30,13 +31,13 @@ func TestService_SendMagicLink(t *testing.T) {
 
 	t.Run("empty_redirect_uri", func(t *testing.T) {
 		svc := &Service{}
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: email})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: email})
 		testutil.WantEq(t, ErrInvalidRedirectURI, err, "error")
 	})
 
 	t.Run("non_absolute_redirect_uri", func(t *testing.T) {
 		svc := &Service{}
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: email, RedirectURI: "/nope"})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: email, RedirectURI: "/nope"})
 		testutil.WantEq(t, ErrInvalidRedirectURI, err, "error")
 	})
 
@@ -47,7 +48,7 @@ func TestService_SendMagicLink(t *testing.T) {
 				Host:   "localhost:3000",
 			},
 		}
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: email, RedirectURI: "https://example.org/login-callback"})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: email, RedirectURI: "https://example.org/login-callback"})
 		testutil.WantEq(t, ErrUntrustedRedirectURI, err, "error")
 	})
 
@@ -60,8 +61,9 @@ func TestService_SendMagicLink(t *testing.T) {
 	t.Run("sender_send_error", func(t *testing.T) {
 		errInternal := errors.New("internal error")
 		svc := &Service{
-			DB:     testDB,
-			Origin: origin,
+			DB:        testDB,
+			Cockroach: testCockroach,
+			Origin:    origin,
 			Sender: &mailing.SenderMock{
 				SendFunc: func(_ context.Context, to, subject, html, text string) error {
 					return errInternal
@@ -69,7 +71,7 @@ func TestService_SendMagicLink(t *testing.T) {
 			},
 		}
 
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: email, RedirectURI: redirectURI})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: email, RedirectURI: redirectURI})
 		testutil.WantEq(t, fmt.Errorf("could not send magic link: %w", errInternal), err, "error")
 	})
 
@@ -80,12 +82,13 @@ func TestService_SendMagicLink(t *testing.T) {
 			},
 		}
 		svc := &Service{
-			DB:     testDB,
-			Origin: origin,
-			Sender: senderMock,
+			DB:        testDB,
+			Cockroach: testCockroach,
+			Origin:    origin,
+			Sender:    senderMock,
 		}
 
-		err := svc.SendMagicLink(ctx, SendMagicLink{Email: email, RedirectURI: redirectURI})
+		err := svc.SendMagicLink(ctx, types.SendMagicLink{Email: email, RedirectURI: redirectURI})
 		testutil.WantEq(t, nil, err, "error")
 
 		calls := senderMock.SendCalls()

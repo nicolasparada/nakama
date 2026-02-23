@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/service"
+	"github.com/nakamauwu/nakama/types"
 )
 
 type loginInput struct {
@@ -19,7 +20,7 @@ type loginInput struct {
 func (h *handler) sendMagicLink(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in nakama.SendMagicLink
+	var in types.SendMagicLink
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
@@ -43,11 +44,13 @@ func (h *handler) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	email := q.Get("email")
-	code := q.Get("verification_code")
-	username := emptyStrPtr(q.Get("username"))
-	auth, err := h.svc.VerifyMagicLink(ctx, email, code, username)
-	if err == nakama.ErrUserNotFound || err == nakama.ErrInvalidUsername || err == nakama.ErrUsernameTaken {
+	in := types.UseEmailVerificationCode{
+		Email:    q.Get("email"),
+		Code:     q.Get("code"),
+		Username: emptyStrPtr(q.Get("username")),
+	}
+	auth, err := h.svc.VerifyMagicLink(ctx, in)
+	if err == service.ErrUserNotFound || err == service.ErrInvalidUsername || err == service.ErrUsernameTaken {
 		redirectWithHashFragment(w, r, redirectURI, url.Values{
 			"error":          []string{err.Error()},
 			"retry_endpoint": []string{r.RequestURI},
@@ -145,7 +148,7 @@ func (h *handler) withAuth(next http.Handler) http.Handler {
 		}
 
 		ctx := r.Context()
-		ctx = context.WithValue(ctx, nakama.KeyAuthUserID, uid)
+		ctx = context.WithValue(ctx, service.KeyAuthUserID, uid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

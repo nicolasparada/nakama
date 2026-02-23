@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"bytes"
@@ -16,14 +16,19 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/disintegration/imaging"
 	"github.com/go-kit/log/level"
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nakamauwu/nakama/cockroach"
+	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/storage"
+	"github.com/nakamauwu/nakama/textutil"
+	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
 const MediaBucket = "media"
@@ -35,42 +40,34 @@ const (
 
 var (
 	// ErrInvalidTimelineItemID denotes an invalid timeline item id; that is not uuid.
-	ErrInvalidTimelineItemID = InvalidArgumentError("invalid timeline item ID")
+	ErrInvalidTimelineItemID = errs.InvalidArgumentError("invalid timeline item ID")
 	// ErrUnsupportedMediaItemFormat denotes an unsupported media item format.
-	ErrUnsupportedMediaItemFormat = InvalidArgumentError("unsupported media item format")
-	ErrMediaItemTooLarge          = InvalidArgumentError("media item too large")
-	ErrMediaTooLarge              = InvalidArgumentError("media too large")
+	ErrUnsupportedMediaItemFormat = errs.InvalidArgumentError("unsupported media item format")
+	ErrMediaItemTooLarge          = errs.InvalidArgumentError("media item too large")
+	ErrMediaTooLarge              = errs.InvalidArgumentError("media too large")
 )
 
-// TimelineItem model.
-type TimelineItem struct {
-	ID     string `json:"timelineItemID"`
-	UserID string `json:"-"`
-	PostID string `json:"-"`
-	*Post
-}
-
 // CreateTimelineItem publishes a post to the user timeline and fan-outs it to his followers.
-func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoilerOf *string, nsfw bool, media []io.ReadSeeker) (TimelineItem, error) {
-	var ti TimelineItem
+func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoilerOf *string, nsfw bool, media []io.ReadSeeker) (types.TimelineItem, error) {
+	var ti types.TimelineItem
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ti, ErrUnauthenticated
+		return ti, errs.Unauthenticated
 	}
 
-	content = smartTrim(content)
+	content = textutil.SmartTrim(content)
 	if len(media) == 0 && content == "" || utf8.RuneCountInString(content) > postContentMaxLength {
 		return ti, ErrInvalidContent
 	}
 
 	if spoilerOf != nil {
-		*spoilerOf = smartTrim(*spoilerOf)
+		*spoilerOf = textutil.SmartTrim(*spoilerOf)
 		if *spoilerOf == "" || utf8.RuneCountInString(*spoilerOf) > postSpoilerMaxLength {
 			return ti, ErrInvalidSpoiler
 		}
 	}
 
-	tags := collectTags(content)
+	tags := textutil.CollectTags(content)
 
 	type File struct {
 		Name        string
@@ -176,12 +173,12 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 		}
 	}
 
-	var p Post
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	var p types.Post
+	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO posts (user_id, content, spoiler_of, nsfw, media) VALUES ($1, $2, $3, $4, $5)
 			RETURNING id, created_at`
-		row := tx.QueryRowContext(ctx, query, uid, content, spoilerOf, nsfw, pq.Array(fileNames))
+		row := tx.QueryRow(ctx, query, uid, content, spoilerOf, nsfw, pq.Array(fileNames))
 		err := row.Scan(&p.ID, &p.CreatedAt)
 		if isForeignKeyViolation(err) {
 			return ErrUserGone
@@ -200,7 +197,7 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 		p.UpdatedAt = p.CreatedAt
 
 		query = "INSERT INTO post_subscriptions (user_id, post_id) VALUES ($1, $2)"
-		if _, err = tx.ExecContext(ctx, query, uid, p.ID); err != nil {
+		if _, err = tx.Exec(ctx, query, uid, p.ID); err != nil {
 			return fmt.Errorf("could not insert post subscription: %w", err)
 		}
 
@@ -208,21 +205,21 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 
 		if len(tags) != 0 {
 			var values []string
-			args := []interface{}{p.ID}
+			args := []any{p.ID}
 			for i := 0; i < len(tags); i++ {
 				values = append(values, fmt.Sprintf("($1, $%d)", i+2))
 				args = append(args, tags[i])
 			}
 
 			query := `INSERT INTO post_tags (post_id, tag) VALUES ` + strings.Join(values, ", ")
-			_, err := tx.ExecContext(ctx, query, args...)
+			_, err := tx.Exec(ctx, query, args...)
 			if err != nil {
 				return fmt.Errorf("could not sql insert post tags: %w", err)
 			}
 		}
 
 		query = "INSERT INTO timeline (user_id, post_id) VALUES ($1, $2) RETURNING id"
-		err = tx.QueryRowContext(ctx, query, uid, p.ID).Scan(&ti.ID)
+		err = tx.QueryRow(ctx, query, uid, p.ID).Scan(&ti.ID)
 		if err != nil {
 			return fmt.Errorf("could not insert timeline item: %w", err)
 		}
@@ -261,7 +258,7 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 	return ti, nil
 }
 
-func (s *Service) postCreated(p Post) {
+func (s *Service) postCreated(p types.Post) {
 	u, err := s.userByID(context.Background(), p.UserID)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not fetch post user: %w", err))
@@ -277,26 +274,11 @@ func (s *Service) postCreated(p Post) {
 	go s.notifyPostMention(p)
 }
 
-type Timeline []TimelineItem
-
-func (tt Timeline) EndCursor() *string {
-	if len(tt) == 0 {
-		return nil
-	}
-
-	last := tt[len(tt)-1]
-	if last.Post == nil {
-		return nil
-	}
-
-	return ptrString(encodeCursor(last.Post.ID, last.Post.CreatedAt))
-}
-
 // Timeline of the authenticated user in descending order and with backward pagination.
-func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Timeline, error) {
+func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (types.Timeline, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, ErrUnauthenticated
+		return nil, errs.Unauthenticated
 	}
 
 	var beforePostID string
@@ -304,8 +286,8 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 
 	if before != nil {
 		var err error
-		beforePostID, beforeCreatedAt, err = decodeCursor(*before)
-		if err != nil || !reUUID.MatchString(beforePostID) {
+		beforePostID, beforeCreatedAt, err = cursor.Decode(*before)
+		if err != nil || !types.ValidUUIDv4(beforePostID) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -348,7 +330,7 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 			)
 		{{ end }}
 		ORDER BY posts.created_at DESC, posts.id ASC
-		LIMIT @last`, map[string]interface{}{
+		LIMIT @last`, map[string]any{
 		"uid":             uid,
 		"last":            last,
 		"beforePostID":    beforePostID,
@@ -358,20 +340,20 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 		return nil, fmt.Errorf("could not build timeline sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select timeline: %w", err)
 	}
 
 	defer rows.Close()
 
-	var tt Timeline
+	var tt types.Timeline
 	for rows.Next() {
-		var ti TimelineItem
-		var p Post
+		var ti types.TimelineItem
+		var p types.Post
 		var rawReactions []byte
 		var rawUserReactions []byte
-		var u User
+		var u types.User
 		var avatar sql.NullString
 		var media []string
 		if err = rows.Scan(
@@ -435,16 +417,16 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (Ti
 }
 
 // TimelineItemStream to receive timeline items in realtime.
-func (s *Service) TimelineItemStream(ctx context.Context) (<-chan TimelineItem, error) {
+func (s *Service) TimelineItemStream(ctx context.Context) (<-chan types.TimelineItem, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, ErrUnauthenticated
+		return nil, errs.Unauthenticated
 	}
 
-	tt := make(chan TimelineItem)
+	tt := make(chan types.TimelineItem)
 	unsub, err := s.PubSub.Sub(timelineTopic(uid), func(data []byte) {
 		go func(r io.Reader) {
-			var ti TimelineItem
+			var ti types.TimelineItem
 			err := gob.NewDecoder(r).Decode(&ti)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not gob decode timeline item: %w", err))
@@ -475,14 +457,14 @@ func (s *Service) TimelineItemStream(ctx context.Context) (<-chan TimelineItem, 
 func (s *Service) DeleteTimelineItem(ctx context.Context, timelineItemID string) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
-	if !reUUID.MatchString(timelineItemID) {
+	if !types.ValidUUIDv4(timelineItemID) {
 		return ErrInvalidTimelineItemID
 	}
 
-	if _, err := s.DB.ExecContext(ctx, `
+	if _, err := s.DB.Exec(ctx, `
 		DELETE FROM timeline
 		WHERE id = $1 AND user_id = $2`, timelineItemID, uid); err != nil {
 		return fmt.Errorf("could not sql delete timeline item: %w", err)
@@ -491,12 +473,12 @@ func (s *Service) DeleteTimelineItem(ctx context.Context, timelineItemID string)
 	return nil
 }
 
-func (s *Service) fanoutPost(p Post) {
+func (s *Service) fanoutPost(p types.Post) {
 	query := `
 		INSERT INTO timeline (user_id, post_id)
 		SELECT follower_id, $1 FROM follows WHERE followee_id = $2
 		RETURNING id, user_id`
-	rows, err := s.DB.Query(query, p.ID, p.UserID)
+	rows, err := s.DB.Query(context.Background(), query, p.ID, p.UserID)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not insert timeline: %w", err))
 		return
@@ -505,7 +487,7 @@ func (s *Service) fanoutPost(p Post) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var ti TimelineItem
+		var ti types.TimelineItem
 		if err = rows.Scan(&ti.ID, &ti.UserID); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan timeline item: %w", err))
 			return
@@ -523,7 +505,7 @@ func (s *Service) fanoutPost(p Post) {
 	}
 }
 
-func (s *Service) broadcastTimelineItem(ti TimelineItem) {
+func (s *Service) broadcastTimelineItem(ti types.TimelineItem) {
 	var b bytes.Buffer
 	err := gob.NewEncoder(&b).Encode(ti)
 	if err != nil {

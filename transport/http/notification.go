@@ -6,8 +6,7 @@ import (
 	"strconv"
 
 	"github.com/matryer/way"
-
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/types"
 )
 
 func (h *handler) notifications(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +25,7 @@ func (h *handler) notifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if nn == nil {
-		nn = []nakama.Notification{} // non null array
+		nn = []types.Notification{} // non null array
 	}
 
 	h.respond(w, paginatedRespBody{

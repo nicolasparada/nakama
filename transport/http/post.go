@@ -9,7 +9,7 @@ import (
 
 	"github.com/matryer/way"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/types"
 )
 
 func (h *handler) userPosts(w http.ResponseWriter, r *http.Request) {
@@ -18,19 +18,19 @@ func (h *handler) userPosts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
 	before := emptyStrPtr(q.Get("before"))
-	pp, err := h.svc.Posts(ctx, last, before, nakama.PostsFromUser(username))
+	pp, err := h.svc.Posts(ctx, last, before, types.PostsFromUser(username))
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
 	if pp == nil {
-		pp = []nakama.Post{} // non null array
+		pp = []types.Post{} // non null array
 	}
 
 	for i := range pp {
 		if pp[i].Reactions == nil {
-			pp[i].Reactions = []nakama.Reaction{} // non null array
+			pp[i].Reactions = []types.Reaction{} // non null array
 		}
 		if pp[i].MediaURLs == nil {
 			pp[i].MediaURLs = []string{} // non null array
@@ -54,9 +54,9 @@ func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
 	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
 	before := emptyStrPtr(q.Get("before"))
 
-	var opts []nakama.PostsOpt
+	var opts []types.PostsOpt
 	if tag := strings.TrimSpace(q.Get("tag")); tag != "" {
-		opts = append(opts, nakama.PostsTagged(tag))
+		opts = append(opts, types.PostsTagged(tag))
 	}
 	pp, err := h.svc.Posts(ctx, last, before, opts...)
 	if err != nil {
@@ -65,12 +65,12 @@ func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if pp == nil {
-		pp = []nakama.Post{} // non null array
+		pp = []types.Post{} // non null array
 	}
 
 	for i := range pp {
 		if pp[i].Reactions == nil {
-			pp[i].Reactions = []nakama.Reaction{} // non null array
+			pp[i].Reactions = []types.Reaction{} // non null array
 		}
 		if pp[i].MediaURLs == nil {
 			pp[i].MediaURLs = []string{} // non null array
@@ -105,7 +105,7 @@ func (h *handler) postStream(w http.ResponseWriter, r *http.Request) {
 	select {
 	case p := <-pp:
 		if p.Reactions == nil {
-			p.Reactions = []nakama.Reaction{} // non null array
+			p.Reactions = []types.Reaction{} // non null array
 		}
 		if p.MediaURLs == nil {
 			p.MediaURLs = []string{} // non null array
@@ -128,7 +128,7 @@ func (h *handler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.Reactions == nil {
-		p.Reactions = []nakama.Reaction{} // non null array
+		p.Reactions = []types.Reaction{} // non null array
 	}
 	if p.MediaURLs == nil {
 		p.MediaURLs = []string{} // non null array
@@ -140,7 +140,7 @@ func (h *handler) post(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updatePost(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in nakama.UpdatePost
+	var in types.UpdatePost
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
 		h.respondErr(w, errBadRequest)
@@ -170,12 +170,10 @@ func (h *handler) deletePost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type togglePostReactionReqBody nakama.ReactionInput
-
 func (h *handler) togglePostReaction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in togglePostReactionReqBody
+	var in types.ReactionInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
@@ -183,7 +181,7 @@ func (h *handler) togglePostReaction(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	postID := way.Param(ctx, "post_id")
-	out, err := h.svc.TogglePostReaction(ctx, postID, nakama.ReactionInput(in))
+	out, err := h.svc.TogglePostReaction(ctx, postID, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return

@@ -12,7 +12,8 @@ import (
 
 	"github.com/matryer/way"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/service"
+	"github.com/nakamauwu/nakama/types"
 )
 
 func (h *handler) users(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +28,7 @@ func (h *handler) users(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if uu == nil {
-		uu = []nakama.UserProfile{} // non null array
+		uu = []types.UserProfile{} // non null array
 	}
 
 	h.respond(w, paginatedRespBody{
@@ -69,12 +70,10 @@ func (h *handler) user(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, u, http.StatusOK)
 }
 
-type updateUserReqBody nakama.UpdateUserParams
-
 func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var reqBody updateUserReqBody
+	var reqBody types.UpdateUserParams
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
 		h.respondErr(w, errBadRequest)
@@ -82,7 +81,7 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	err = h.svc.UpdateUser(ctx, nakama.UpdateUserParams(reqBody))
+	err = h.svc.UpdateUser(ctx, reqBody)
 	if err != nil {
 		h.respondErr(w, err)
 		return
@@ -94,7 +93,7 @@ func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updateAvatar(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, nakama.MaxAvatarBytes))
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, service.MaxAvatarBytes))
 	if err != nil {
 		h.respondErr(w, errBadRequest)
 		return
@@ -116,7 +115,7 @@ func (h *handler) updateAvatar(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updateCover(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, nakama.MaxAvatarBytes))
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, service.MaxAvatarBytes))
 	if err != nil {
 		h.respondErr(w, errBadRequest)
 		return
@@ -161,7 +160,7 @@ func (h *handler) followers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if uu == nil {
-		uu = []nakama.UserProfile{} // non null array
+		uu = []types.UserProfile{} // non null array
 	}
 
 	h.respond(w, paginatedRespBody{
@@ -183,7 +182,7 @@ func (h *handler) followees(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if uu == nil {
-		uu = []nakama.UserProfile{} // non null array
+		uu = []types.UserProfile{} // non null array
 	}
 
 	h.respond(w, paginatedRespBody{

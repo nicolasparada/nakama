@@ -1,5 +1,3 @@
-//go:generate go tool moq -rm -stub -out sender_mock.go . Sender
-
 package mailing
 
 import (

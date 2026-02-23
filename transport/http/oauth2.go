@@ -19,8 +19,10 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/service"
+	"github.com/nakamauwu/nakama/types"
 	webtemplate "github.com/nakamauwu/nakama/web"
+	"github.com/nicolasparada/go-errs"
 )
 
 const oauth2Timeout = time.Minute * 2
@@ -30,11 +32,11 @@ var refreshTmpl = template.Must(template.ParseFS(webtemplate.TemplateFiles, "tem
 type OauthProvider struct {
 	Name            string
 	Config          *oauth2.Config
-	FetchUser       func(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (nakama.ProvidedUser, error)
+	FetchUser       func(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (types.ProvidedUser, error)
 	IDTokenVerifier *oidc.IDTokenVerifier
 }
 
-var GithubUserFetcher = func(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (nakama.ProvidedUser, error) {
+var GithubUserFetcher = func(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (types.ProvidedUser, error) {
 	const baseURL = "https://api.github.com"
 
 	var user struct {
@@ -104,7 +106,7 @@ var GithubUserFetcher = func(ctx context.Context, config *oauth2.Config, token *
 		return nil
 	})
 
-	var out nakama.ProvidedUser
+	var out types.ProvidedUser
 
 	if err := g.Wait(); err != nil {
 		return out, err
@@ -150,9 +152,9 @@ func (h *handler) oauth2Handler(provider OauthProvider) http.HandlerFunc {
 		}
 
 		username := q.Get("username")
-		if username != "" && !nakama.ValidUsername(username) {
+		if username != "" && !types.ValidUsername(username) {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
-				"error": []string{nakama.ErrInvalidUsername.Error()},
+				"error": []string{service.ErrInvalidUsername.Error()},
 			}, http.StatusSeeOther)
 			return
 		}
@@ -321,18 +323,18 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 		token, err := provider.Config.Exchange(ctx, q.Get("code"))
 		if err != nil {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
-				"error": []string{nakama.ErrUnauthenticated.Error()},
+				"error": []string{errs.Unauthenticated.Error()},
 			}, http.StatusSeeOther)
 			return
 		}
 
-		var providedUser nakama.ProvidedUser
+		var providedUser types.ProvidedUser
 
 		if provider.IDTokenVerifier != nil {
 			rawIDToken, ok := token.Extra("id_token").(string)
 			if !ok {
 				redirectWithHashFragment(w, r, redirectURI, url.Values{
-					"error": []string{nakama.ErrUnauthenticated.Error()},
+					"error": []string{errs.Unauthenticated.Error()},
 				}, http.StatusSeeOther)
 				return
 			}
@@ -340,7 +342,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 			idToken, err := provider.IDTokenVerifier.Verify(ctx, rawIDToken)
 			if err != nil {
 				redirectWithHashFragment(w, r, redirectURI, url.Values{
-					"error": []string{nakama.ErrUnauthenticated.Error()},
+					"error": []string{errs.Unauthenticated.Error()},
 				}, http.StatusSeeOther)
 				return
 			}
@@ -352,7 +354,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 			}
 			if err := idToken.Claims(&claims); err != nil {
 				redirectWithHashFragment(w, r, redirectURI, url.Values{
-					"error": []string{nakama.ErrUnauthenticated.Error()},
+					"error": []string{errs.Unauthenticated.Error()},
 				}, http.StatusSeeOther)
 				return
 			}
@@ -401,7 +403,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 		}
 
 		user, err := h.svc.LoginFromProvider(ctx, provider.Name, providedUser)
-		if err == nakama.ErrUserNotFound || err == nakama.ErrInvalidUsername || err == nakama.ErrUsernameTaken {
+		if err == service.ErrUserNotFound || err == service.ErrInvalidUsername || err == service.ErrUsernameTaken {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
 				"error":          []string{err.Error()},
 				"retry_endpoint": []string{"/api/" + provider.Name + "_auth"},
@@ -427,7 +429,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 			return
 		}
 
-		ctx = context.WithValue(ctx, nakama.KeyAuthUserID, user.ID)
+		ctx = context.WithValue(ctx, service.KeyAuthUserID, user.ID)
 		auth, err := h.svc.Token(ctx)
 		if err != nil {
 			statusCode := err2code(err)

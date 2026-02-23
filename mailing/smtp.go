@@ -7,7 +7,7 @@ import (
 	"net/smtp"
 )
 
-// SMTPSender sends emails using an SMTP nakama.
+// SMTPSender sends emails using an SMTP service.
 type SMTPSender struct {
 	From mail.Address
 	Addr string

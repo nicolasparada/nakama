@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"context"
@@ -12,25 +12,27 @@ import (
 	"time"
 
 	"github.com/SherClockHolmes/webpush-go"
+	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
 const (
 	webPushNoticationSendTimeout = time.Second * 30
-	webPushNoticationContact     = "contact@nakama.social"
+	webPushNoticationContact     = "contact@service.social"
 )
 
 var (
-	errWebPushSubscriptionGone = GoneError("web push subscription gone")
+	errWebPushSubscriptionGone = errs.GoneError("web push subscription gone")
 )
 
 func (svc *Service) AddWebPushSubscription(ctx context.Context, sub webpush.Subscription) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
 	query := "INSERT INTO user_web_push_subscriptions (user_id, sub) VALUES ($1, $2)"
-	_, err := svc.DB.ExecContext(ctx, query, uid, jsonValue{sub})
+	_, err := svc.DB.Exec(ctx, query, uid, jsonValue{sub})
 	if isUniqueViolation(err) {
 		return nil
 	}
@@ -44,7 +46,7 @@ func (svc *Service) AddWebPushSubscription(ctx context.Context, sub webpush.Subs
 
 func (svc *Service) webPushSubscriptions(ctx context.Context, userID string) ([]webpush.Subscription, error) {
 	query := "SELECT sub FROM user_web_push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC"
-	rows, err := svc.DB.QueryContext(ctx, query, userID)
+	rows, err := svc.DB.Query(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("could not sql query select user web push susbcriptions: %w", err)
 	}
@@ -69,7 +71,7 @@ func (svc *Service) webPushSubscriptions(ctx context.Context, userID string) ([]
 	return subs, nil
 }
 
-func (svc *Service) sendWebPushNotifications(n Notification) {
+func (svc *Service) sendWebPushNotifications(n types.Notification) {
 	ctx := context.Background()
 	subs, err := svc.webPushSubscriptions(ctx, n.UserID)
 	if err != nil {
@@ -148,7 +150,7 @@ func (svc *Service) sendWebPushNotification(sub webpush.Subscription, message []
 
 func (svc *Service) deleteWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
 	query := "DELETE FROM user_web_push_subscriptions WHERE user_id = $1 AND sub = $2"
-	_, err := svc.DB.ExecContext(ctx, query, userID, jsonValue{sub})
+	_, err := svc.DB.Exec(ctx, query, userID, jsonValue{sub})
 	if err != nil {
 		return fmt.Errorf("sql delete user web push subscription: %w", err)
 	}

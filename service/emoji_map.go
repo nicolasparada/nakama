@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"strings"

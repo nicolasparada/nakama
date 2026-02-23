@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"bytes"
@@ -12,116 +12,56 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/jackc/pgx/v5"
+	"github.com/nakamauwu/nakama/cockroach"
+	"github.com/nakamauwu/nakama/cursor"
+	"github.com/nakamauwu/nakama/textutil"
+	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
 const commentContentMaxLength = 2048
 
 var (
-	// ErrInvalidCommentID denotes an invalid comment ID; that is not uuid.
-	ErrInvalidCommentID = InvalidArgumentError("invalid comment ID")
-	// ErrCommentNotFound denotes a not found comment.
-	ErrCommentNotFound     = NotFoundError("comment not found")
-	ErrUpdateCommentDenied = PermissionDeniedError("update comment denied")
+	ErrInvalidCommentID    = errs.InvalidArgumentError("invalid comment ID")
+	ErrCommentNotFound     = errs.NotFoundError("comment not found")
+	ErrUpdateCommentDenied = errs.PermissionDeniedError("update comment denied")
 )
 
-// Comment model.
-type Comment struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"-"`
-	PostID    string     `json:"-"`
-	Content   string     `json:"content"`
-	Reactions []Reaction `json:"reactions"`
-	CreatedAt time.Time  `json:"createdAt"`
-	User      *User      `json:"user,omitempty"`
-	Mine      bool       `json:"mine"`
-}
-
-type UpdateComment struct {
-	ID      string  `json:"-"`
-	Content *string `json:"content"`
-}
-
-type UpdatedComment struct {
-	Content string `json:"content"`
-}
-
 // CreateComment on a post.
-func (s *Service) CreateComment(ctx context.Context, postID string, content string) (Comment, error) {
-	var c Comment
+func (s *Service) CreateComment(ctx context.Context, in types.CreateComment) (types.Comment, error) {
+	var c types.Comment
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return c, ErrUnauthenticated
+		return c, errs.Unauthenticated
 	}
 
-	if !reUUID.MatchString(postID) {
-		return c, ErrInvalidPostID
+	if err := in.Validate(); err != nil {
+		return c, err
 	}
 
-	content = smartTrim(content)
-	if content == "" || utf8.RuneCountInString(content) > commentContentMaxLength {
-		return c, ErrInvalidContent
-	}
+	in.SetUserID(uid)
+	in.SetTags(textutil.CollectTags(in.Content))
 
-	tags := collectTags(content)
-
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
-		query := `
-			INSERT INTO comments (user_id, post_id, content) VALUES ($1, $2, $3)
-			RETURNING id, created_at`
-		err := tx.QueryRowContext(ctx, query, uid, postID, content).Scan(&c.ID, &c.CreatedAt)
-		if isForeignKeyViolation(err) {
-			return ErrPostNotFound
-		}
-
-		if err != nil {
-			return fmt.Errorf("could not insert comment: %w", err)
-		}
-
-		c.UserID = uid
-		c.PostID = postID
-		c.Content = content
-		c.Mine = true
-
-		query = `
-			INSERT INTO post_subscriptions (user_id, post_id) VALUES ($1, $2)
-			ON CONFLICT (user_id, post_id) DO NOTHING`
-		if _, err = tx.ExecContext(ctx, query, uid, postID); err != nil {
-			return fmt.Errorf("could not insert post subcription after commenting: %w", err)
-		}
-
-		if len(tags) != 0 {
-			var values []string
-			args := []interface{}{postID, c.ID}
-			for i := 0; i < len(tags); i++ {
-				values = append(values, fmt.Sprintf("($1, $2, $%d)", i+3))
-				args = append(args, tags[i])
-			}
-
-			query := `INSERT INTO post_tags (post_id, comment_id, tag) VALUES ` + strings.Join(values, ", ")
-			_, err := tx.ExecContext(ctx, query, args...)
-			if err != nil {
-				return fmt.Errorf("could not sql insert post (comment) tags: %w", err)
-			}
-		}
-
-		query = "UPDATE posts SET comments_count = comments_count + 1 WHERE id = $1"
-		if _, err = tx.ExecContext(ctx, query, postID); err != nil {
-			return fmt.Errorf("could not update and increment post comments count: %w", err)
-		}
-
-		return nil
-	})
+	created, err := s.Cockroach.CreateComment(ctx, in)
 	if err != nil {
 		return c, err
 	}
+
+	c.ID = created.ID
+	c.CreatedAt = created.CreatedAt
+
+	c.UserID = uid
+	c.PostID = in.PostID
+	c.Content = in.Content
+	c.Mine = true
 
 	go s.commentCreated(c)
 
 	return c, nil
 }
 
-func (s *Service) commentCreated(c Comment) {
+func (s *Service) commentCreated(c types.Comment) {
 	u, err := s.userByID(context.Background(), c.UserID)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not fetch comment user: %w", err))
@@ -136,20 +76,9 @@ func (s *Service) commentCreated(c Comment) {
 	go s.broadcastComment(c)
 }
 
-type Comments []Comment
-
-func (cc Comments) EndCursor() *string {
-	if len(cc) == 0 {
-		return nil
-	}
-
-	last := cc[len(cc)-1]
-	return ptrString(encodeCursor(last.ID, last.CreatedAt))
-}
-
 // Comments from a post in descending order with backward pagination.
-func (s *Service) Comments(ctx context.Context, postID string, last uint64, before *string) (Comments, error) {
-	if !reUUID.MatchString(postID) {
+func (s *Service) Comments(ctx context.Context, postID string, last uint64, before *string) (types.Comments, error) {
+	if !types.ValidUUIDv4(postID) {
 		return nil, ErrInvalidPostID
 	}
 
@@ -158,8 +87,8 @@ func (s *Service) Comments(ctx context.Context, postID string, last uint64, befo
 
 	if before != nil {
 		var err error
-		beforeCommentID, beforeCreatedAt, err = decodeCursor(*before)
-		if err != nil || !reUUID.MatchString(beforeCommentID) {
+		beforeCommentID, beforeCreatedAt, err = cursor.Decode(*before)
+		if err != nil || !types.ValidUUIDv4(beforeCommentID) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -197,7 +126,7 @@ func (s *Service) Comments(ctx context.Context, postID string, last uint64, befo
 			)
 		{{ end }}
 		ORDER BY comments.created_at DESC, comments.id ASC
-		LIMIT @last`, map[string]interface{}{
+		LIMIT @last`, map[string]any{
 		"auth":            auth,
 		"uid":             uid,
 		"postID":          postID,
@@ -209,21 +138,21 @@ func (s *Service) Comments(ctx context.Context, postID string, last uint64, befo
 		return nil, fmt.Errorf("could not build comments sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select comments: %w", err)
 	}
 
 	defer rows.Close()
 
-	var cc Comments
+	var cc types.Comments
 	for rows.Next() {
-		var c Comment
+		var c types.Comment
 		var rawReactions []byte
 		var rawUserReactions []byte
-		var u User
+		var u types.User
 		var avatar sql.NullString
-		dest := []interface{}{&c.ID, &c.Content, &rawReactions, &c.CreatedAt, &u.Username, &avatar}
+		dest := []any{&c.ID, &c.Content, &rawReactions, &c.CreatedAt, &u.Username, &avatar}
 		if auth {
 			dest = append(dest, &c.Mine, &rawUserReactions)
 		}
@@ -270,16 +199,16 @@ func (s *Service) Comments(ctx context.Context, postID string, last uint64, befo
 }
 
 // CommentStream to receive comments in realtime.
-func (s *Service) CommentStream(ctx context.Context, postID string) (<-chan Comment, error) {
-	if !reUUID.MatchString(postID) {
+func (s *Service) CommentStream(ctx context.Context, postID string) (<-chan types.Comment, error) {
+	if !types.ValidUUIDv4(postID) {
 		return nil, ErrInvalidPostID
 	}
 
-	cc := make(chan Comment)
+	cc := make(chan types.Comment)
 	uid, auth := ctx.Value(KeyAuthUserID).(string)
 	unsub, err := s.PubSub.Sub(commentTopic(postID), func(data []byte) {
 		go func(r io.Reader) {
-			var c Comment
+			var c types.Comment
 			err := gob.NewDecoder(r).Decode(&c)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not gob decode comment: %w", err))
@@ -309,16 +238,16 @@ func (s *Service) CommentStream(ctx context.Context, postID string) (<-chan Comm
 	return cc, nil
 }
 
-func (s *Service) UpdateComment(ctx context.Context, in UpdateComment) (UpdatedComment, error) {
-	var out UpdatedComment
+func (s *Service) UpdateComment(ctx context.Context, in types.UpdateComment) (types.UpdatedComment, error) {
+	var out types.UpdatedComment
 
 	in.ID = strings.TrimSpace(in.ID)
-	if !reUUID.MatchString(in.ID) {
+	if !types.ValidUUIDv4(in.ID) {
 		return out, ErrInvalidCommentID
 	}
 
 	if in.Content != nil {
-		*in.Content = smartTrim(*in.Content)
+		*in.Content = textutil.SmartTrim(*in.Content)
 		if *in.Content == "" || utf8.RuneCountInString(*in.Content) > commentContentMaxLength {
 			return out, ErrInvalidContent
 		}
@@ -326,13 +255,13 @@ func (s *Service) UpdateComment(ctx context.Context, in UpdateComment) (UpdatedC
 
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return out, ErrUnauthenticated
+		return out, errs.Unauthenticated
 	}
 
-	return out, crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	return out, cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		var isOwner bool
 		query := "SELECT user_id = $1 FROM comments WHERE id = $2"
-		row := tx.QueryRowContext(ctx, query, uid, in.ID)
+		row := tx.QueryRow(ctx, query, uid, in.ID)
 		err := row.Scan(&isOwner)
 		if err == sql.ErrNoRows {
 			return ErrCommentNotFound
@@ -343,12 +272,12 @@ func (s *Service) UpdateComment(ctx context.Context, in UpdateComment) (UpdatedC
 		}
 
 		if !isOwner {
-			return ErrPermissionDenied
+			return errs.PermissionDenied
 		}
 
 		var createdAt time.Time
 		query = "SELECT created_at FROM comments WHERE id = $1"
-		row = tx.QueryRowContext(ctx, query, in.ID)
+		row = tx.QueryRow(ctx, query, in.ID)
 		err = row.Scan(&createdAt)
 		if err == sql.ErrNoRows {
 			return ErrCommentNotFound
@@ -364,7 +293,7 @@ func (s *Service) UpdateComment(ctx context.Context, in UpdateComment) (UpdatedC
 		}
 
 		query = "UPDATE comments SET content = COALESCE($1::varchar, content) WHERE id = $2 RETURNING content"
-		row = tx.QueryRowContext(ctx, query, in.Content, in.ID)
+		row = tx.QueryRow(ctx, query, in.Content, in.ID)
 		err = row.Scan(&out.Content)
 		if err == sql.ErrNoRows {
 			return ErrCommentNotFound
@@ -381,17 +310,17 @@ func (s *Service) UpdateComment(ctx context.Context, in UpdateComment) (UpdatedC
 func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
-	if !reUUID.MatchString(commentID) {
+	if !types.ValidUUIDv4(commentID) {
 		return ErrInvalidCommentID
 	}
 
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		var postID string
 		query := "SELECT post_id FROM comments WHERE id = $1 AND user_id = $2"
-		row := tx.QueryRowContext(ctx, query, commentID, uid)
+		row := tx.QueryRow(ctx, query, commentID, uid)
 		err := row.Scan(&postID)
 		if err == sql.ErrNoRows {
 			return ErrCommentNotFound
@@ -402,13 +331,13 @@ func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 		}
 
 		query = "DELETE FROM comments WHERE id = $1"
-		_, err = tx.ExecContext(ctx, query, commentID)
+		_, err = tx.Exec(ctx, query, commentID)
 		if err != nil {
 			return fmt.Errorf("could not delete comment: %w", err)
 		}
 
 		query = "UPDATE posts SET comments_count = comments_count - 1 WHERE id = $1"
-		_, err = tx.ExecContext(ctx, query, postID)
+		_, err = tx.Exec(ctx, query, postID)
 		if err != nil {
 			return fmt.Errorf("could not update post comments count after comment deletion: %w", err)
 		}
@@ -422,13 +351,13 @@ func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 	return nil
 }
 
-func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, in ReactionInput) ([]Reaction, error) {
+func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, in types.ReactionInput) ([]types.Reaction, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, ErrUnauthenticated
+		return nil, errs.Unauthenticated
 	}
 
-	if !reUUID.MatchString(commentID) {
+	if !types.ValidUUIDv4(commentID) {
 		return nil, ErrInvalidCommentID
 	}
 
@@ -440,8 +369,8 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 		return nil, ErrInvalidReaction
 	}
 
-	var out []Reaction
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	var out []types.Reaction
+	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		out = nil
 
 		var rawReactions []byte
@@ -457,7 +386,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 				GROUP BY user_id, comment_id
 			) AS reactions ON reactions.user_id = $1 AND reactions.comment_id = comments.id
 			WHERE comments.id = $2`
-		row := tx.QueryRowContext(ctx, query, uid, commentID)
+		row := tx.QueryRow(ctx, query, uid, commentID)
 		err := row.Scan(&rawReactions, &rawUserReactions)
 		if err == sql.ErrNoRows {
 			return ErrCommentNotFound
@@ -467,7 +396,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 			return fmt.Errorf("could not sql scan comment and user reactions: %w", err)
 		}
 
-		var reactions []Reaction
+		var reactions []types.Reaction
 		if rawReactions != nil {
 			err = json.Unmarshal(rawReactions, &reactions)
 			if err != nil {
@@ -494,7 +423,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 		reacted := userReactionIdx != -1
 		if !reacted {
 			query = "INSERT INTO comment_reactions (user_id, comment_id, type, reaction) VALUES ($1, $2, $3, $4)"
-			_, err = tx.ExecContext(ctx, query, uid, commentID, in.Type, in.Reaction)
+			_, err = tx.Exec(ctx, query, uid, commentID, in.Type, in.Reaction)
 			if err != nil {
 				return fmt.Errorf("could not sql insert comment reaction: %w", err)
 			}
@@ -506,7 +435,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 					AND type = $3
 					AND reaction = $4
 			`
-			_, err = tx.ExecContext(ctx, query, uid, commentID, in.Type, in.Reaction)
+			_, err = tx.Exec(ctx, query, uid, commentID, in.Type, in.Reaction)
 			if err != nil {
 				return fmt.Errorf("could not sql delete comment reaction: %w", err)
 			}
@@ -541,7 +470,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 		}
 
 		if !updated {
-			reactions = append(reactions, Reaction{
+			reactions = append(reactions, types.Reaction{
 				Type:     in.Type,
 				Reaction: in.Reaction,
 				Count:    1,
@@ -558,7 +487,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 		}
 
 		query = "UPDATE comments SET reactions = $1 WHERE comments.id = $2"
-		_, err = tx.ExecContext(ctx, query, rawReactions, commentID)
+		_, err = tx.Exec(ctx, query, rawReactions, commentID)
 		if err != nil {
 			return fmt.Errorf("could not sql update comment reactions: %w", err)
 		}
@@ -587,7 +516,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 	return out, nil
 }
 
-func (s *Service) broadcastComment(c Comment) {
+func (s *Service) broadcastComment(c types.Comment) {
 	var b bytes.Buffer
 	err := gob.NewEncoder(&b).Encode(c)
 	if err != nil {

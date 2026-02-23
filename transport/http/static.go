@@ -16,7 +16,7 @@ import (
 
 	"github.com/matryer/way"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/web"
 )
 
@@ -56,7 +56,7 @@ func (h *handler) avatar(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := way.Param(ctx, "name")
 
-	f, err := h.store.Open(ctx, nakama.AvatarsBucket, name)
+	f, err := h.store.Open(ctx, service.AvatarsBucket, name)
 	if err != nil {
 		h.respondErr(w, err)
 		return
@@ -77,7 +77,7 @@ func (h *handler) cover(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := way.Param(ctx, "name")
 
-	f, err := h.store.Open(ctx, nakama.CoversBucket, name)
+	f, err := h.store.Open(ctx, service.CoversBucket, name)
 	if err != nil {
 		h.respondErr(w, err)
 		return
@@ -98,7 +98,7 @@ func (h *handler) media(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := way.Param(ctx, "name")
 
-	f, err := h.store.Open(ctx, nakama.MediaBucket, name)
+	f, err := h.store.Open(ctx, service.MediaBucket, name)
 	if err != nil {
 		h.respondErr(w, err)
 		return

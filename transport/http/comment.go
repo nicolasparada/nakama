@@ -8,32 +8,28 @@ import (
 
 	"github.com/matryer/way"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/types"
 )
-
-type createCommentInput struct {
-	Content string
-}
 
 func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in createCommentInput
+	var in types.CreateComment
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
-	c, err := h.svc.CreateComment(ctx, postID, in.Content)
+	in.PostID = way.Param(ctx, "post_id")
+	c, err := h.svc.CreateComment(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
 	if c.Reactions == nil {
-		c.Reactions = []nakama.Reaction{} // non null array
+		c.Reactions = []types.Reaction{} // non null array
 	}
 
 	h.respond(w, c, http.StatusCreated)
@@ -57,12 +53,12 @@ func (h *handler) comments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cc == nil {
-		cc = []nakama.Comment{} // non null array
+		cc = types.Comments{} // non null array
 	}
 
 	for i := range cc {
 		if cc[i].Reactions == nil {
-			cc[i].Reactions = []nakama.Reaction{} // non null array
+			cc[i].Reactions = []types.Reaction{} // non null array
 		}
 	}
 
@@ -95,7 +91,7 @@ func (h *handler) commentStream(w http.ResponseWriter, r *http.Request) {
 	select {
 	case c := <-cc:
 		if c.Reactions == nil {
-			c.Reactions = []nakama.Reaction{}
+			c.Reactions = []types.Reaction{}
 		}
 		h.writeSSE(w, c)
 		f.Flush()
@@ -107,7 +103,7 @@ func (h *handler) commentStream(w http.ResponseWriter, r *http.Request) {
 func (h *handler) updateComment(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in nakama.UpdateComment
+	var in types.UpdateComment
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
 		h.respondErr(w, errBadRequest)
@@ -137,12 +133,10 @@ func (h *handler) deleteComment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type toggleCommentReactionReqBody nakama.ReactionInput
-
 func (h *handler) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in toggleCommentReactionReqBody
+	var in types.ReactionInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
@@ -150,7 +144,7 @@ func (h *handler) toggleCommentReaction(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 	commentID := way.Param(ctx, "comment_id")
-	out, err := h.svc.ToggleCommentReaction(ctx, commentID, nakama.ReactionInput(in))
+	out, err := h.svc.ToggleCommentReaction(ctx, commentID, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return

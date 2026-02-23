@@ -1,4 +1,4 @@
-package nakama
+package service
 
 import (
 	"bytes"
@@ -9,15 +9,18 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/disintegration/imaging"
+	"github.com/jackc/pgx/v5"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
+	"github.com/nakamauwu/nakama/cockroach"
+	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/storage"
+	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
 const (
@@ -31,90 +34,46 @@ const (
 )
 
 var (
-	reEmail    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-	reUsername = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,17}$`)
-)
-
-var (
 	// ErrInvalidUserID denotes an invalid user id; that is not uuid.
-	ErrInvalidUserID = InvalidArgumentError("invalid user ID")
+	ErrInvalidUserID = errs.InvalidArgumentError("invalid user ID")
 	// ErrInvalidEmail denotes an invalid email address.
-	ErrInvalidEmail = InvalidArgumentError("invalid email")
+	ErrInvalidEmail = errs.InvalidArgumentError("invalid email")
 	// ErrInvalidUsername denotes an invalid username.
-	ErrInvalidUsername = InvalidArgumentError("invalid username")
+	ErrInvalidUsername = errs.InvalidArgumentError("invalid username")
 	// ErrEmailTaken denotes an email already taken.
-	ErrEmailTaken = AlreadyExistsError("email taken")
+	ErrEmailTaken = errs.ConflictError("email taken")
 	// ErrUsernameTaken denotes a username already taken.
-	ErrUsernameTaken = AlreadyExistsError("username taken")
+	ErrUsernameTaken = errs.ConflictError("username taken")
 	// ErrUserNotFound denotes a not found user.
-	ErrUserNotFound = NotFoundError("user not found")
+	ErrUserNotFound = errs.NotFoundError("user not found")
 	// ErrForbiddenFollow denotes a forbiden follow. Like following yourself.
-	ErrForbiddenFollow = PermissionDeniedError("forbidden follow")
+	ErrForbiddenFollow = errs.PermissionDeniedError("forbidden follow")
 	// ErrUnsupportedAvatarFormat denotes an unsupported avatar image format.
-	ErrUnsupportedAvatarFormat = InvalidArgumentError("unsupported avatar format")
+	ErrUnsupportedAvatarFormat = errs.InvalidArgumentError("unsupported avatar format")
 	// ErrUnsupportedCoverFormat denotes an unsupported avatar image format.
-	ErrUnsupportedCoverFormat = InvalidArgumentError("unsupported cover format")
+	ErrUnsupportedCoverFormat = errs.InvalidArgumentError("unsupported cover format")
 	// ErrUserGone denotes that the user has already been deleted.
-	ErrUserGone = GoneError("user gone")
+	ErrUserGone = errs.GoneError("user gone")
 	// ErrInvalidUpdateUserParams denotes invalid params to update a user, that is no params altogether.
-	ErrInvalidUpdateUserParams = InvalidArgumentError("invalid update user params")
+	ErrInvalidUpdateUserParams = errs.InvalidArgumentError("invalid update user params")
 	// ErrInvalidUserBio denotes an invalid user bio. That is empty or it exceeds the max allowed characters (480).
-	ErrInvalidUserBio = InvalidArgumentError("invalid user bio")
+	ErrInvalidUserBio = errs.InvalidArgumentError("invalid user bio")
 	// ErrInvalidUserWaifu denotes an invalid waifu name for an user.
-	ErrInvalidUserWaifu = InvalidArgumentError("invalid user waifu")
+	ErrInvalidUserWaifu = errs.InvalidArgumentError("invalid user waifu")
 	// ErrInvalidUserHusbando denotes an invalid husbando name for an user.
-	ErrInvalidUserHusbando = InvalidArgumentError("invalid user husbando")
+	ErrInvalidUserHusbando = errs.InvalidArgumentError("invalid user husbando")
 )
-
-// User model.
-type User struct {
-	ID        string  `json:"id,omitempty"`
-	Username  string  `json:"username"`
-	AvatarURL *string `json:"avatarURL"`
-}
-
-// UserProfile model.
-type UserProfile struct {
-	User
-	Email          string  `json:"email,omitempty"`
-	CoverURL       *string `json:"coverURL"`
-	Bio            *string `json:"bio"`
-	Waifu          *string `json:"waifu"`
-	Husbando       *string `json:"husbando"`
-	FollowersCount int     `json:"followersCount"`
-	FolloweesCount int     `json:"followeesCount"`
-	Me             bool    `json:"me"`
-	Following      bool    `json:"following"`
-	Followeed      bool    `json:"followeed"`
-}
-
-// ToggleFollowOutput response.
-type ToggleFollowOutput struct {
-	Following      bool `json:"following"`
-	FollowersCount int  `json:"followersCount"`
-}
-
-type UserProfiles []UserProfile
-
-func (uu UserProfiles) EndCursor() *string {
-	if len(uu) == 0 {
-		return nil
-	}
-
-	last := uu[len(uu)-1]
-	return ptrString(encodeSimpleCursor(last.Username))
-}
 
 // Users in ascending order with forward pagination and filtered by username.
-func (s *Service) Users(ctx context.Context, search string, first uint64, after *string) (UserProfiles, error) {
+func (s *Service) Users(ctx context.Context, search string, first uint64, after *string) (types.UserProfiles, error) {
 	search = strings.TrimSpace(search)
 	first = normalizePageSize(first)
 
 	var afterUsername string
 	if after != nil {
 		var err error
-		afterUsername, err = decodeSimpleCursor(*after)
-		if err != nil || !ValidUsername(afterUsername) {
+		afterUsername, err = cursor.DecodeSimple(*after)
+		if err != nil || !types.ValidUsername(afterUsername) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -138,7 +97,7 @@ func (s *Service) Users(ctx context.Context, search string, first uint64, after 
 		{{ if and .search .afterUsername }}AND{{ end }}
 		{{ if .afterUsername }}username > @afterUsername{{ end }}
 		ORDER BY username ASC
-		LIMIT @first`, map[string]interface{}{
+		LIMIT @first`, map[string]any{
 		"auth":          auth,
 		"uid":           uid,
 		"search":        search,
@@ -149,18 +108,18 @@ func (s *Service) Users(ctx context.Context, search string, first uint64, after 
 		return nil, fmt.Errorf("could not build users sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select users: %w", err)
 	}
 
 	defer rows.Close()
 
-	var uu UserProfiles
+	var uu types.UserProfiles
 	for rows.Next() {
-		var u UserProfile
+		var u types.UserProfile
 		var avatar, cover sql.NullString
-		dest := []interface{}{
+		dest := []any{
 			&u.ID, &u.Email,
 			&u.Username,
 			&avatar,
@@ -195,19 +154,8 @@ func (s *Service) Users(ctx context.Context, search string, first uint64, after 
 	return uu, nil
 }
 
-type Usernames []string
-
-func (uu Usernames) EndCursor() *string {
-	if len(uu) == 0 {
-		return nil
-	}
-
-	last := uu[len(uu)-1]
-	return ptrString(encodeSimpleCursor(last))
-}
-
 // Usernames to autocomplete a mention box or something.
-func (s *Service) Usernames(ctx context.Context, startingWith string, first uint64, after *string) (Usernames, error) {
+func (s *Service) Usernames(ctx context.Context, startingWith string, first uint64, after *string) (types.Usernames, error) {
 	startingWith = strings.TrimSpace(startingWith)
 	if startingWith == "" {
 		return nil, nil
@@ -216,8 +164,8 @@ func (s *Service) Usernames(ctx context.Context, startingWith string, first uint
 	var afterUsername string
 	if after != nil {
 		var err error
-		afterUsername, err = decodeSimpleCursor(*after)
-		if err != nil || !ValidUsername(afterUsername) {
+		afterUsername, err = cursor.DecodeSimple(*after)
+		if err != nil || !types.ValidUsername(afterUsername) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -230,7 +178,7 @@ func (s *Service) Usernames(ctx context.Context, startingWith string, first uint
 		{{ if .auth }}AND users.id != @uid{{ end }}
 		{{ if .afterUsername }}AND username > @afterUsername{{ end }}
 		ORDER BY username ASC
-		LIMIT @first`, map[string]interface{}{
+		LIMIT @first`, map[string]any{
 		"startingWith":  startingWith,
 		"auth":          auth,
 		"uid":           uid,
@@ -241,14 +189,14 @@ func (s *Service) Usernames(ctx context.Context, startingWith string, first uint
 		return nil, fmt.Errorf("could not build usernames sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select usernames: %w", err)
 	}
 
 	defer rows.Close()
 
-	var uu Usernames
+	var uu types.Usernames
 	for rows.Next() {
 		var u string
 		if err = rows.Scan(&u); err != nil {
@@ -265,31 +213,32 @@ func (s *Service) Usernames(ctx context.Context, startingWith string, first uint
 	return uu, nil
 }
 
-func (s *Service) userByID(ctx context.Context, id string) (User, error) {
-	var u User
-	var avatar sql.NullString
-	query := "SELECT username, avatar FROM users WHERE id = $1"
-	err := s.DB.QueryRowContext(ctx, query, id).Scan(&u.Username, &avatar)
-	if err == sql.ErrNoRows {
-		return u, ErrUserNotFound
-	}
-
+func (s *Service) userByID(ctx context.Context, id string) (types.User, error) {
+	user, err := s.Cockroach.User(ctx, id)
 	if err != nil {
-		return u, fmt.Errorf("could not query select user: %w", err)
+		return user, err
 	}
 
-	u.ID = id
-	u.AvatarURL = s.avatarURL(avatar)
+	user.SetAvatarURL(s.AvatarURLPrefix)
+	return user, nil
+}
 
-	return u, nil
+func (s *Service) userByEmail(ctx context.Context, email string) (types.User, error) {
+	user, err := s.Cockroach.UserByEmail(ctx, email)
+	if err != nil {
+		return user, err
+	}
+
+	user.SetAvatarURL(s.AvatarURLPrefix)
+	return user, nil
 }
 
 // User with the given username.
-func (s *Service) User(ctx context.Context, username string) (UserProfile, error) {
-	var u UserProfile
+func (s *Service) User(ctx context.Context, username string) (types.UserProfile, error) {
+	var u types.UserProfile
 
 	username = strings.TrimSpace(username)
-	if !ValidUsername(username) {
+	if !types.ValidUsername(username) {
 		return u, ErrInvalidUsername
 	}
 
@@ -307,7 +256,7 @@ func (s *Service) User(ctx context.Context, username string) (UserProfile, error
 		LEFT JOIN follows AS followees
 			ON followees.follower_id = users.id AND followees.followee_id = @uid
 		{{end}}
-		WHERE username = @username`, map[string]interface{}{
+		WHERE username = @username`, map[string]any{
 		"auth":     auth,
 		"uid":      uid,
 		"username": username,
@@ -317,11 +266,11 @@ func (s *Service) User(ctx context.Context, username string) (UserProfile, error
 	}
 
 	var avatar, cover sql.NullString
-	dest := []interface{}{&u.ID, &u.Email, &avatar, &cover, &u.Bio, &u.Waifu, &u.Husbando, &u.FollowersCount, &u.FolloweesCount}
+	dest := []any{&u.ID, &u.Email, &avatar, &cover, &u.Bio, &u.Waifu, &u.Husbando, &u.FollowersCount, &u.FolloweesCount}
 	if auth {
 		dest = append(dest, &u.Following, &u.Followeed)
 	}
-	err = s.DB.QueryRowContext(ctx, query, args...).Scan(dest...)
+	err = s.DB.QueryRow(ctx, query, args...).Scan(dest...)
 	if err == sql.ErrNoRows {
 		return u, ErrUserNotFound
 	}
@@ -341,22 +290,15 @@ func (s *Service) User(ctx context.Context, username string) (UserProfile, error
 	return u, nil
 }
 
-type UpdateUserParams struct {
-	Username *string `json:"username"`
-	Bio      *string `json:"bio"`
-	Waifu    *string `json:"waifu"`
-	Husbando *string `json:"husbando"`
-}
-
-func (s *Service) UpdateUser(ctx context.Context, params UpdateUserParams) error {
+func (s *Service) UpdateUser(ctx context.Context, params types.UpdateUserParams) error {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return ErrUnauthenticated
+		return errs.Unauthenticated
 	}
 
 	if params.Username != nil {
 		*params.Username = strings.TrimSpace(*params.Username)
-		if !ValidUsername(*params.Username) {
+		if !types.ValidUsername(*params.Username) {
 			return ErrInvalidUsername
 		}
 	}
@@ -389,7 +331,7 @@ func (s *Service) UpdateUser(ctx context.Context, params UpdateUserParams) error
 			, waifu = $3
 			, husbando = $4
 		WHERE id = $5`
-	_, err := s.DB.ExecContext(ctx, query, params.Username, params.Bio, params.Waifu, params.Husbando, uid)
+	_, err := s.DB.Exec(ctx, query, params.Username, params.Bio, params.Waifu, params.Husbando, uid)
 	if isUniqueViolation(err) {
 		return ErrUsernameTaken
 	}
@@ -406,7 +348,7 @@ func (s *Service) UpdateUser(ctx context.Context, params UpdateUserParams) error
 func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return "", ErrUnauthenticated
+		return "", errs.Unauthenticated
 	}
 
 	ct, err := detectContentType(r)
@@ -459,7 +401,7 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 		UPDATE users SET avatar = $1 WHERE id = $2
 		RETURNING (SELECT avatar FROM users WHERE id = $2) AS old_avatar
 	`
-	row := s.DB.QueryRowContext(ctx, query, avatarFileName, uid)
+	row := s.DB.QueryRow(ctx, query, avatarFileName, uid)
 	err = row.Scan(&oldAvatar)
 	if err != nil {
 		defer func() {
@@ -489,7 +431,7 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 func (s *Service) UpdateCover(ctx context.Context, r io.ReadSeeker) (string, error) {
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return "", ErrUnauthenticated
+		return "", errs.Unauthenticated
 	}
 
 	ct, err := detectContentType(r)
@@ -542,7 +484,7 @@ func (s *Service) UpdateCover(ctx context.Context, r io.ReadSeeker) (string, err
 		UPDATE users SET cover = $1 WHERE id = $2
 		RETURNING (SELECT cover FROM users WHERE id = $2) AS old_cover
 	`
-	row := s.DB.QueryRowContext(ctx, query, coverFileName, uid)
+	row := s.DB.QueryRow(ctx, query, coverFileName, uid)
 	err = row.Scan(&oldCover)
 	if err != nil {
 		defer func() {
@@ -568,22 +510,22 @@ func (s *Service) UpdateCover(ctx context.Context, r io.ReadSeeker) (string, err
 }
 
 // ToggleFollow between two users.
-func (s *Service) ToggleFollow(ctx context.Context, username string) (ToggleFollowOutput, error) {
-	var out ToggleFollowOutput
+func (s *Service) ToggleFollow(ctx context.Context, username string) (types.ToggleFollowOutput, error) {
+	var out types.ToggleFollowOutput
 	followerID, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return out, ErrUnauthenticated
+		return out, errs.Unauthenticated
 	}
 
 	username = strings.TrimSpace(username)
-	if !ValidUsername(username) {
+	if !types.ValidUsername(username) {
 		return out, ErrInvalidUsername
 	}
 
 	var followeeID string
-	err := crdb.ExecuteTx(ctx, s.DB, nil, func(tx *sql.Tx) error {
+	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		query := "SELECT id FROM users WHERE username = $1"
-		err := tx.QueryRowContext(ctx, query, username).Scan(&followeeID)
+		err := tx.QueryRow(ctx, query, username).Scan(&followeeID)
 		if err == sql.ErrNoRows {
 			return ErrUserNotFound
 		}
@@ -600,7 +542,7 @@ func (s *Service) ToggleFollow(ctx context.Context, username string) (ToggleFoll
 			SELECT EXISTS (
 				SELECT 1 FROM follows WHERE follower_id = $1 AND followee_id = $2
 			)`
-		row := tx.QueryRowContext(ctx, query, followerID, followeeID)
+		row := tx.QueryRow(ctx, query, followerID, followeeID)
 		err = row.Scan(&out.Following)
 		if err != nil {
 			return fmt.Errorf("could not query select existence of follow: %w", err)
@@ -608,39 +550,39 @@ func (s *Service) ToggleFollow(ctx context.Context, username string) (ToggleFoll
 
 		if out.Following {
 			query = "DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2"
-			_, err = tx.ExecContext(ctx, query, followerID, followeeID)
+			_, err = tx.Exec(ctx, query, followerID, followeeID)
 			if err != nil {
 				return fmt.Errorf("could not delete follow: %w", err)
 			}
 
 			query = "UPDATE users SET followees_count = followees_count - 1 WHERE id = $1"
-			if _, err = tx.ExecContext(ctx, query, followerID); err != nil {
+			if _, err = tx.Exec(ctx, query, followerID); err != nil {
 				return fmt.Errorf("could not decrement followees count: %w", err)
 			}
 
 			query = `
 				UPDATE users SET followers_count = followers_count - 1 WHERE id = $1
 				RETURNING followers_count`
-			if err = tx.QueryRowContext(ctx, query, followeeID).
+			if err = tx.QueryRow(ctx, query, followeeID).
 				Scan(&out.FollowersCount); err != nil {
 				return fmt.Errorf("could not decrement followers count: %w", err)
 			}
 		} else {
 			query = "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)"
-			_, err = tx.ExecContext(ctx, query, followerID, followeeID)
+			_, err = tx.Exec(ctx, query, followerID, followeeID)
 			if err != nil {
 				return fmt.Errorf("could not insert follow: %w", err)
 			}
 
 			query = "UPDATE users SET followees_count = followees_count + 1 WHERE id = $1"
-			if _, err = tx.ExecContext(ctx, query, followerID); err != nil {
+			if _, err = tx.Exec(ctx, query, followerID); err != nil {
 				return fmt.Errorf("could not increment followees count: %w", err)
 			}
 
 			query = `
 				UPDATE users SET followers_count = followers_count + 1 WHERE id = $1
 				RETURNING followers_count`
-			row = tx.QueryRowContext(ctx, query, followeeID)
+			row = tx.QueryRow(ctx, query, followeeID)
 			err = row.Scan(&out.FollowersCount)
 			if err != nil {
 				return fmt.Errorf("could not increment followers count: %w", err)
@@ -663,17 +605,17 @@ func (s *Service) ToggleFollow(ctx context.Context, username string) (ToggleFoll
 }
 
 // Followers in ascending order with forward pagination.
-func (s *Service) Followers(ctx context.Context, username string, first uint64, after *string) (UserProfiles, error) {
+func (s *Service) Followers(ctx context.Context, username string, first uint64, after *string) (types.UserProfiles, error) {
 	username = strings.TrimSpace(username)
-	if !ValidUsername(username) {
+	if !types.ValidUsername(username) {
 		return nil, ErrInvalidUsername
 	}
 
 	var afterUsername string
 	if after != nil {
 		var err error
-		afterUsername, err = decodeSimpleCursor(*after)
-		if err != nil || !ValidUsername(afterUsername) {
+		afterUsername, err = cursor.DecodeSimple(*after)
+		if err != nil || !types.ValidUsername(afterUsername) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -703,7 +645,7 @@ func (s *Service) Followers(ctx context.Context, username string, first uint64, 
 		WHERE follows.followee_id = (SELECT id FROM users WHERE username = @username)
 		{{ if .afterUsername }}AND username > @afterUsername{{ end }}
 		ORDER BY username ASC
-		LIMIT @first`, map[string]interface{}{
+		LIMIT @first`, map[string]any{
 		"auth":          auth,
 		"uid":           uid,
 		"username":      username,
@@ -714,18 +656,18 @@ func (s *Service) Followers(ctx context.Context, username string, first uint64, 
 		return nil, fmt.Errorf("could not build followers sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select followers: %w", err)
 	}
 
 	defer rows.Close()
 
-	var uu UserProfiles
+	var uu types.UserProfiles
 	for rows.Next() {
-		var u UserProfile
+		var u types.UserProfile
 		var avatar, cover sql.NullString
-		dest := []interface{}{
+		dest := []any{
 			&u.ID,
 			&u.Email,
 			&u.Username,
@@ -759,17 +701,17 @@ func (s *Service) Followers(ctx context.Context, username string, first uint64, 
 }
 
 // Followees in ascending order with forward pagination.
-func (s *Service) Followees(ctx context.Context, username string, first uint64, after *string) (UserProfiles, error) {
+func (s *Service) Followees(ctx context.Context, username string, first uint64, after *string) (types.UserProfiles, error) {
 	username = strings.TrimSpace(username)
-	if !ValidUsername(username) {
+	if !types.ValidUsername(username) {
 		return nil, ErrInvalidUsername
 	}
 
 	var afterUsername string
 	if after != nil {
 		var err error
-		afterUsername, err = decodeSimpleCursor(*after)
-		if err != nil || !ValidUsername(afterUsername) {
+		afterUsername, err = cursor.DecodeSimple(*after)
+		if err != nil || !types.ValidUsername(afterUsername) {
 			return nil, ErrInvalidCursor
 		}
 	}
@@ -799,7 +741,7 @@ func (s *Service) Followees(ctx context.Context, username string, first uint64, 
 		WHERE follows.follower_id = (SELECT id FROM users WHERE username = @username)
 		{{ if .afterUsername }}AND username > @afterUsername{{ end }}
 		ORDER BY username ASC
-		LIMIT @first`, map[string]interface{}{
+		LIMIT @first`, map[string]any{
 		"auth":          auth,
 		"uid":           uid,
 		"username":      username,
@@ -810,18 +752,18 @@ func (s *Service) Followees(ctx context.Context, username string, first uint64, 
 		return nil, fmt.Errorf("could not build followees sql query: %w", err)
 	}
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("could not query select followees: %w", err)
 	}
 
 	defer rows.Close()
 
-	var uu UserProfiles
+	var uu types.UserProfiles
 	for rows.Next() {
-		var u UserProfile
+		var u types.UserProfile
 		var avatar, cover sql.NullString
-		dest := []interface{}{
+		dest := []any{
 			&u.ID,
 			&u.Email,
 			&u.Username,
@@ -869,10 +811,6 @@ func (s *Service) coverURL(cover sql.NullString) *string {
 
 	str := s.CoverURLPrefix + cover.String
 	return &str
-}
-
-func ValidUsername(s string) bool {
-	return reUsername.MatchString(s)
 }
 
 func validUserBio(s string) bool {

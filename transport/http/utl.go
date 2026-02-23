@@ -13,8 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nakamauwu/nakama"
-	"github.com/nakamauwu/nakama/storage"
+	"github.com/nakamauwu/nakama/service"
+	"github.com/nicolasparada/go-errs"
+	"github.com/nicolasparada/go-errs/httperrs"
 )
 
 const proxyCacheControl = time.Hour * 24 * 14
@@ -23,7 +24,7 @@ var (
 	errBadRequest           = errors.New("bad request")
 	errStreamingUnsupported = errors.New("streaming unsupported")
 	errTeaPot               = errors.New("i am a teapot")
-	errInvalidTargetURL     = nakama.InvalidArgumentError("invalid target URL")
+	errInvalidTargetURL     = errs.InvalidArgumentError("invalid target URL")
 	errOauthTimeout         = errors.New("oauth timeout")
 	errEmailNotVerified     = errors.New("email not verified")
 	errEmailNotProvided     = errors.New("email not provided")
@@ -31,12 +32,12 @@ var (
 )
 
 type paginatedRespBody struct {
-	Items       interface{} `json:"items"`
-	StartCursor *string     `json:"startCursor"`
-	EndCursor   *string     `json:"endCursor"`
+	Items       any     `json:"items"`
+	StartCursor *string `json:"startCursor"`
+	EndCursor   *string `json:"endCursor"`
 }
 
-func (h *handler) respond(w http.ResponseWriter, v interface{}, statusCode int) {
+func (h *handler) respond(w http.ResponseWriter, v any, statusCode int) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		h.respondErr(w, fmt.Errorf("could not json marshal http response body: %w", err))
@@ -68,40 +69,26 @@ func err2code(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-
 	switch {
-	case err == errBadRequest ||
-		err == errOauthTimeout ||
-		err == errEmailNotVerified ||
-		err == errEmailNotProvided:
+	case errors.Is(err, errBadRequest) ||
+		errors.Is(err, errOauthTimeout) ||
+		errors.Is(err, errEmailNotVerified) ||
+		errors.Is(err, errEmailNotProvided):
 		return http.StatusBadRequest
-	case err == errStreamingUnsupported:
+	case errors.Is(err, errStreamingUnsupported):
 		return http.StatusExpectationFailed
-	case err == errTeaPot:
+	case errors.Is(err, errTeaPot):
 		return http.StatusTeapot
-	case errors.Is(err, nakama.ErrInvalidArgument):
-		return http.StatusUnprocessableEntity
-	case errors.Is(err, nakama.ErrNotFound) ||
-		errors.Is(err, storage.ErrNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, nakama.ErrAlreadyExists):
-		return http.StatusConflict
-	case errors.Is(err, nakama.ErrPermissionDenied):
-		return http.StatusForbidden
-	case err == nakama.ErrUnauthenticated || errors.Is(err, nakama.ErrUnauthenticated):
-		return http.StatusUnauthorized
-	case errors.Is(err, nakama.ErrUnimplemented):
-		return http.StatusNotImplemented
-	case errors.Is(err, nakama.ErrGone):
-		return http.StatusGone
-	case err == errServiceUnavailable:
+	case errors.Is(err, errServiceUnavailable):
 		return http.StatusServiceUnavailable
+	case errors.Is(err, service.ErrUnimplemented):
+		return http.StatusNotImplemented
 	}
 
-	return http.StatusInternalServerError
+	return httperrs.Code(err)
 }
 
-func (h *handler) writeSSE(w io.Writer, v interface{}) {
+func (h *handler) writeSSE(w io.Writer, v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		_ = h.logger.Log("err", fmt.Errorf("could not json marshal sse data: %w", err))

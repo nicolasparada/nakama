@@ -8,12 +8,12 @@ import (
 	"github.com/gorilla/securecookie"
 	"github.com/matryer/way"
 
+	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/storage"
-	"github.com/nakamauwu/nakama/transport"
 )
 
 type handler struct {
-	svc              transport.Service
+	svc              *service.Service
 	origin           *url.URL
 	logger           log.Logger
 	store            storage.Store
@@ -22,7 +22,7 @@ type handler struct {
 }
 
 // New makes use of the service to provide an http.Handler with predefined routing.
-func New(svc transport.Service, oauthProviders []OauthProvider, origin *url.URL, logger log.Logger, store storage.Store, cdc *securecookie.SecureCookie, promHandler http.Handler, embedStaticFiles bool) http.Handler {
+func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, logger log.Logger, store storage.Store, cdc *securecookie.SecureCookie, promHandler http.Handler, embedStaticFiles bool) http.Handler {
 	h := &handler{
 		svc:              svc,
 		origin:           origin,

@@ -1,16 +1,21 @@
-package nakama
+package service
 
 import (
-	"database/sql"
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/ory/dockertest/v3"
 )
 
-var testDB *sql.DB
+var (
+	testDB        *pgxpool.Pool
+	testCockroach *cockroach.Cockroach
+)
 
 func TestMain(m *testing.M) {
 	os.Exit(testMain(m))
@@ -37,8 +42,9 @@ func testMain(m *testing.M) int {
 		fmt.Printf("could not setup test db: %v\n", err)
 		return 1
 	}
+	testCockroach = cockroach.New(testDB)
 
-	_, err = testDB.Exec(Schema)
+	_, err = testDB.Exec(context.Background(), cockroach.Schema)
 	if err != nil {
 		fmt.Printf("could not exec schema: %v\n", err)
 		return 1
@@ -53,7 +59,7 @@ func testMain(m *testing.M) int {
 	return m.Run()
 }
 
-func setupTestDB(pool *dockertest.Pool) (*sql.DB, func() error, error) {
+func setupTestDB(pool *dockertest.Pool) (*pgxpool.Pool, func() error, error) {
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "cockroachdb/cockroach",
 		Tag:        "latest",
@@ -63,17 +69,17 @@ func setupTestDB(pool *dockertest.Pool) (*sql.DB, func() error, error) {
 		return nil, nil, fmt.Errorf("could not create cockroach resource: %w", err)
 	}
 
-	var db *sql.DB
+	var db *pgxpool.Pool
 	err = pool.Retry(func() (err error) {
 		hostPort := resource.GetHostPort("26257/tcp")
-		db, err = sql.Open("postgres", "postgresql://root@"+hostPort+"/nakama?sslmode=disable")
+		db, err = pgxpool.New(context.Background(), "postgresql://root@"+hostPort+"/nakama?sslmode=disable")
 		if err != nil {
 			return fmt.Errorf("could not open db: %w", err)
 		}
 
 		// do not close db
 
-		if err = db.Ping(); err != nil {
+		if err = db.Ping(context.Background()); err != nil {
 			return fmt.Errorf("could not ping db: %w", err)
 		}
 

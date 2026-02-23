@@ -10,7 +10,8 @@ import (
 
 	"github.com/matryer/way"
 
-	"github.com/nakamauwu/nakama"
+	"github.com/nakamauwu/nakama/service"
+	"github.com/nakamauwu/nakama/types"
 )
 
 type createTimelineItemInput struct {
@@ -44,8 +45,8 @@ func (h *handler) createTimelineItem(w http.ResponseWriter, r *http.Request) {
 		}
 		if files, ok := r.MultipartForm.File["media"]; ok {
 			for _, header := range files {
-				if header.Size > nakama.MaxMediaItemBytes {
-					h.respondErr(w, nakama.ErrMediaItemTooLarge)
+				if header.Size > service.MaxMediaItemBytes {
+					h.respondErr(w, service.ErrMediaItemTooLarge)
 					return
 				}
 
@@ -74,7 +75,7 @@ func (h *handler) createTimelineItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ti.Post.Reactions == nil {
-		ti.Post.Reactions = []nakama.Reaction{} // non null array
+		ti.Post.Reactions = []types.Reaction{} // non null array
 	}
 
 	if ti.Post.MediaURLs == nil {
@@ -101,12 +102,12 @@ func (h *handler) timeline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tt == nil {
-		tt = []nakama.TimelineItem{} // non null array
+		tt = []types.TimelineItem{} // non null array
 	}
 
 	for i := range tt {
 		if tt[i].Post.Reactions == nil {
-			tt[i].Post.Reactions = []nakama.Reaction{} // non null array
+			tt[i].Post.Reactions = []types.Reaction{} // non null array
 		}
 		if tt[i].Post.MediaURLs == nil {
 			tt[i].Post.MediaURLs = []string{} // non null array
@@ -141,7 +142,7 @@ func (h *handler) timelineItemStream(w http.ResponseWriter, r *http.Request) {
 	select {
 	case ti := <-tt:
 		if ti.Post.Reactions == nil {
-			ti.Post.Reactions = []nakama.Reaction{} // non null array
+			ti.Post.Reactions = []types.Reaction{} // non null array
 		}
 		if ti.Post.MediaURLs == nil {
 			ti.Post.MediaURLs = []string{} // non null array

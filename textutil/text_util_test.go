@@ -1,11 +1,13 @@
-package nakama
+package textutil_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/nakamauwu/nakama/textutil"
 )
 
-func Test_collectTags(t *testing.T) {
+func TestCollectTags(t *testing.T) {
 	tt := []struct {
 		name  string
 		given string
@@ -55,10 +57,14 @@ func Test_collectTags(t *testing.T) {
 			given: "https://example.org#nope",
 			want:  nil,
 		},
+		{
+			given: "#repeated #repeated #repeated",
+			want:  []string{"repeated"},
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := collectTags(tc.given)
+			got := textutil.CollectTags(tc.given)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("collectTags(%q) = %+v, want %+v", tc.given, got, tc.want)
 			}
