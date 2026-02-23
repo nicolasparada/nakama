@@ -11,7 +11,7 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/lib/pq"
+	"github.com/nicolasparada/go-db"
 )
 
 const (
@@ -23,13 +23,11 @@ const (
 var queriesCache sync.Map
 
 func isUniqueViolation(err error) bool {
-	pqerr, ok := err.(*pq.Error)
-	return ok && pqerr.Code == "23505"
+	return db.IsUniqueViolationError(err)
 }
 
 func isForeignKeyViolation(err error) bool {
-	pqerr, ok := err.(*pq.Error)
-	return ok && pqerr.Code == "23503"
+	return db.IsForeignKeyViolationError(err)
 }
 
 func buildQuery(text string, data map[string]any) (string, []any, error) {

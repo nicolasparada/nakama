@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -271,7 +272,7 @@ func (s *Service) User(ctx context.Context, username string) (types.UserProfile,
 		dest = append(dest, &u.Following, &u.Followeed)
 	}
 	err = s.DB.QueryRow(ctx, query, args...).Scan(dest...)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrUserNotFound
 	}
 
@@ -526,7 +527,7 @@ func (s *Service) ToggleFollow(ctx context.Context, username string) (types.Togg
 	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
 		query := "SELECT id FROM users WHERE username = $1"
 		err := tx.QueryRow(ctx, query, username).Scan(&followeeID)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrUserNotFound
 		}
 

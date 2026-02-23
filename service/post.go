@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lib/pq"
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/textutil"
@@ -169,7 +169,7 @@ func (s *Service) Posts(ctx context.Context, last uint64, before *string, opts .
 			&p.NSFW,
 			&rawReactions,
 			&p.CommentsCount,
-			pq.Array(&media),
+			&media,
 			&p.CreatedAt,
 			&p.UpdatedAt,
 		}
@@ -317,7 +317,7 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 		&p.NSFW,
 		&rawReactions,
 		&p.CommentsCount,
-		pq.Array(&media),
+		&media,
 		&p.CreatedAt,
 		&p.UpdatedAt,
 		&u.Username,
@@ -327,7 +327,7 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 		dest = append(dest, &p.Mine, &rawUserReactions, &p.Subscribed)
 	}
 	err = s.DB.QueryRow(ctx, query, args...).Scan(dest...)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrPostNotFound
 	}
 
@@ -391,7 +391,7 @@ func (s *Service) postCreatedAt(ctx context.Context, postID string) (time.Time, 
 
 	var createdAt time.Time
 	err := s.DB.QueryRow(ctx, q, postID).Scan(&createdAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return createdAt, ErrPostNotFound
 	}
 
@@ -527,7 +527,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 			WHERE posts.id = $2`
 		row := tx.QueryRow(ctx, query, uid, postID)
 		err := row.Scan(&rawReactions, &rawUserReactions)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPostNotFound
 		}
 

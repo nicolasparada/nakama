@@ -3,14 +3,13 @@ package service
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lib/pq"
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/textutil"
@@ -78,7 +77,7 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 	for rows.Next() {
 		var n types.Notification
 		var readAt *time.Time
-		if err = rows.Scan(&n.ID, pq.Array(&n.Actors), &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.Actors, &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
 			return nil, fmt.Errorf("could not scan notification: %w", err)
 		}
 
@@ -214,16 +213,16 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 		var nid string
 		query = "SELECT id FROM notifications WHERE user_id = $1 AND type = 'follow' AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')"
 		err = tx.QueryRow(ctx, query, followeeID).Scan(&nid)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("could not query select unread follow notification: %w", err)
 		}
 
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			actors := []string{actor}
 			query = `
 				INSERT INTO notifications (user_id, actors, type) VALUES ($1, $2, 'follow')
 				RETURNING id, issued_at`
-			row := tx.QueryRow(ctx, query, followeeID, pq.Array(actors))
+			row := tx.QueryRow(ctx, query, followeeID, actors)
 			err = row.Scan(&n.ID, &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not insert follow notification: %w", err)
@@ -238,7 +237,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 				WHERE id = $2
 				RETURNING actors, issued_at`
 			row := tx.QueryRow(ctx, query, actor, nid)
-			err = row.Scan(pq.Array(&n.Actors), &n.IssuedAt)
+			err = row.Scan(&n.Actors, &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not update follow notification: %w", err)
 			}
@@ -272,7 +271,7 @@ func (s *Service) notifyComment(c types.Comment) {
 			actors = array_prepend($4, array_remove(notifications.actors, $4)),
 			issued_at = now()
 		RETURNING id, user_id, actors, issued_at`,
-		pq.Array([]string{actor}),
+		[]string{actor},
 		c.PostID,
 		c.UserID,
 		actor,
@@ -286,7 +285,7 @@ func (s *Service) notifyComment(c types.Comment) {
 
 	for rows.Next() {
 		var n types.Notification
-		if err = rows.Scan(&n.ID, &n.UserID, pq.Array(&n.Actors), &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.UserID, &n.Actors, &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment notification: %w", err))
 			return
 		}
@@ -316,10 +315,10 @@ func (s *Service) notifyPostMention(p types.Post) {
 		WHERE users.id != $3
 			AND username = ANY($4)
 		RETURNING id, user_id, issued_at`,
-		pq.Array(actors),
+		actors,
 		p.ID,
 		p.UserID,
-		pq.Array(mentions),
+		mentions,
 	)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not insert post mention notifications: %w", err))
@@ -364,10 +363,10 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 			actors = array_prepend($5, array_remove(notifications.actors, $5)),
 			issued_at = now()
 		RETURNING id, user_id, actors, issued_at`,
-		pq.Array([]string{actor}),
+		[]string{actor},
 		c.PostID,
 		c.UserID,
-		pq.Array(mentions),
+		mentions,
 		actor,
 	)
 	if err != nil {
@@ -379,7 +378,7 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 
 	for rows.Next() {
 		var n types.Notification
-		if err = rows.Scan(&n.ID, &n.UserID, pq.Array(&n.Actors), &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.UserID, &n.Actors, &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment mention notification: %w", err))
 			return
 		}

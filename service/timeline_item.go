@@ -19,7 +19,6 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/go-kit/log/level"
 	"github.com/jackc/pgx/v5"
-	"github.com/lib/pq"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"golang.org/x/sync/errgroup"
 
@@ -178,7 +177,7 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 		query := `
 			INSERT INTO posts (user_id, content, spoiler_of, nsfw, media) VALUES ($1, $2, $3, $4, $5)
 			RETURNING id, created_at`
-		row := tx.QueryRow(ctx, query, uid, content, spoilerOf, nsfw, pq.Array(fileNames))
+		row := tx.QueryRow(ctx, query, uid, content, spoilerOf, nsfw, fileNames)
 		err := row.Scan(&p.ID, &p.CreatedAt)
 		if isForeignKeyViolation(err) {
 			return ErrUserGone
@@ -365,7 +364,7 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (ty
 			&rawReactions,
 			&rawUserReactions,
 			&p.CommentsCount,
-			pq.Array(&media),
+			&media,
 			&p.CreatedAt,
 			&p.UpdatedAt,
 			&p.Mine,

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -263,7 +264,7 @@ func (s *Service) UpdateComment(ctx context.Context, in types.UpdateComment) (ty
 		query := "SELECT user_id = $1 FROM comments WHERE id = $2"
 		row := tx.QueryRow(ctx, query, uid, in.ID)
 		err := row.Scan(&isOwner)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCommentNotFound
 		}
 
@@ -279,7 +280,7 @@ func (s *Service) UpdateComment(ctx context.Context, in types.UpdateComment) (ty
 		query = "SELECT created_at FROM comments WHERE id = $1"
 		row = tx.QueryRow(ctx, query, in.ID)
 		err = row.Scan(&createdAt)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCommentNotFound
 		}
 
@@ -295,7 +296,7 @@ func (s *Service) UpdateComment(ctx context.Context, in types.UpdateComment) (ty
 		query = "UPDATE comments SET content = COALESCE($1::varchar, content) WHERE id = $2 RETURNING content"
 		row = tx.QueryRow(ctx, query, in.Content, in.ID)
 		err = row.Scan(&out.Content)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCommentNotFound
 		}
 
@@ -322,7 +323,7 @@ func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 		query := "SELECT post_id FROM comments WHERE id = $1 AND user_id = $2"
 		row := tx.QueryRow(ctx, query, commentID, uid)
 		err := row.Scan(&postID)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCommentNotFound
 		}
 
@@ -388,7 +389,7 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, commentID string, i
 			WHERE comments.id = $2`
 		row := tx.QueryRow(ctx, query, uid, commentID)
 		err := row.Scan(&rawReactions, &rawUserReactions)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrCommentNotFound
 		}
 

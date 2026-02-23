@@ -19,7 +19,6 @@ require (
 	github.com/jackc/pgxutil v0.0.0-20231015020832-ec5434149869
 	github.com/joho/godotenv v1.5.1
 	github.com/kyokomi/emoji/v2 v2.2.13
-	github.com/lib/pq v1.11.2
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/matryer/way v0.0.0-20180416093233-9632d0c407b0
 	github.com/minio/minio-go/v7 v7.0.98
@@ -63,6 +62,7 @@ require (
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
+	github.com/lib/pq v1.11.2 // indirect
 	github.com/matryer/moq v0.6.0 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
