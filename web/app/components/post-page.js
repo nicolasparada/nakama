@@ -23,7 +23,8 @@ import "./toast-item.js"
  */
 
 /**
- * @typedef {import("../types.js").Page<import("../types.js").Comment>} CommentsPage
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
  */
 
 /**
@@ -308,7 +309,7 @@ function fetchPost(postID) {
 
 /**
  * @param {ListComments} input
- * @returns {Promise<CommentsPage>}
+ * @returns {Promise<Page<Comment>>}
  */
 function fetchComments(input) {
     const u = new URL("/api/posts/" + encodeURIComponent(input.postID) + "/comments", location.origin)
@@ -326,7 +327,7 @@ function fetchComments(input) {
     }
     return request("GET", u.toString())
         .then(resp => resp.body)
-        .then((/**@type {CommentsPage}*/ page) => {
+        .then((/**@type {Page<Comment>}*/ page) => {
             page.items = page.items.map(c => ({
                 ...c,
                 createdAt: new Date(c.createdAt)
