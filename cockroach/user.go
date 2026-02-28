@@ -12,6 +12,21 @@ import (
 	"github.com/nicolasparada/go-errs"
 )
 
+const (
+	usersColumns = `
+		  users.id
+		, users.username
+		, users.avatar
+	`
+	userJSONB = `
+		jsonb_build_object(
+			'id', users.id,
+			'username', users.username,
+			'avatar', users.avatar
+		) AS user
+	`
+)
+
 func (c *Cockroach) CreateUser(ctx context.Context, email, username string) (string, error) {
 	const query = `
 		INSERT INTO users (email, username)
@@ -39,7 +54,7 @@ func (c *Cockroach) CreateUser(ctx context.Context, email, username string) (str
 }
 
 func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error) {
-	const query = "SELECT id, username, avatar FROM users WHERE id = @user_id"
+	query := `SELECT ` + usersColumns + ` FROM users WHERE id = @user_id`
 	args := pgx.StrictNamedArgs{
 		"user_id": userID,
 	}
@@ -56,7 +71,7 @@ func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error)
 }
 
 func (c *Cockroach) UserByEmail(ctx context.Context, email string) (types.User, error) {
-	const query = "SELECT id, username, avatar FROM users WHERE email = @email"
+	query := `SELECT ` + usersColumns + ` FROM users WHERE email = @email`
 	args := pgx.StrictNamedArgs{
 		"email": email,
 	}
@@ -104,7 +119,7 @@ func (c *Cockroach) EmailTaken(ctx context.Context, email, userID string) (bool,
 }
 
 func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (types.User, error) {
-	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING id, username, avatar"
+	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING " + usersColumns
 	args := pgx.StrictNamedArgs{
 		"email":   email,
 		"user_id": userID,

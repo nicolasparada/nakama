@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
-	"strconv"
 
 	"github.com/matryer/way"
 
@@ -43,29 +42,33 @@ func (h *handler) comments(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	q := r.URL.Query()
-	postID := way.Param(ctx, "post_id")
-	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
-	before := emptyStrPtr(q.Get("before"))
-	cc, err := h.svc.Comments(ctx, postID, last, before)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if cc == nil {
-		cc = types.Comments{} // non null array
+	in := types.ListComments{
+		PostID:   way.Param(ctx, "post_id"),
+		PageArgs: pageArgs,
+	}
+	page, err := h.svc.Comments(ctx, in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
 	}
 
-	for i := range cc {
-		if cc[i].Reactions == nil {
-			cc[i].Reactions = []types.Reaction{} // non null array
+	if page.Items == nil {
+		page.Items = types.Comments{} // non null array
+	}
+
+	for i := range page.Items {
+		if page.Items[i].Reactions == nil {
+			page.Items[i].Reactions = []types.Reaction{} // non null array
 		}
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     cc,
-		EndCursor: cc.EndCursor(),
-	}, http.StatusOK)
+	h.respond(w, page, http.StatusOK)
 }
 
 func (h *handler) commentStream(w http.ResponseWriter, r *http.Request) {

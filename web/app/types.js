@@ -43,7 +43,6 @@
  * @prop {string|Date} updatedAt
  * @prop {User=} user
  * @prop {boolean} mine
- * @prop {boolean} liked
  * @prop {boolean} subscribed
  */
 
@@ -88,19 +87,41 @@
  * @template T
  * @typedef Page
  * @prop {T[]} items
- * @prop {string|null} startCursor
+ * @prop {PageInfo} pageInfo
+ */
+
+/**
+ * @typedef PageInfo
+ * @prop {boolean} hasNextPage
  * @prop {string|null} endCursor
+ * @prop {boolean} hasPrevPage
+ * @prop {string|null} startCursor
  */
 
 /**
  * @typedef Comment
  * @prop {string} id
+ * @prop {string} userID
+ * @prop {string} postID
  * @prop {string} content
  * @prop {ReactionCount[]} reactions
  * @prop {string|Date} createdAt
  * @prop {User=} user
  * @prop {boolean} mine
- * @prop {boolean} liked
+ */
+
+/**
+ * @typedef ListComments
+ * @prop {string} postID
+ * @prop {PageArgs} pageArgs
+ */
+
+/**
+ * @typedef PageArgs
+ * @prop {number=} first
+ * @prop {string=} after
+ * @prop {number=} last
+ * @prop {string=} before
  */
 
 /**

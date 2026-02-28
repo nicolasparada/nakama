@@ -10,24 +10,46 @@ import { navigate } from "../router.js"
 import "./post-item.js"
 import "./toast-item.js"
 
-const pageSize = 10
+/**
+ * @typedef {import("../types.js").Post} Post
+ */
+
+/**
+ * @typedef {import("../types.js").Comment} Comment
+ */
+
+/**
+ * @typedef {import("../types.js").ListComments} ListComments
+ */
+
+/**
+ * @typedef {import("../types.js").Page<import("../types.js").Comment>} CommentsPage
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
 
 export default function ({ params }) {
     return html`<post-page .postID=${params.postID}></post-page>`
 }
 
+/**
+ * @param {object} props 
+ * @param {string} props.postID
+ */
 function PostPage({ postID }) {
     const [auth] = useStore(authStore)
-    const [post, setPost] = useState(/** @type {import("../types.js").Post|null} */(null))
-    const [comments, setComments] = useState(/** @type {import("../types.js").Comment[]} */([]))
+    const [post, setPost] = useState(/** @type {Post|null} */(null))
+    const [comments, setComments] = useState(/** @type {Comment[]} */([]))
     const [commentsEndCursor, setCommentsEndCursor] = useState(/** @type {string|null} */(null))
     const [fetching, setFetching] = useState(post === null)
     const [postErr, setPostErr] = useState(/** @type {Error|null} */(null))
     const [commentsErr, setCommentsErr] = useState(/** @type {Error|null} */(null))
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMoreComments, setNoMoreComments] = useState(false)
-    const [queue, setQueue] = useState(/** @type {import("../types.js").Comment[]} */([]))
-    const [toast, setToast] = useState(/** @type {import("./toast-item.js").Toast|null} */(null))
+    const [queue, setQueue] = useState(/** @type {Comment[]} */([]))
+    const [toast, setToast] = useState(/** @type {Toast|null} */(null))
     const commentsRef = useRef(comments)
     const queueRef = useRef(queue)
 
@@ -36,7 +58,7 @@ function PostPage({ postID }) {
     }
 
     const onCommentCreated = ev => {
-        const payload = /** @type {import("../types.js").Comment} */ (ev.detail)
+        const payload = /** @type {Comment} */ (ev.detail)
         setPost(p => ({
             ...p,
             commentsCount: p.commentsCount + 1,
@@ -45,7 +67,7 @@ function PostPage({ postID }) {
         setQueue([])
     }
 
-    const onNewCommentArrive = (/** @type {import("../types.js").Comment} */ c) => {
+    const onNewCommentArrive = (/** @type {Comment} */ c) => {
         if (hasComment(commentsRef.current, c) || hasComment(queueRef.current, c)) {
             return
         }
@@ -63,7 +85,7 @@ function PostPage({ postID }) {
     }
 
     const onCommentDeleted = ev => {
-        const payload = /** @type {import("../types.js").Comment} */ (ev.detail)
+        const payload = /** @type {Comment} */ (ev.detail)
         setComments(cc => cc.filter(c => c.id !== payload.id))
         setPost(p => ({
             ...p,
@@ -82,11 +104,11 @@ function PostPage({ postID }) {
         }
 
         setLoadingMore(true)
-        fetchComments(postID, commentsEndCursor).then(({ items: comments, endCursor }) => {
-            setComments(cc => [...cc, ...comments])
-            setCommentsEndCursor(endCursor)
+        fetchComments({postID, pageArgs: {after: commentsEndCursor}}).then(page => {
+            setComments(cc => [...cc, ...page.items])
+            setCommentsEndCursor(page.pageInfo.endCursor)
 
-            if (comments.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreComments(true)
             }
         }, err => {
@@ -109,14 +131,20 @@ function PostPage({ postID }) {
     useEffect(() => {
         setFetching(true)
         Promise.all([
-            fetchPost(postID).catch(setPostErr),
-            fetchComments(postID).catch(setCommentsErr),
-        ]).then(([post, { items: comments, endCursor }]) => {
+            fetchPost(postID).catch(err => {
+                setPostErr(err)
+                throw void 0 // to prevent Promise.all from resolving successfully
+            }),
+            fetchComments({postID, pageArgs: {}}).catch(err => {
+                setCommentsErr(err)
+                throw void 0 // to prevent Promise.all from resolving successfully
+            }),
+        ]).then(([post, commentsPage]) => {
             setPost(post)
-            setComments(comments)
-            setCommentsEndCursor(endCursor)
+            setComments(commentsPage.items)
+            setCommentsEndCursor(commentsPage.pageInfo.endCursor)
 
-            if (comments.length < pageSize) {
+            if (!commentsPage.pageInfo.hasNextPage) {
                 setNoMoreComments(true)
             }
         }).finally(() => {
@@ -265,19 +293,40 @@ function CommentForm({ postID }) {
 // @ts-ignore
 customElements.define("comment-form", component(CommentForm, { useShadowDOM: false }))
 
+/**
+ * @param {string} postID 
+ * @returns {Promise<Post>}
+ */
 function fetchPost(postID) {
     return request("GET", "/api/posts/" + encodeURIComponent(postID))
         .then(resp => resp.body)
-        .then(post => {
+        .then((/**@type {Post}*/ post) => {
             post.createdAt = new Date(post.createdAt)
             return post
         })
 }
 
-function fetchComments(postID, before = "", last = pageSize) {
-    return request("GET", `/api/posts/${encodeURIComponent(postID)}/comments?last=${last}&before=${before}`)
+/**
+ * @param {ListComments} input
+ * @returns {Promise<CommentsPage>}
+ */
+function fetchComments(input) {
+    const u = new URL("/api/posts/" + encodeURIComponent(input.postID) + "/comments", location.origin)
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
-        .then(page => {
+        .then((/**@type {CommentsPage}*/ page) => {
             page.items = page.items.map(c => ({
                 ...c,
                 createdAt: new Date(c.createdAt)
@@ -302,7 +351,7 @@ function subscribeToComments(postID, cb) {
     })
 }
 
-function fetchUsernames(startingWith = "", after = "", first = pageSize) {
+function fetchUsernames(startingWith = "", after = "", first = 10) {
     return request("GET", `/api/usernames?starting_with=${encodeURIComponent(startingWith)}&after=${encodeURIComponent(after)}&first=${encodeURIComponent(first)}`)
         .then(resp => resp.body)
 }

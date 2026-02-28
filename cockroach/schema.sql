@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
     PRIMARY KEY (user_id, comment_id, reaction)
 );
 
+-- Index to speed up lookups of a user's reactions on a comment
+CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_user ON comment_reactions (comment_id, user_id);
+
 CREATE TABLE IF NOT EXISTS post_tags (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
     post_id UUID NOT NULL REFERENCES posts ON DELETE CASCADE,

@@ -13,8 +13,8 @@ const CommentContentMaxLength = 2048
 
 type Comment struct {
 	ID        string     `json:"id"`
-	UserID    string     `json:"-"`
-	PostID    string     `json:"-"`
+	UserID    string     `json:"userID" db:"user_id"`
+	PostID    string     `json:"postID" db:"post_id"`
 	Content   string     `json:"content"`
 	Reactions []Reaction `json:"reactions"`
 	CreatedAt time.Time  `json:"createdAt" db:"created_at"`
@@ -57,6 +57,28 @@ func (in *CreateComment) Validate() error {
 	}
 
 	return nil
+}
+
+type ListComments struct {
+	PostID string
+	PageArgs
+	authUserID *string
+}
+
+func (in *ListComments) SetAuthUserID(userID string) {
+	in.authUserID = &userID
+}
+
+func (in ListComments) AuthUserID() *string {
+	return in.authUserID
+}
+
+func (in *ListComments) Validate() error {
+	if !ValidUUIDv4(in.PostID) {
+		return errs.InvalidArgumentError("invalid post ID")
+	}
+
+	return in.PageArgs.Validate()
 }
 
 type UpdateComment struct {

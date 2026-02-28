@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/nakamauwu/nakama/service"
+	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
 	"github.com/nicolasparada/go-errs/httperrs"
 )
@@ -168,4 +170,36 @@ func redirectWithHashFragment(w http.ResponseWriter, r *http.Request, uri *url.U
 	location := uri.String()
 	location = strings.Replace(location, "?", "#", 1)
 	http.Redirect(w, r, location, statusCode)
+}
+
+func parsePageArgs(q url.Values) (types.PageArgs, error) {
+	var pageArgs types.PageArgs
+
+	if q.Has("first") {
+		first, err := strconv.ParseUint(q.Get("first"), 10, 64)
+		if err != nil {
+			return pageArgs, errs.InvalidArgumentError("invalid first page arg")
+		}
+
+		pageArgs.First = new(uint(first))
+	}
+
+	if q.Has("after") {
+		pageArgs.After = new(q.Get("after"))
+	}
+
+	if q.Has("last") {
+		last, err := strconv.ParseUint(q.Get("last"), 10, 64)
+		if err != nil {
+			return pageArgs, errs.InvalidArgumentError("invalid last page arg")
+		}
+
+		pageArgs.Last = new(uint(last))
+	}
+
+	if q.Has("before") {
+		pageArgs.Before = new(q.Get("before"))
+	}
+
+	return pageArgs, nil
 }
