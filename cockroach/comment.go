@@ -13,13 +13,48 @@ import (
 	"github.com/nicolasparada/go-errs"
 )
 
-const commentsColumns = `
+const sqlCommentCols = `
 	  comments.id
 	, comments.user_id
 	, comments.post_id
 	, comments.content
 	, comments.created_at
 `
+
+// sqlSelectCommentsReactions adds a `reacted` field to each reaction, producing something like this:
+//
+//	[
+//		{ "type": "emoji", "reaction": "❤️", "count": 3, "reacted": true },
+//		{ "type": "emoji", "reaction": "😂", "count": 2, "reacted": false }
+//	]
+const sqlSelectCommentsReactions = `
+	CASE WHEN comments.reactions IS NULL THEN NULL
+	ELSE (
+		SELECT jsonb_agg(
+			jsonb_set(
+				reaction,
+				'{reacted}',
+				to_jsonb(COALESCE(user_reactions.reactions, '{}'::jsonb) ? ((reaction ->> 'type') || ':' || (reaction ->> 'reaction'))),
+				true
+			)
+		)
+		FROM jsonb_array_elements(comments.reactions) AS reaction
+	) END AS reactions`
+
+// sqlJoinCommentReactions builds an object with keys being the reaction type and value, producing something like this:
+//
+//	{
+//		"emoji:❤️": true
+//	}
+const sqlJoinCommentReactions = `
+	LEFT JOIN (
+		SELECT
+			comment_reactions.comment_id,
+			jsonb_object_agg(comment_reactions.type || ':' || comment_reactions.reaction, true) AS reactions
+		FROM comment_reactions
+		WHERE comment_reactions.user_id = @viewer_id
+		GROUP BY comment_reactions.comment_id
+	) AS user_reactions ON user_reactions.comment_id = comments.id`
 
 func (c *Cockroach) CreateComment(ctx context.Context, in types.CreateComment) (types.Created, error) {
 	var out types.Created
@@ -79,35 +114,27 @@ func (c *Cockroach) createComment(ctx context.Context, in types.CreateComment) (
 func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.Page[types.Comment], error) {
 	var out types.Page[types.Comment]
 
-	args := pgx.StrictNamedArgs{
-		"post_id": in.PostID,
+	args := pgx.StrictNamedArgs{"post_id": in.PostID}
+	selects := []string{sqlCommentCols, sqlUserJSONB}
+	joins := []string{"INNER JOIN users ON comments.user_id = users.id"}
+	filters := []string{"comments.post_id = @post_id"}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
 	}
 
-	var userReactionsJoin string
 	if in.ViewerID() != nil {
-		// This join produces something like this:
-		// {
-		//   "emoji:❤️": true
-		// }
-		userReactionsJoin = `
-			LEFT JOIN (
-				SELECT
-					comment_reactions.comment_id,
-					jsonb_object_agg(comment_reactions.type || ':' || comment_reactions.reaction, true) AS reactions
-				FROM comment_reactions
-				WHERE comment_reactions.user_id = @viewer_id
-				GROUP BY comment_reactions.comment_id
-			) AS user_reactions ON user_reactions.comment_id = comments.id
-		`
 		args["viewer_id"] = *in.ViewerID()
+		selects = append(selects, `(comments.user_id = @viewer_id) AS mine`, sqlSelectCommentsReactions)
+		joins = append(joins, sqlJoinCommentReactions)
+	} else {
+		selects = append(selects, `false AS mine`, `comments.reactions`)
 	}
 
 	pageArgs, err := ParsePageArgs[time.Time](in.PageArgs)
 	if err != nil {
 		return out, err
 	}
-
-	filters := []string{"comments.post_id = @post_id"}
 
 	if pageArgs.After != nil {
 		filters = append(filters, "(comments.created_at, comments.id) < (@after_created_at, @after_id)")
@@ -128,47 +155,19 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.First, defaultPageSize)+1) // +1 to check if there's a next page
 	}
 
-	query := `
-		SELECT ` + commentsColumns + `, ` + userJSONB
-
-	if in.ViewerID() == nil {
-		query += ` , false AS mine `
-	} else {
-		query += ` , (comments.user_id = @viewer_id) AS mine `
-	}
-
-	if in.ViewerID() == nil {
-		query += ` , comments.reactions `
-	} else {
-		// This select produces something like this:
-		// [
-		//   { "type": "emoji", "reaction": "❤️", "count": 3, "reacted": true },
-		//   { "type": "emoji", "reaction": "😂", "count": 2, "reacted": false }
-		// ]
-		query += `
-			, CASE
-				WHEN comments.reactions IS NULL THEN NULL
-				ELSE (
-					SELECT jsonb_agg(
-						jsonb_set(
-							reaction,
-							'{reacted}',
-							to_jsonb(COALESCE(user_reactions.reactions, '{}'::jsonb) ? ((reaction ->> 'type') || ':' || (reaction ->> 'reaction'))),
-							true
-						)
-					)
-					FROM jsonb_array_elements(comments.reactions) AS reaction
-				)
-				END AS reactions
-			`
-	}
-	query += `
+	query := fmt.Sprintf(`
+		SELECT %s
 		FROM comments
-		INNER JOIN users ON comments.user_id = users.id
-		` + userReactionsJoin + `
-		WHERE ` + strings.Join(filters, " AND ") + `
-		` + order + `
-		` + limit
+		%s
+		WHERE %s
+		%s
+		%s`,
+		strings.Join(selects, ",\n\t\t"),
+		strings.Join(joins, "\n\t\t"),
+		strings.Join(filters, " AND "),
+		order,
+		limit,
+	)
 
 	comments, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Comment])
 	if err != nil {
@@ -177,10 +176,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 
 	out.Items = comments
 	applyPageInfo(&out, pageArgs, func(c types.Comment) Cursor[time.Time] {
-		return Cursor[time.Time]{
-			ID:    c.ID,
-			Value: c.CreatedAt,
-		}
+		return Cursor[time.Time]{ID: c.ID, Value: c.CreatedAt}
 	})
 
 	return out, nil

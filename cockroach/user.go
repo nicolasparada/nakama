@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	usersColumns = `
+	sqlUserCols = `
 		  users.id
 		, users.username
 		, users.avatar
 	`
-	userJSONB = `
+	sqlUserJSONB = `
 		jsonb_build_object(
 			'id', users.id,
 			'username', users.username,
@@ -54,7 +54,7 @@ func (c *Cockroach) CreateUser(ctx context.Context, email, username string) (str
 }
 
 func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error) {
-	query := `SELECT ` + usersColumns + ` FROM users WHERE id = @user_id`
+	query := `SELECT ` + sqlUserCols + ` FROM users WHERE id = @user_id`
 	args := pgx.StrictNamedArgs{
 		"user_id": userID,
 	}
@@ -71,7 +71,7 @@ func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error)
 }
 
 func (c *Cockroach) UserByEmail(ctx context.Context, email string) (types.User, error) {
-	query := `SELECT ` + usersColumns + ` FROM users WHERE email = @email`
+	query := `SELECT ` + sqlUserCols + ` FROM users WHERE email = @email`
 	args := pgx.StrictNamedArgs{
 		"email": email,
 	}
@@ -119,7 +119,7 @@ func (c *Cockroach) EmailTaken(ctx context.Context, email, userID string) (bool,
 }
 
 func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (types.User, error) {
-	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING " + usersColumns
+	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING " + sqlUserCols
 	args := pgx.StrictNamedArgs{
 		"email":   email,
 		"user_id": userID,
