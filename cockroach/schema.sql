@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS comments (
     INDEX sorted_comments (created_at DESC, id)
 );
 
+DROP INDEX IF EXISTS sorted_comments;
+
+CREATE INDEX IF NOT EXISTS idx_comments_post_id_sorted
+ON comments (post_id, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS comment_reactions (
     user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
     comment_id UUID NOT NULL REFERENCES comments ON DELETE CASCADE,
@@ -93,8 +98,8 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
 
 DROP INDEX IF EXISTS idx_comment_reactions_comment_user;
 
-CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_user 
-ON comment_reactions (comment_id, user_id) 
+CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_user
+ON comment_reactions (comment_id, user_id)
 STORING (type);
 
 CREATE TABLE IF NOT EXISTS post_tags (
