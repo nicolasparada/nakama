@@ -10,7 +10,7 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-const defaultPageSize = 3
+const defaultPageSize = 15
 
 type Cursor[T any] struct {
 	ID string `msgpack:"i"`
