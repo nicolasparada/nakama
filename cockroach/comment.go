@@ -80,8 +80,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	var out types.Page[types.Comment]
 
 	args := pgx.StrictNamedArgs{
-		"post_id":   in.PostID,
-		"viewer_id": in.ViewerID(),
+		"post_id": in.PostID,
 	}
 
 	var userReactionsJoin string
@@ -96,10 +95,11 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 					comment_reactions.comment_id,
 					jsonb_object_agg(comment_reactions.type || ':' || comment_reactions.reaction, true) AS reactions
 				FROM comment_reactions
-				WHERE comment_reactions.user_id = @viewer_id::varchar
+				WHERE comment_reactions.user_id = @viewer_id
 				GROUP BY comment_reactions.comment_id
 			) AS user_reactions ON user_reactions.comment_id = comments.id
 		`
+		args["viewer_id"] = *in.ViewerID()
 	}
 
 	pageArgs, err := ParsePageArgs[time.Time](in.PageArgs)
@@ -129,32 +129,39 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	}
 
 	query := `
-		SELECT ` + commentsColumns + `, ` + userJSONB + `
-			, (@viewer_id::varchar IS NOT NULL AND comments.user_id = @viewer_id::varchar) AS mine
-		`
+		SELECT ` + commentsColumns + `, ` + userJSONB
 
-	// This select produces something like this:
-	// [
-	//   { "type": "emoji", "reaction": "❤️", "count": 3, "reacted": true },
-	//   { "type": "emoji", "reaction": "😂", "count": 2, "reacted": false }
-	// ]
-	query += `
-		, CASE
-			WHEN comments.reactions IS NULL THEN NULL
-			WHEN @viewer_id::varchar IS NULL THEN comments.reactions
-			ELSE (
-				SELECT jsonb_agg(
-					jsonb_set(
-						reaction,
-						'{reacted}',
-						to_jsonb(COALESCE(user_reactions.reactions, '{}'::jsonb) ? ((reaction ->> 'type') || ':' || (reaction ->> 'reaction'))),
-						true
+	if in.ViewerID() == nil {
+		query += ` , false AS mine `
+	} else {
+		query += ` , (comments.user_id = @viewer_id) AS mine `
+	}
+
+	if in.ViewerID() == nil {
+		query += ` , comments.reactions `
+	} else {
+		// This select produces something like this:
+		// [
+		//   { "type": "emoji", "reaction": "❤️", "count": 3, "reacted": true },
+		//   { "type": "emoji", "reaction": "😂", "count": 2, "reacted": false }
+		// ]
+		query += `
+			, CASE
+				WHEN comments.reactions IS NULL THEN NULL
+				ELSE (
+					SELECT jsonb_agg(
+						jsonb_set(
+							reaction,
+							'{reacted}',
+							to_jsonb(COALESCE(user_reactions.reactions, '{}'::jsonb) ? ((reaction ->> 'type') || ':' || (reaction ->> 'reaction'))),
+							true
+						)
 					)
+					FROM jsonb_array_elements(comments.reactions) AS reaction
 				)
-				FROM jsonb_array_elements(comments.reactions) AS reaction
-			)
-			END AS reactions
-		`
+				END AS reactions
+			`
+	}
 	query += `
 		FROM comments
 		INNER JOIN users ON comments.user_id = users.id
