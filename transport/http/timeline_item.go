@@ -36,6 +36,13 @@ func (h *handler) createTimelineItem(w http.ResponseWriter, r *http.Request) {
 
 	mediatype, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err == nil && strings.Contains(strings.ToLower(mediatype), "multipart/form-data") {
+		if err := r.ParseMultipartForm(service.MaxMediaItemBytes); err != nil {
+			h.respondErr(w, errBadRequest)
+			return
+		}
+
+		defer r.MultipartForm.RemoveAll()
+
 		in.Content = r.FormValue("content")
 		if s := strings.TrimSpace(r.FormValue("spoiler_of")); s != "" {
 			in.SpoilerOf = &s
