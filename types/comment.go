@@ -62,15 +62,15 @@ func (in *CreateComment) Validate() error {
 type ListComments struct {
 	PostID string
 	PageArgs
-	authUserID *string
+	viewerID *string
 }
 
-func (in *ListComments) SetAuthUserID(userID string) {
-	in.authUserID = &userID
+func (in *ListComments) SetViewerID(userID string) {
+	in.viewerID = &userID
 }
 
-func (in ListComments) AuthUserID() *string {
-	return in.authUserID
+func (in ListComments) ViewerID() *string {
+	return in.viewerID
 }
 
 func (in *ListComments) Validate() error {

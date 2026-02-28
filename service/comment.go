@@ -84,7 +84,7 @@ func (s *Service) Comments(ctx context.Context, in types.ListComments) (types.Pa
 	}
 
 	if userID, ok := ctx.Value(KeyAuthUserID).(string); ok {
-		in.SetAuthUserID(userID)
+		in.SetViewerID(userID)
 	}
 
 	out, err := s.Cockroach.Comments(ctx, in)

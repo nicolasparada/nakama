@@ -80,12 +80,12 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	var out types.Page[types.Comment]
 
 	args := pgx.StrictNamedArgs{
-		"post_id":      in.PostID,
-		"auth_user_id": in.AuthUserID(),
+		"post_id":   in.PostID,
+		"viewer_id": in.ViewerID(),
 	}
 
 	var userReactionsJoin string
-	if in.AuthUserID() != nil {
+	if in.ViewerID() != nil {
 		// This join produces something like this:
 		// {
 		//   "emoji:❤️": true
@@ -96,7 +96,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 					comment_reactions.comment_id,
 					jsonb_object_agg(comment_reactions.type || ':' || comment_reactions.reaction, true) AS reactions
 				FROM comment_reactions
-				WHERE comment_reactions.user_id = @auth_user_id
+				WHERE comment_reactions.user_id = @viewer_id::varchar
 				GROUP BY comment_reactions.comment_id
 			) AS user_reactions ON user_reactions.comment_id = comments.id
 		`
@@ -130,7 +130,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 
 	query := `
 		SELECT ` + commentsColumns + `, ` + userJSONB + `
-			, (@auth_user_id IS NOT NULL AND comments.user_id = @auth_user_id) AS mine
+			, (@viewer_id::varchar IS NOT NULL AND comments.user_id = @viewer_id::varchar) AS mine
 		`
 
 	// This select produces something like this:
@@ -141,7 +141,7 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	query += `
 		, CASE
 			WHEN comments.reactions IS NULL THEN NULL
-			WHEN @auth_user_id IS NULL THEN comments.reactions
+			WHEN @viewer_id::varchar IS NULL THEN comments.reactions
 			ELSE (
 				SELECT jsonb_agg(
 					jsonb_set(
