@@ -49,15 +49,6 @@ CREATE TABLE IF NOT EXISTS posts (
     INDEX sorted_posts (created_at DESC, id)
 );
 
-UPDATE posts
-SET reactions = (
-    SELECT jsonb_agg(
-        (reaction - 'type') || jsonb_build_object('kind', reaction->'type')
-    )
-    FROM jsonb_array_elements(posts.reactions) AS reaction
-)
-WHERE reactions IS NOT NULL AND jsonb_array_length(reactions) > 0;
-
 CREATE TABLE IF NOT EXISTS post_reactions (
     user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
     post_id UUID NOT NULL REFERENCES posts ON DELETE CASCADE,
@@ -65,10 +56,6 @@ CREATE TABLE IF NOT EXISTS post_reactions (
     kind VARCHAR NOT NULL,
     PRIMARY KEY (user_id, post_id, reaction)
 );
-
-ALTER TABLE post_reactions RENAME COLUMN type TO kind;
-
-ALTER TABLE post_reactions DROP CONSTRAINT check_type_type;
 
 ALTER TABLE post_reactions 
 ADD CONSTRAINT post_reactions_kind_check 
@@ -99,18 +86,8 @@ CREATE TABLE IF NOT EXISTS comments (
     post_id UUID NOT NULL REFERENCES posts ON DELETE CASCADE,
     content VARCHAR NOT NULL,
     reactions JSONB, -- [{ "kind": "emoji", "reaction": "❤️", "count": 3 }]
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    INDEX sorted_comments (created_at DESC, id)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-UPDATE comments
-SET reactions = (
-    SELECT jsonb_agg(
-        (reaction - 'type') || jsonb_build_object('kind', reaction->'type')
-    )
-    FROM jsonb_array_elements(comments.reactions) AS reaction
-)
-WHERE reactions IS NOT NULL AND jsonb_array_length(reactions) > 0;
 
 DROP INDEX IF EXISTS sorted_comments;
 
@@ -124,10 +101,6 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
     kind VARCHAR NOT NULL,
     PRIMARY KEY (user_id, comment_id, reaction)
 );
-
-ALTER TABLE comment_reactions RENAME COLUMN type TO kind;
-
-ALTER TABLE comment_reactions DROP CONSTRAINT check_type_type;
 
 ALTER TABLE comment_reactions 
 ADD CONSTRAINT comment_reactions_kind_check 
