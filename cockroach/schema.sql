@@ -61,8 +61,6 @@ ALTER TABLE post_reactions
 ADD CONSTRAINT IF NOT EXISTS post_reactions_kind_check 
 CHECK (kind IN ('emoji', 'custom'));
 
-DROP INDEX IF EXISTS idx_post_reactions_post_user;
-
 CREATE INDEX IF NOT EXISTS idx_post_reactions_post_user
 ON post_reactions (post_id, user_id)
 STORING (kind);
@@ -89,8 +87,6 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-DROP INDEX IF EXISTS sorted_comments;
-
 CREATE INDEX IF NOT EXISTS idx_comments_post_id_sorted
 ON comments (post_id, created_at DESC, id DESC);
 
@@ -105,8 +101,6 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
 ALTER TABLE comment_reactions 
 ADD CONSTRAINT IF NOT EXISTS comment_reactions_kind_check 
 CHECK (kind IN ('emoji', 'custom'));
-
-DROP INDEX IF EXISTS idx_comment_reactions_comment_user;
 
 CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_user
 ON comment_reactions (comment_id, user_id)
