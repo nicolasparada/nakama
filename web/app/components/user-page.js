@@ -108,7 +108,7 @@ function UserPage({ username }) {
         }
 
         setLoadingMore(true)
-        fetchPosts({ username, pageArgs: { after: postsEndCursor } }).then(page => {
+        fetchUserPosts({ username, pageArgs: { after: postsEndCursor } }).then(page => {
             setPosts(pp => [...pp, ...page.items])
             setPostsEndCursor(page.pageInfo.endCursor)
 
@@ -129,7 +129,7 @@ function UserPage({ username }) {
         setFetching(true)
         Promise.all([
             fetchUser(username),
-            fetchPosts({ username, pageArgs: {} }),
+            fetchUserPosts({ username, pageArgs: {} }),
         ]).then(([user, postsPage]) => {
             setUser(user)
             setPosts(postsPage.items)
@@ -698,8 +698,12 @@ function fetchUser(username) {
  * @param {ListPosts} input
  * @returns {Promise<Page<Post>>}
  */
-function fetchPosts(input) {
-    const u = new URL("/api/posts", window.location.origin)
+function fetchUserPosts(input) {
+    if (input.username == null) {
+        return Promise.reject(new TypeError("username is required"))
+    }
+
+    const u = new URL(`/api/users/${encodeURIComponent(input.username)}/posts`, window.location.origin)
     if (input.tag != null) {
         u.searchParams.set("tag", input.tag)
     }
