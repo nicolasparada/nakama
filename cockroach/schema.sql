@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS post_reactions (
 );
 
 ALTER TABLE post_reactions 
-ADD CONSTRAINT post_reactions_kind_check 
+ADD CONSTRAINT IF NOT EXISTS post_reactions_kind_check 
 CHECK (kind IN ('emoji', 'custom'));
 
 DROP INDEX IF EXISTS idx_post_reactions_post_user;
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
 );
 
 ALTER TABLE comment_reactions 
-ADD CONSTRAINT comment_reactions_kind_check 
+ADD CONSTRAINT IF NOT EXISTS comment_reactions_kind_check 
 CHECK (kind IN ('emoji', 'custom'));
 
 DROP INDEX IF EXISTS idx_comment_reactions_comment_user;
