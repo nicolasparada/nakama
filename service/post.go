@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/cursor"
+	"github.com/nakamauwu/nakama/emoji"
 	"github.com/nakamauwu/nakama/textutil"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
@@ -46,8 +47,8 @@ var (
 )
 
 type userReaction struct {
-	Reaction string `json:"reaction"`
-	Type     string `json:"type"`
+	Reaction string             `json:"reaction"`
+	Kind     types.ReactionKind `json:"kind"`
 }
 
 // Posts in descending order and with backward pagination.
@@ -104,7 +105,7 @@ func (s *Service) Posts(ctx context.Context, last uint64, before *string, opts .
 		LEFT JOIN (
 			SELECT user_id
 			, post_id
-			, json_agg(json_build_object('reaction', reaction, 'type', type)) AS user_reactions
+			, json_agg(json_build_object('reaction', reaction, 'kind', kind)) AS user_reactions
 			FROM post_reactions
 			GROUP BY user_id, post_id
 		) AS reactions ON reactions.user_id = @uid AND reactions.post_id = posts.id
@@ -201,7 +202,7 @@ func (s *Service) Posts(ctx context.Context, last uint64, before *string, opts .
 			for i, r := range p.Reactions {
 				var reacted bool
 				for _, ur := range userReactions {
-					if r.Type == ur.Type && r.Reaction == ur.Reaction {
+					if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
 						reacted = true
 						break
 					}
@@ -289,7 +290,7 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 		LEFT JOIN (
 			SELECT user_id
 			, post_id
-			, json_agg(json_build_object('reaction', reaction, 'type', type)) AS user_reactions
+			, json_agg(json_build_object('reaction', reaction, 'kind', kind)) AS user_reactions
 			FROM post_reactions
 			GROUP BY user_id, post_id
 		) AS reactions ON reactions.user_id = @uid AND reactions.post_id = posts.id
@@ -352,7 +353,7 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 		for i, r := range p.Reactions {
 			var reacted bool
 			for _, ur := range userReactions {
-				if r.Type == ur.Type && r.Reaction == ur.Reaction {
+				if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
 					reacted = true
 					break
 				}
@@ -500,11 +501,11 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 		return nil, ErrInvalidPostID
 	}
 
-	if in.Type != "emoji" || in.Reaction == "" {
+	if in.Kind != "emoji" || in.Reaction == "" {
 		return nil, ErrInvalidReaction
 	}
 
-	if in.Type == "emoji" && !validEmoji(in.Reaction) {
+	if in.Kind == "emoji" && !emoji.IsValid(in.Reaction) {
 		return nil, ErrInvalidReaction
 	}
 
@@ -520,7 +521,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 			LEFT JOIN (
 				SELECT user_id
 				, post_id
-				, json_agg(json_build_object('reaction', reaction, 'type', type)) AS user_reactions
+				, json_agg(json_build_object('reaction', reaction, 'kind', kind)) AS user_reactions
 				FROM post_reactions
 				GROUP BY user_id, post_id
 			) AS reactions ON reactions.user_id = $1 AND reactions.post_id = posts.id
@@ -553,7 +554,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 
 		userReactionIdx := -1
 		for i, ur := range userReactions {
-			if ur.Type == in.Type && ur.Reaction == in.Reaction {
+			if ur.Kind == in.Kind && ur.Reaction == in.Reaction {
 				userReactionIdx = i
 				break
 			}
@@ -561,8 +562,8 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 
 		reacted := userReactionIdx != -1
 		if !reacted {
-			query = "INSERT INTO post_reactions (user_id, post_id, type, reaction) VALUES ($1, $2, $3, $4)"
-			_, err = tx.Exec(ctx, query, uid, postID, in.Type, in.Reaction)
+			query = "INSERT INTO post_reactions (user_id, post_id, kind, reaction) VALUES ($1, $2, $3, $4)"
+			_, err = tx.Exec(ctx, query, uid, postID, in.Kind, in.Reaction)
 			if err != nil {
 				return fmt.Errorf("could not sql insert post reaction: %w", err)
 			}
@@ -571,10 +572,10 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 				DELETE FROM post_reactions
 				WHERE user_id = $1
 					AND post_id = $2
-					AND type = $3
+					AND kind = $3
 					AND reaction = $4
 			`
-			_, err = tx.Exec(ctx, query, uid, postID, in.Type, in.Reaction)
+			_, err = tx.Exec(ctx, query, uid, postID, in.Kind, in.Reaction)
 			if err != nil {
 				return fmt.Errorf("could not sql delete post reaction: %w", err)
 			}
@@ -584,7 +585,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 			userReactions = append(userReactions[:userReactionIdx], userReactions[userReactionIdx+1:]...)
 		} else {
 			userReactions = append(userReactions, userReaction{
-				Type:     in.Type,
+				Kind:     in.Kind,
 				Reaction: in.Reaction,
 			})
 		}
@@ -592,7 +593,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 		var updated bool
 		zeroReactionsIdx := -1
 		for i, r := range reactions {
-			if !(r.Type == in.Type && r.Reaction == in.Reaction) {
+			if !(r.Kind == in.Kind && r.Reaction == in.Reaction) {
 				continue
 			}
 
@@ -610,7 +611,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 
 		if !updated {
 			reactions = append(reactions, types.Reaction{
-				Type:     in.Type,
+				Kind:     in.Kind,
 				Reaction: in.Reaction,
 				Count:    1,
 			})
@@ -635,7 +636,7 @@ func (s *Service) TogglePostReaction(ctx context.Context, postID string, in type
 			for i, r := range reactions {
 				var reacted bool
 				for _, ur := range userReactions {
-					if r.Type == ur.Type && r.Reaction == ur.Reaction {
+					if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
 						reacted = true
 						break
 					}

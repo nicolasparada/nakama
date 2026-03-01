@@ -15,3 +15,8 @@ type Created struct {
 	ID        string    `json:"id"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 }
+
+type Deleted struct {
+	Deleted   bool       `json:"deleted"`
+	DeletedAt *time.Time `json:"deletedAt" db:"deleted_at"`
+}

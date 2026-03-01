@@ -18,11 +18,12 @@ const (
 		, users.username
 		, users.avatar
 	`
+	// The JSON version uses `avatarURL` instead of `avatar`.
 	sqlUserJSONB = `
 		jsonb_build_object(
 			'id', users.id,
 			'username', users.username,
-			'avatar', users.avatar
+			'avatarURL', users.avatar
 		) AS user
 	`
 )

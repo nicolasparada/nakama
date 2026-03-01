@@ -315,7 +315,7 @@ function ReactionBtn({ postID, reaction: initialReaction, type }) {
     return html`
         <button class="post-reaction${reaction.reacted ? " reacted" : ""}" .disabled=${fetching} @click=${onClick}>
             <span>${reaction.count}</span>
-            ${reaction.type === "emoji" ? html`
+            ${reaction.kind === "emoji" ? html`
                 <span>${reaction.reaction}</span>
             ` : html`
                 <img src="${reaction.reaction}">
@@ -368,7 +368,7 @@ function AddReactionBtn({ postID, type }) {
     const onEmojiClick = ev => {
         const emoji = ev.detail.unicode
         setFetching(true)
-        toggleReaction(type, postID, { type: "emoji", reaction: emoji }).then(reactions => {
+        toggleReaction(type, postID, { kind: "emoji", reaction: emoji }).then(reactions => {
             setShowEmojiPicker(false)
             dispatchNewReactionCounts({ reactions })
         }, err => {

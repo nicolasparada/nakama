@@ -139,18 +139,22 @@ func (h *handler) deleteComment(w http.ResponseWriter, r *http.Request) {
 func (h *handler) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in types.ReactionInput
+	var in types.ToggleCommentReaction
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	commentID := way.Param(ctx, "comment_id")
-	out, err := h.svc.ToggleCommentReaction(ctx, commentID, in)
+	in.CommentID = way.Param(ctx, "comment_id")
+	out, err := h.svc.ToggleCommentReaction(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return
+	}
+
+	if out == nil {
+		out = []types.Reaction{} // non null array
 	}
 
 	h.respond(w, out, http.StatusOK)

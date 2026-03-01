@@ -392,7 +392,7 @@ func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (ty
 			for i, r := range p.Reactions {
 				var reacted bool
 				for _, ur := range userReactions {
-					if r.Type == ur.Type && r.Reaction == ur.Reaction {
+					if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
 						reacted = true
 						break
 					}

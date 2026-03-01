@@ -84,6 +84,30 @@ func (in *ListComments) Validate() error {
 type UpdateComment struct {
 	ID      string  `json:"-"`
 	Content *string `json:"content"`
+	tags    []string
+}
+
+func (in *UpdateComment) SetTags(tags []string) {
+	in.tags = tags
+}
+
+func (in UpdateComment) Tags() []string {
+	return in.tags
+}
+
+func (in *UpdateComment) Validate() error {
+	if !ValidUUIDv4(in.ID) {
+		return errs.InvalidArgumentError("invalid comment ID")
+	}
+
+	if in.Content != nil {
+		*in.Content = textutil.SmartTrim(*in.Content)
+		if *in.Content == "" || utf8.RuneCountInString(*in.Content) > CommentContentMaxLength {
+			return errs.InvalidArgumentError("invalid content")
+		}
+	}
+
+	return nil
 }
 
 type UpdatedComment struct {

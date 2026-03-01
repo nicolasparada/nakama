@@ -1,10 +1,10 @@
-package service
+package emoji
 
 import (
 	"testing"
 )
 
-func Test_validEmoji(t *testing.T) {
+func Test_IsValid(t *testing.T) {
 	tt := []struct {
 		name  string
 		emoji string
@@ -28,7 +28,7 @@ func Test_validEmoji(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := validEmoji(tc.emoji)
+			got := IsValid(tc.emoji)
 			if tc.want != got {
 				t.Errorf("%q want %v; got %v", tc.emoji, tc.want, got)
 			}

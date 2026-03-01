@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (c *Cockroach) UpsertPostSubscription(ctx context.Context, userID, postID string) error {
+func (c *Cockroach) upsertPostSubscription(ctx context.Context, userID, postID string) error {
 	const query = `
 		INSERT INTO post_subscriptions (user_id, post_id) VALUES (@user_id, @post_id)
 		ON CONFLICT (user_id, post_id) DO NOTHING

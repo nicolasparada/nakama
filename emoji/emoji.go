@@ -1,4 +1,4 @@
-package service
+package emoji
 
 import (
 	"strings"
@@ -20,10 +20,10 @@ var yellowSkinToneMod = func() string {
 	return string(r)
 }()
 
-func validEmoji(s string) bool {
+func IsValid(s string) bool {
 	_, ok := emojiMap[s]
 	if !ok && strings.Contains(s, yellowSkinToneMod) {
-		return validEmoji(
+		return IsValid(
 			strings.ReplaceAll(s, yellowSkinToneMod, ""),
 		)
 	}
