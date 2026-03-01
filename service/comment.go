@@ -178,10 +178,6 @@ func (s *Service) ToggleCommentReaction(ctx context.Context, in types.ToggleComm
 		return nil, err
 	}
 
-	if err := s.authorize(ctx, ResourceKindComment, in.CommentID); err != nil {
-		return nil, err
-	}
-
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
 		return nil, errs.Unauthenticated
