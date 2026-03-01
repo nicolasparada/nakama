@@ -59,7 +59,7 @@ func (h *handler) comments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if page.Items == nil {
-		page.Items = types.Comments{} // non null array
+		page.Items = []types.Comment{} // non null array
 	}
 
 	for i := range page.Items {

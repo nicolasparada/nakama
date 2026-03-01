@@ -15,7 +15,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nakamauwu/nakama/cockroach"
-	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/emoji"
 	"github.com/nakamauwu/nakama/textutil"
 	"github.com/nakamauwu/nakama/types"
@@ -51,180 +50,31 @@ type userReaction struct {
 	Kind     types.ReactionKind `json:"kind"`
 }
 
-// Posts in descending order and with backward pagination.
-// They can be filtered from a specific user by using `PostsFromUser` option
-// in this late case, user field won't be populated.
-// They can also be filtered by tag using `PostsTagged`.
-func (s *Service) Posts(ctx context.Context, last uint64, before *string, opts ...types.PostsOpt) (types.Posts, error) {
-	var options types.PostsOpts
-	for _, o := range opts {
-		o(&options)
+func (s *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
+	var out types.Page[types.Post]
+
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
 
-	if options.Username != nil {
-		*options.Username = strings.TrimSpace(*options.Username)
-		if !types.ValidUsername(*options.Username) {
-			return nil, ErrInvalidUsername
-		}
+	if uid, ok := ctx.Value(KeyAuthUserID).(string); ok {
+		in.SetViewerID(uid)
 	}
 
-	var beforePostID string
-	var beforeCreatedAt time.Time
-
-	if before != nil {
-		var err error
-		beforePostID, beforeCreatedAt, err = cursor.Decode(*before)
-		if err != nil || !types.ValidUUIDv4(beforePostID) {
-			return nil, ErrInvalidCursor
-		}
-	}
-
-	uid, auth := ctx.Value(KeyAuthUserID).(string)
-	last = normalizePageSize(last)
-	query, args, err := buildQuery(`
-		SELECT posts.id
-		, posts.content
-		, posts.spoiler_of
-		, posts.nsfw
-		, posts.reactions
-		, posts.comments_count
-		, posts.media
-		, posts.created_at
-		, posts.updated_at
-		{{ if .auth }}
-		, posts.user_id = @uid AS post_mine
-		, reactions.user_reactions
-		, subscriptions.user_id IS NOT NULL AS post_subscribed
-		{{ end }}
-		{{ if not .username }}
-		, users.username
-		, users.avatar
-		{{ end }}
-		FROM posts
-		{{ if .auth }}
-		LEFT JOIN (
-			SELECT user_id
-			, post_id
-			, json_agg(json_build_object('reaction', reaction, 'kind', kind)) AS user_reactions
-			FROM post_reactions
-			GROUP BY user_id, post_id
-		) AS reactions ON reactions.user_id = @uid AND reactions.post_id = posts.id
-		LEFT JOIN post_subscriptions AS subscriptions
-			ON subscriptions.user_id = @uid AND subscriptions.post_id = posts.id
-		{{ end }}
-		{{ if not .username }}
-		INNER JOIN users ON posts.user_id = users.id
-		{{ end }}
-		{{ if .tag }}
-		INNER JOIN post_tags ON post_tags.post_id = posts.id AND post_tags.tag = @tag
-		{{ end }}
-		{{ if or .username (and .beforePostID .beforeCreatedAt) }}
-		WHERE
-		{{ end }}
-		{{ if .username }}
-			posts.user_id = (SELECT id FROM users WHERE username = @username)
-		{{ end }}
-		{{ if and .beforePostID .beforeCreatedAt }}
-			{{ if .username }}
-			AND
-			{{ end }}
-			posts.created_at <= @beforeCreatedAt
-			AND (
-				posts.id < @beforePostID
-					OR posts.created_at < @beforeCreatedAt
-			)
-		{{ end }}
-		ORDER BY posts.created_at DESC, posts.id ASC
-		LIMIT @last`, map[string]any{
-		"auth":            auth,
-		"uid":             uid,
-		"username":        options.Username,
-		"tag":             options.Tag,
-		"last":            last,
-		"beforePostID":    beforePostID,
-		"beforeCreatedAt": beforeCreatedAt,
-	})
+	out, err := s.Cockroach.Posts(ctx, in)
 	if err != nil {
-		return nil, fmt.Errorf("could not build posts sql query: %w", err)
+		return out, err
 	}
 
-	rows, err := s.DB.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("could not query select posts: %w", err)
+	for i, p := range out.Items {
+		if p.User != nil {
+			p.User.SetAvatarURL(s.AvatarURLPrefix)
+		}
+		p.SetMediaURLs(s.MediaURLPrefix)
+		out.Items[i] = p
 	}
 
-	defer rows.Close()
-
-	var pp types.Posts
-	for rows.Next() {
-		var p types.Post
-		var u types.User
-		var avatar sql.NullString
-		var rawReactions []byte
-		var rawUserReactions []byte
-		var media []string
-		dest := []any{
-			&p.ID,
-			&p.Content,
-			&p.SpoilerOf,
-			&p.NSFW,
-			&rawReactions,
-			&p.CommentsCount,
-			&media,
-			&p.CreatedAt,
-			&p.UpdatedAt,
-		}
-		if auth {
-			dest = append(dest, &p.Mine, &rawUserReactions, &p.Subscribed)
-		}
-		if options.Username == nil {
-			dest = append(dest, &u.Username, &avatar)
-		}
-
-		if err = rows.Scan(dest...); err != nil {
-			return nil, fmt.Errorf("could not scan post: %w", err)
-		}
-
-		if rawReactions != nil {
-			err = json.Unmarshal(rawReactions, &p.Reactions)
-			if err != nil {
-				return nil, fmt.Errorf("could not json unmarshall post reactions: %w", err)
-			}
-		}
-
-		if rawUserReactions != nil {
-			var userReactions []userReaction
-			err = json.Unmarshal(rawUserReactions, &userReactions)
-			if err != nil {
-				return nil, fmt.Errorf("could not json unmarshall user post reactions: %w", err)
-			}
-
-			for i, r := range p.Reactions {
-				var reacted bool
-				for _, ur := range userReactions {
-					if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
-						reacted = true
-						break
-					}
-				}
-				p.Reactions[i].Reacted = &reacted
-			}
-		}
-
-		if options.Username == nil {
-			u.AvatarURL = s.avatarURL(avatar)
-			p.User = &u
-		}
-
-		p.MediaURLs = s.mediaURLs(media)
-		pp = append(pp, p)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate posts rows: %w", err)
-	}
-
-	return pp, nil
+	return out, nil
 }
 
 // PostStream to receive posts in realtime.

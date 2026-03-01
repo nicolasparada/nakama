@@ -124,10 +124,6 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 
 	if in.ViewerID() != nil {
 		args["viewer_id"] = *in.ViewerID()
-	}
-
-	if in.ViewerID() != nil {
-		args["viewer_id"] = *in.ViewerID()
 		selects = append(selects, `(comments.user_id = @viewer_id) AS mine`, sqlSelectCommentsReactions)
 		joins = append(joins, sqlJoinCommentReactions)
 	} else {

@@ -100,31 +100,35 @@ func (h *handler) timeline(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	q := r.URL.Query()
-	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
-	before := emptyStrPtr(q.Get("before"))
-	tt, err := h.svc.Timeline(ctx, last, before)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if tt == nil {
-		tt = []types.TimelineItem{} // non null array
+	in := types.ListTimeline{
+		PageArgs: pageArgs,
+	}
+	page, err := h.svc.Timeline(ctx, in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
 	}
 
-	for i := range tt {
-		if tt[i].Post.Reactions == nil {
-			tt[i].Post.Reactions = []types.Reaction{} // non null array
+	if page.Items == nil {
+		page.Items = []types.TimelineItem{} // non null array
+	}
+
+	for i := range page.Items {
+		if page.Items[i].Post.Reactions == nil {
+			page.Items[i].Post.Reactions = []types.Reaction{} // non null array
 		}
-		if tt[i].Post.MediaURLs == nil {
-			tt[i].Post.MediaURLs = []string{} // non null array
+		if page.Items[i].Post.MediaURLs == nil {
+			page.Items[i].Post.MediaURLs = []string{} // non null array
 		}
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     tt,
-		EndCursor: tt.EndCursor(),
-	}, http.StatusOK)
+	h.respond(w, page, http.StatusOK)
 }
 
 func (h *handler) timelineItemStream(w http.ResponseWriter, r *http.Request) {

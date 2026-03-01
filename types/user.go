@@ -82,6 +82,14 @@ func joinOptionalPrefix(prefix string, path *string) *string {
 	return &url
 }
 
+func joinPrefix(prefix string, path string) string {
+	if strings.HasPrefix(path, prefix) {
+		return path
+	}
+
+	return prefix + path
+}
+
 var reEmail = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 func ValidEmail(s string) bool {

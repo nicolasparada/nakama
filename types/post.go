@@ -3,23 +3,60 @@ package types
 import (
 	"time"
 
-	"github.com/nakamauwu/nakama/cursor"
+	"github.com/nicolasparada/go-errs"
 )
 
 type Post struct {
 	ID            string     `json:"id"`
-	UserID        string     `json:"-"`
+	UserID        string     `json:"userID" db:"user_id"`
 	Content       string     `json:"content"`
 	SpoilerOf     *string    `json:"spoilerOf" db:"spoiler_of"`
 	NSFW          bool       `json:"nsfw"`
 	Reactions     []Reaction `json:"reactions"`
 	CommentsCount int        `json:"commentsCount" db:"comments_count"`
-	MediaURLs     []string   `json:"mediaURLs" db:"media_urls"`
+	MediaURLs     []string   `json:"mediaURLs" db:"media"`
 	CreatedAt     time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt     time.Time  `json:"updatedAt" db:"updated_at"`
 	User          *User      `json:"user,omitempty"`
 	Mine          bool       `json:"mine" db:"mine,omitempty"`
 	Subscribed    bool       `json:"subscribed" db:"subscribed,omitempty"`
+}
+
+func (p *Post) SetMediaURLs(prefix string) {
+	for i, media := range p.MediaURLs {
+		p.MediaURLs[i] = joinPrefix(prefix, media)
+	}
+}
+
+type ListPosts struct {
+	Username *string
+	Tag      *string
+	PageArgs
+	viewerID *string
+}
+
+func (in *ListPosts) SetViewerID(userID string) {
+	in.viewerID = &userID
+}
+
+func (in ListPosts) ViewerID() *string {
+	return in.viewerID
+}
+
+func (in *ListPosts) Validate() error {
+	if in.Username != nil {
+		if !ValidUsername(*in.Username) {
+			return errs.InvalidArgumentError("invalid username")
+		}
+	}
+
+	if in.Tag != nil {
+		if *in.Tag == "" {
+			return errs.InvalidArgumentError("invalid tag")
+		}
+	}
+
+	return in.PageArgs.Validate()
 }
 
 type UpdatePost struct {
@@ -37,17 +74,6 @@ type UpdatedPost struct {
 	SpoilerOf *string   `json:"spoilerOf"`
 	NSFW      bool      `json:"nsfw"`
 	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-type Posts []Post
-
-func (pp Posts) EndCursor() *string {
-	if len(pp) == 0 {
-		return nil
-	}
-
-	last := pp[len(pp)-1]
-	return new(cursor.Encode(last.ID, last.CreatedAt))
 }
 
 type PostsOpts struct {

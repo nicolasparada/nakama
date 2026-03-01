@@ -26,9 +26,13 @@
  */
 
 /**
- * @typedef {Post & TimelineItemExt} TimelineItem
+ * @typedef {Post & {timelineItemID: string }} TimelineItem
  */
 
+/**
+ * @typedef ListTimeline
+ * @prop {PageArgs} pageArgs
+ */
 
 /**
  * @typedef Post
@@ -44,6 +48,13 @@
  * @prop {User=} user
  * @prop {boolean} mine
  * @prop {boolean} subscribed
+ */
+
+/**
+ * @typedef ListPosts
+ * @prop {string=} username
+ * @prop {string=} tag
+ * @prop {PageArgs} pageArgs
  */
 
 /**
@@ -76,11 +87,6 @@
  * @prop {string} type
  * @prop {string} reaction
  * @prop {number} count
- */
-
-/**
- * @typedef {object} TimelineItemExt
- * @prop {string} timelineItemID
  */
 
 /**

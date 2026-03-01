@@ -4,7 +4,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/textutil"
 	"github.com/nicolasparada/go-errs"
 )
@@ -112,15 +111,4 @@ func (in *UpdateComment) Validate() error {
 
 type UpdatedComment struct {
 	Content string `json:"content"`
-}
-
-type Comments []Comment
-
-func (cc Comments) EndCursor() *string {
-	if len(cc) == 0 {
-		return nil
-	}
-
-	last := cc[len(cc)-1]
-	return new(cursor.Encode(last.ID, last.CreatedAt))
 }

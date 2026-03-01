@@ -53,7 +53,7 @@ func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, 
 	api.HandleFunc("POST", "/api/users/:username/toggle_follow", h.toggleFollow)
 	api.HandleFunc("GET", "/api/users/:username/followers", h.followers)
 	api.HandleFunc("GET", "/api/users/:username/followees", h.followees)
-	api.HandleFunc("GET", "/api/users/:username/posts", h.userPosts)
+	api.HandleFunc("GET", "/api/users/:username/posts", h.posts)
 	api.HandleFunc("GET", "/api/posts", h.posts)
 	api.HandleFunc("GET", "/api/posts/:post_id", h.post)
 	api.HandleFunc("PATCH", "/api/posts/:post_id", h.updatePost)

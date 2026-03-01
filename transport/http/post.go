@@ -4,83 +4,64 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/matryer/way"
 
 	"github.com/nakamauwu/nakama/types"
 )
 
-func (h *handler) userPosts(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	username := way.Param(ctx, "username")
-	q := r.URL.Query()
-	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
-	before := emptyStrPtr(q.Get("before"))
-	pp, err := h.svc.Posts(ctx, last, before, types.PostsFromUser(username))
-	if err != nil {
-		h.respondErr(w, err)
-		return
-	}
-
-	if pp == nil {
-		pp = []types.Post{} // non null array
-	}
-
-	for i := range pp {
-		if pp[i].Reactions == nil {
-			pp[i].Reactions = []types.Reaction{} // non null array
-		}
-		if pp[i].MediaURLs == nil {
-			pp[i].MediaURLs = []string{} // non null array
-		}
-	}
-
-	h.respond(w, paginatedRespBody{
-		Items:     pp,
-		EndCursor: pp.EndCursor(),
-	}, http.StatusOK)
-}
-
 func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
-	if a, _, err := mime.ParseMediaType(r.Header.Get("Accept")); err == nil && a == "text/event-stream" {
-		h.postStream(w, r)
-		return
+	// SSE support only for /api/posts endpoint
+	if r.URL.Path == "/api/posts" {
+		if a, _, err := mime.ParseMediaType(r.Header.Get("Accept")); err == nil && a == "text/event-stream" {
+			h.postStream(w, r)
+			return
+		}
 	}
 
 	ctx := r.Context()
 	q := r.URL.Query()
-	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
-	before := emptyStrPtr(q.Get("before"))
-
-	var opts []types.PostsOpt
-	if tag := strings.TrimSpace(q.Get("tag")); tag != "" {
-		opts = append(opts, types.PostsTagged(tag))
-	}
-	pp, err := h.svc.Posts(ctx, last, before, opts...)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if pp == nil {
-		pp = []types.Post{} // non null array
+	in := types.ListPosts{
+		PageArgs: pageArgs,
 	}
 
-	for i := range pp {
-		if pp[i].Reactions == nil {
-			pp[i].Reactions = []types.Reaction{} // non null array
+	// Username is an optional path parameter since this handler is used for both:
+	// - /api/posts
+	// - /api/users/:username/posts
+	if username := way.Param(ctx, "username"); username != "" {
+		in.Username = &username
+	}
+
+	if q.Has("tag") {
+		in.Tag = new(q.Get("tag"))
+	}
+
+	page, err := h.svc.Posts(ctx, in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	if page.Items == nil {
+		page.Items = []types.Post{} // non null array
+	}
+
+	for i := range page.Items {
+		if page.Items[i].Reactions == nil {
+			page.Items[i].Reactions = []types.Reaction{} // non null array
 		}
-		if pp[i].MediaURLs == nil {
-			pp[i].MediaURLs = []string{} // non null array
+		if page.Items[i].MediaURLs == nil {
+			page.Items[i].MediaURLs = []string{} // non null array
 		}
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     pp,
-		EndCursor: pp.EndCursor(),
-	}, http.StatusOK)
+	h.respond(w, page, http.StatusOK)
 }
 
 func (h *handler) postStream(w http.ResponseWriter, r *http.Request) {

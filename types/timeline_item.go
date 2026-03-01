@@ -1,27 +1,25 @@
 package types
 
-import (
-	"github.com/nakamauwu/nakama/cursor"
-)
-
 type TimelineItem struct {
-	ID     string `json:"timelineItemID"`
-	UserID string `json:"-"`
-	PostID string `json:"-"`
-	*Post
+	ID     string `json:"timelineItemID" db:"timeline_item_id"`
+	UserID string `json:"-" db:"-"`
+	PostID string `json:"-" db:"-"`
+	Post
 }
 
-type Timeline []TimelineItem
+type ListTimeline struct {
+	PageArgs
+	userID string
+}
 
-func (tt Timeline) EndCursor() *string {
-	if len(tt) == 0 {
-		return nil
-	}
+func (in *ListTimeline) SetUserID(userID string) {
+	in.userID = userID
+}
 
-	last := tt[len(tt)-1]
-	if last.Post == nil {
-		return nil
-	}
+func (in ListTimeline) UserID() string {
+	return in.userID
+}
 
-	return new(cursor.Encode(last.Post.ID, last.Post.CreatedAt))
+func (in *ListTimeline) Validate() error {
+	return in.PageArgs.Validate()
 }

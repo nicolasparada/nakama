@@ -18,6 +18,32 @@ import "./user-follow-counts.js"
 
 const pageSize = 10
 
+/**
+ * @typedef {import("../types.js").TimelineItem} TimelineItem
+ */
+
+/**
+ * @typedef {import("../types.js").ListTimeline} ListTimeline
+ */
+
+/**
+ * @typedef {import("../types.js").Post} Post
+ */
+
+/**
+ * @typedef {import("../types.js").ListPosts} ListPosts
+ */
+
+/**
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
+
+
 export default function ({ params }) {
     return html`<user-page .username=${params.username}></user-page>`
 }
@@ -82,15 +108,11 @@ function UserPage({ username }) {
         }
 
         setLoadingMore(true)
-        fetchPosts(username, postsEndCursor).then(({ items: posts, endCursor }) => {
-            for (let i = 0; i < posts.length; i++) {
-                posts[i].user = user
-            }
+        fetchPosts({ username, pageArgs: { after: postsEndCursor } }).then(page => {
+            setPosts(pp => [...pp, ...page.items])
+            setPostsEndCursor(page.pageInfo.endCursor)
 
-            setPosts(pp => [...pp, ...posts])
-            setPostsEndCursor(endCursor)
-
-            if (posts.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMorePosts(true)
                 setEndReached(true)
             }
@@ -107,17 +129,13 @@ function UserPage({ username }) {
         setFetching(true)
         Promise.all([
             fetchUser(username),
-            fetchPosts(username),
-        ]).then(([user, { items: posts, endCursor }]) => {
-            for (let i = 0; i < posts.length; i++) {
-                posts[i].user = user
-            }
-
+            fetchPosts({ username, pageArgs: {} }),
+        ]).then(([user, postsPage]) => {
             setUser(user)
-            setPosts(posts)
-            setPostsEndCursor(endCursor)
+            setPosts(postsPage.items)
+            setPostsEndCursor(postsPage.pageInfo.endCursor)
 
-            if (posts.length < pageSize) {
+            if (!postsPage.pageInfo.hasNextPage) {
                 setNoMorePosts(true)
             }
         }, err => {
@@ -677,12 +695,29 @@ function fetchUser(username) {
 }
 
 /**
- * @param {string} username
+ * @param {ListPosts} input
+ * @returns {Promise<Page<Post>>}
  */
-function fetchPosts(username, before = "", last = pageSize) {
-    return request("GET", `/api/users/${encodeURIComponent(username)}/posts?last=${encodeURIComponent(last)}&before=${encodeURIComponent(before)}`)
+function fetchPosts(input) {
+    const u = new URL("/api/posts", window.location.origin)
+    if (input.tag != null) {
+        u.searchParams.set("tag", input.tag)
+    }
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
-        .then(page => {
+        .then((/** @type {Page<Post>} */ page) => {
             page.items = page.items.map(p => ({
                 ...p,
                 createdAt: new Date(p.createdAt),

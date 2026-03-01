@@ -3,9 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -13,7 +11,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/disintegration/imaging"
@@ -23,7 +20,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/nakamauwu/nakama/cockroach"
-	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/storage"
 	"github.com/nakamauwu/nakama/textutil"
 	"github.com/nakamauwu/nakama/types"
@@ -225,7 +221,7 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 
 		ti.UserID = uid
 		ti.PostID = p.ID
-		ti.Post = &p
+		ti.Post = p
 
 		return nil
 	})
@@ -273,146 +269,34 @@ func (s *Service) postCreated(p types.Post) {
 	go s.notifyPostMention(p)
 }
 
-// Timeline of the authenticated user in descending order and with backward pagination.
-func (s *Service) Timeline(ctx context.Context, last uint64, before *string) (types.Timeline, error) {
+func (s *Service) Timeline(ctx context.Context, in types.ListTimeline) (types.Page[types.TimelineItem], error) {
+	var out types.Page[types.TimelineItem]
+
+	if err := in.Validate(); err != nil {
+		return out, err
+	}
+
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, errs.Unauthenticated
+		return out, errs.Unauthenticated
 	}
 
-	var beforePostID string
-	var beforeCreatedAt time.Time
+	in.SetUserID(uid)
 
-	if before != nil {
-		var err error
-		beforePostID, beforeCreatedAt, err = cursor.Decode(*before)
-		if err != nil || !types.ValidUUIDv4(beforePostID) {
-			return nil, ErrInvalidCursor
-		}
-	}
-
-	last = normalizePageSize(last)
-	query, args, err := buildQuery(`
-		SELECT timeline.id
-		, posts.id
-		, posts.content
-		, posts.spoiler_of
-		, posts.nsfw
-		, posts.reactions
-		, reactions.user_reactions
-		, posts.comments_count
-		, posts.media
-		, posts.created_at
-		, posts.updated_at
-		, posts.user_id = @uid AS post_mine
-		, subscriptions.user_id IS NOT NULL AS post_subscribed
-		, users.username
-		, users.avatar
-		FROM timeline
-		INNER JOIN posts ON timeline.post_id = posts.id
-		INNER JOIN users ON posts.user_id = users.id
-		LEFT JOIN (
-			SELECT user_id
-			, post_id
-			, json_agg(json_build_object('reaction', reaction, 'type', type)) AS user_reactions
-			FROM post_reactions
-			GROUP BY user_id, post_id
-		) AS reactions ON reactions.user_id = @uid AND reactions.post_id = posts.id
-		LEFT JOIN post_subscriptions AS subscriptions
-			ON subscriptions.user_id = @uid AND subscriptions.post_id = posts.id
-		WHERE timeline.user_id = @uid
-		{{ if and .beforePostID .beforeCreatedAt }}
-			AND posts.created_at <= @beforeCreatedAt
-			AND (
-				posts.id < @beforePostID
-					OR posts.created_at < @beforeCreatedAt
-			)
-		{{ end }}
-		ORDER BY posts.created_at DESC, posts.id ASC
-		LIMIT @last`, map[string]any{
-		"uid":             uid,
-		"last":            last,
-		"beforePostID":    beforePostID,
-		"beforeCreatedAt": beforeCreatedAt,
-	})
+	out, err := s.Cockroach.Timeline(ctx, in)
 	if err != nil {
-		return nil, fmt.Errorf("could not build timeline sql query: %w", err)
+		return out, err
 	}
 
-	rows, err := s.DB.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("could not query select timeline: %w", err)
-	}
-
-	defer rows.Close()
-
-	var tt types.Timeline
-	for rows.Next() {
-		var ti types.TimelineItem
-		var p types.Post
-		var rawReactions []byte
-		var rawUserReactions []byte
-		var u types.User
-		var avatar sql.NullString
-		var media []string
-		if err = rows.Scan(
-			&ti.ID,
-			&p.ID,
-			&p.Content,
-			&p.SpoilerOf,
-			&p.NSFW,
-			&rawReactions,
-			&rawUserReactions,
-			&p.CommentsCount,
-			&media,
-			&p.CreatedAt,
-			&p.UpdatedAt,
-			&p.Mine,
-			&p.Subscribed,
-			&u.Username,
-			&avatar,
-		); err != nil {
-			return nil, fmt.Errorf("could not scan timeline item: %w", err)
+	for i, ti := range out.Items {
+		if ti.Post.User != nil {
+			ti.Post.User.SetAvatarURL(s.AvatarURLPrefix)
 		}
-
-		if rawReactions != nil {
-			err = json.Unmarshal(rawReactions, &p.Reactions)
-			if err != nil {
-				return nil, fmt.Errorf("could not json unmarshall timeline post reactions: %w", err)
-			}
-		}
-
-		if rawUserReactions != nil {
-			var userReactions []userReaction
-			err = json.Unmarshal(rawUserReactions, &userReactions)
-			if err != nil {
-				return nil, fmt.Errorf("could not json unmarshall user timeline post reactions: %w", err)
-			}
-
-			for i, r := range p.Reactions {
-				var reacted bool
-				for _, ur := range userReactions {
-					if r.Kind == ur.Kind && r.Reaction == ur.Reaction {
-						reacted = true
-						break
-					}
-				}
-				p.Reactions[i].Reacted = &reacted
-			}
-		}
-
-		p.MediaURLs = s.mediaURLs(media)
-		u.AvatarURL = s.avatarURL(avatar)
-		p.User = &u
-		ti.Post = &p
-		tt = append(tt, ti)
+		ti.Post.SetMediaURLs(s.MediaURLPrefix)
+		out.Items[i] = ti
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate timeline rows: %w", err)
-	}
-
-	return tt, nil
+	return out, nil
 }
 
 // TimelineItemStream to receive timeline items in realtime.
@@ -493,7 +377,7 @@ func (s *Service) fanoutPost(p types.Post) {
 		}
 
 		ti.PostID = p.ID
-		ti.Post = &p
+		ti.Post = p
 
 		go s.broadcastTimelineItem(ti)
 	}
