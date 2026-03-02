@@ -80,7 +80,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		googleClientID      = os.Getenv("GOOGLE_CLIENT_ID")
 		googleClientSecret  = os.Getenv("GOOGLE_CLIENT_SECRET")
 		disabledDevLogin, _ = strconv.ParseBool(os.Getenv("DISABLE_DEV_LOGIN"))
-		allowedOrigins      = os.Getenv("ALLOWED_ORIGINS")
+		allowedOrigins      = env("ALLOWED_ORIGINS", originStr)
 		vapidPrivateKey     = os.Getenv("VAPID_PRIVATE_KEY")
 		vapidPublicKey      = os.Getenv("VAPID_PUBLIC_KEY")
 	)
@@ -168,10 +168,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		)
 	} else {
 		_ = logger.Log("mailing_implementation", "log")
-		sender = mailing.NewLogSender(
-			sendFrom,
-			log.With(logger, "component", "mailing"),
-		)
+		sender = mailing.NewLogSender(sendFrom)
 	}
 
 	var store storage.Store

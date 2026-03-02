@@ -6,7 +6,7 @@ import { authStore, useStore } from "../ctx.js"
 import { request } from "../http.js"
 import "./toast-item.js"
 
-const inLocalhost = ["127.0.0.1", "localhost"].some(s => s === location.hostname)
+const inLocalhost = ["127.0.0.1", "localhost"].some(s => s === location.hostname) && !Boolean(import.meta.env.PROD)
 
 export default function AccessPage() {
     return html`

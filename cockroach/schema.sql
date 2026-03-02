@@ -21,13 +21,16 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS email_verification_codes (
+    user_id UUID REFERENCES users ON DELETE CASCADE,
     email VARCHAR NOT NULL,
     code UUID NOT NULL DEFAULT gen_random_uuid(),
+    redirect_uri VARCHAR NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (email, code)
 );
 
 ALTER TABLE IF EXISTS email_verification_codes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users ON DELETE CASCADE;
+ALTER TABLE IF EXISTS email_verification_codes ADD COLUMN IF NOT EXISTS redirect_uri VARCHAR NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS follows (
     follower_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,

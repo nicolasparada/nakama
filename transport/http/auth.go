@@ -36,17 +36,17 @@ func (h *handler) sendMagicLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	q := r.URL.Query()
-	redirectURI, err := h.svc.ParseRedirectURI(q.Get("redirect_uri"))
+	code := q.Get("code")
+	redirectURI, err := h.svc.EmailVerificationCodeRedirectURI(ctx, code)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	ctx := r.Context()
 	in := types.UseEmailVerificationCode{
-		Email:    q.Get("email"),
-		Code:     q.Get("code"),
+		Code:     code,
 		Username: emptyStrPtr(q.Get("username")),
 	}
 	auth, err := h.svc.VerifyMagicLink(ctx, in)

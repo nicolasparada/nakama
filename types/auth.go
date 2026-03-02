@@ -31,27 +31,38 @@ type ProvidedUser struct {
 }
 
 type EmailVerificationCode struct {
-	UserID    *string   `json:"userID,omitempty" db:"user_id,omitempty"`
-	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+	UserID      *string   `json:"userID" db:"user_id"`
+	Email       string    `json:"email"`
+	Code        string    `json:"code"`
+	RedirectURI string    `json:"redirectURI" db:"redirect_uri"`
+	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
 }
 
 func (c EmailVerificationCode) IsExpired(ttl time.Duration) bool {
 	return time.Since(c.CreatedAt) > ttl
 }
 
+type CreateEmailVerificationCode struct {
+	UserID      *string
+	Email       string
+	RedirectURI string
+}
+
 type UseEmailVerificationCode struct {
-	Email    string
 	Code     string
 	Username *string
+	ttl      time.Duration
+}
+
+func (in *UseEmailVerificationCode) SetTTL(ttl time.Duration) {
+	in.ttl = ttl
+}
+
+func (in UseEmailVerificationCode) TTL() time.Duration {
+	return in.ttl
 }
 
 func (in *UseEmailVerificationCode) Validate() error {
-	in.Email = strings.TrimSpace(in.Email)
-	in.Email = strings.ToLower(in.Email)
-	if !ValidEmail(in.Email) {
-		return errs.InvalidArgumentError("invalid email")
-	}
-
 	if !ValidUUIDv4(in.Code) {
 		return errs.InvalidArgumentError("invalid verification code")
 	}

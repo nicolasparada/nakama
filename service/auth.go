@@ -79,10 +79,21 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 
 	var code string
 	if in.UpdateEmail {
-		uid, _ := ctx.Value(KeyAuthUserID).(string)
-		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, in.Email, &uid)
+		uid, ok := ctx.Value(KeyAuthUserID).(string)
+		if !ok {
+			return errs.Unauthenticated
+		}
+
+		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
+			UserID:      &uid,
+			Email:       in.Email,
+			RedirectURI: in.RedirectURI,
+		})
 	} else {
-		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, in.Email, nil)
+		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
+			Email:       in.Email,
+			RedirectURI: in.RedirectURI,
+		})
 	}
 	if err != nil {
 		return err
@@ -91,7 +102,7 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 	defer func() {
 		if err != nil {
 			go func() {
-				err := s.Cockroach.DeleteEmailVerificationCode(context.Background(), in.Email, code)
+				err := s.Cockroach.DeleteEmailVerificationCode(context.Background(), code)
 				if err != nil {
 					_ = s.Logger.Log("error", fmt.Errorf("could not delete verification code: %w", err))
 				}
@@ -104,9 +115,7 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 	magicLink := cloneURL(s.Origin)
 	magicLink.Path = "/api/verify_magic_link"
 	q := magicLink.Query()
-	q.Set("email", in.Email)
-	q.Set("verification_code", code)
-	q.Set("redirect_uri", in.RedirectURI)
+	q.Set("code", code)
 	magicLink.RawQuery = q.Encode()
 
 	s.magicLinkTmplOncer.Do(func() {
@@ -182,6 +191,24 @@ func (s *Service) ParseRedirectURI(rawurl string) (*url.URL, error) {
 	return nil, ErrUntrustedRedirectURI
 }
 
+func (s *Service) EmailVerificationCodeRedirectURI(ctx context.Context, code string) (*url.URL, error) {
+	if !types.ValidUUIDv4(code) {
+		return nil, errs.InvalidArgumentError("invalid verification code")
+	}
+
+	str, err := s.Cockroach.EmailVerificationCodeRedirectURI(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := url.Parse(str)
+	if err != nil || !u.IsAbs() {
+		return nil, errs.InvalidArgumentError("invalid redirect URI")
+	}
+
+	return u, nil
+}
+
 // VerifyMagicLink checks whether the given email and verification code exists and issues a new auth token.
 // If the user does not exists, it can create a new one with the given username.
 func (s *Service) VerifyMagicLink(ctx context.Context, in types.UseEmailVerificationCode) (types.AuthOutput, error) {
@@ -191,13 +218,15 @@ func (s *Service) VerifyMagicLink(ctx context.Context, in types.UseEmailVerifica
 		return out, err
 	}
 
-	user, err := s.Cockroach.UseEmailVerificationCode(ctx, in, emailVerificationCodeTTL, func(user types.User) error {
+	in.SetTTL(emailVerificationCodeTTL)
+
+	user, err := s.Cockroach.UseEmailVerificationCode(ctx, in, func(user types.User) error {
 		out.ExpiresAt = time.Now().Add(authTokenTTL)
 
 		var err error
-		out.Token, err = s.codec().EncodeToString(out.User.ID)
+		out.Token, err = s.codec().EncodeToString(user.ID)
 		if err != nil {
-			return fmt.Errorf("could not create auth token: %w", err)
+			return fmt.Errorf("create auth token: %w", err)
 		}
 
 		return nil
