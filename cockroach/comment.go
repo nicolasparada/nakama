@@ -229,8 +229,10 @@ func (c *Cockroach) UpdateComment(ctx context.Context, in types.UpdateComment) (
 			return err
 		}
 
-		if err := c.deletePostsTagsWithComment(ctx, in.ID); err != nil {
-			return err
+		if in.Content != nil {
+			if err := c.deletePostsTagsWithComment(ctx, in.ID); err != nil {
+				return err
+			}
 		}
 
 		if len(in.Tags()) > 0 {

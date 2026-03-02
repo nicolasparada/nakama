@@ -31,6 +31,18 @@ func (c *Cockroach) createPostTags(ctx context.Context, in types.CreatePostTags)
 	return nil
 }
 
+func (c *Cockroach) deletePostsTags(ctx context.Context, postID string) error {
+	const query = `DELETE FROM post_tags WHERE post_id = @post_id AND comment_id IS NULL`
+	args := pgx.StrictNamedArgs{"post_id": postID}
+
+	_, err := c.db.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("sql delete post tags: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Cockroach) deletePostsTagsWithComment(ctx context.Context, commentID string) error {
 	const query = `DELETE FROM post_tags WHERE comment_id = @comment_id`
 	args := pgx.StrictNamedArgs{"comment_id": commentID}

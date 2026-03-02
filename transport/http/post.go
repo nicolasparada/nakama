@@ -129,8 +129,8 @@ func (h *handler) updatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
-	out, err := h.svc.UpdatePost(ctx, postID, in)
+	in.ID = way.Param(ctx, "post_id")
+	out, err := h.svc.UpdatePost(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return
@@ -154,15 +154,15 @@ func (h *handler) deletePost(w http.ResponseWriter, r *http.Request) {
 func (h *handler) togglePostReaction(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in types.ReactionInput
+	var in types.TogglePostReaction
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
-	out, err := h.svc.TogglePostReaction(ctx, postID, in)
+	in.PostID = way.Param(ctx, "post_id")
+	out, err := h.svc.TogglePostReaction(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return

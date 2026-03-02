@@ -52,13 +52,13 @@ func (s *Service) CreateTimelineItem(ctx context.Context, content string, spoile
 
 	content = textutil.SmartTrim(content)
 	if len(media) == 0 && content == "" || utf8.RuneCountInString(content) > postContentMaxLength {
-		return ti, ErrInvalidContent
+		return ti, errs.InvalidArgumentError("invalid content")
 	}
 
 	if spoilerOf != nil {
 		*spoilerOf = textutil.SmartTrim(*spoilerOf)
 		if *spoilerOf == "" || utf8.RuneCountInString(*spoilerOf) > postSpoilerMaxLength {
-			return ti, ErrInvalidSpoiler
+			return ti, errs.InvalidArgumentError("invalid spoiler")
 		}
 	}
 

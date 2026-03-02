@@ -44,6 +44,40 @@ type ReactionInput struct {
 	Reaction string       `json:"reaction"`
 }
 
+type TogglePostReaction struct {
+	PostID   string       `json:"-"`
+	Kind     ReactionKind `json:"kind"`
+	Reaction string       `json:"reaction"`
+	userID   string
+}
+
+func (in *TogglePostReaction) SetUserID(userID string) {
+	in.userID = userID
+}
+
+func (in TogglePostReaction) UserID() string {
+	return in.userID
+}
+
+func (in *TogglePostReaction) Validate() error {
+	if !ValidUUIDv4(in.PostID) {
+		return errs.InvalidArgumentError("invalid post ID")
+	}
+
+	if err := in.Kind.Validate(); err != nil {
+		return err
+	}
+
+	switch in.Kind {
+	case ReactionKindEmoji:
+		if !emoji.IsValid(in.Reaction) {
+			return errs.InvalidArgumentError("invalid reaction")
+		}
+	}
+
+	return nil
+}
+
 type ToggleCommentReaction struct {
 	CommentID string       `json:"-"`
 	Kind      ReactionKind `json:"kind"`

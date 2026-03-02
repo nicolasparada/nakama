@@ -10,11 +10,12 @@ import (
 type ResourceKind string
 
 const (
+	ResourceKindPost    ResourceKind = "post"
 	ResourceKindComment ResourceKind = "comment"
 )
 
 func (svc *Service) authorize(ctx context.Context, resourceKind ResourceKind, resourceID string) error {
-	uid, ok := ctx.Value(KeyAuthUserID).(string)
+	userID, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
 		return errs.Unauthenticated
 	}
@@ -23,17 +24,19 @@ func (svc *Service) authorize(ctx context.Context, resourceKind ResourceKind, re
 	var err error
 
 	switch resourceKind {
+	case ResourceKindPost:
+		resourceUserID, err = svc.Cockroach.PostUserID(ctx, resourceID)
 	case ResourceKindComment:
 		resourceUserID, err = svc.Cockroach.CommentUserID(ctx, resourceID)
 	default:
-		return fmt.Errorf("unknown resource kind: %s", resourceKind)
+		return fmt.Errorf("unknown resource kind %q", resourceKind)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	if resourceUserID != uid {
+	if resourceUserID != userID {
 		return errs.PermissionDenied
 	}
 

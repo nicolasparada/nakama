@@ -95,7 +95,7 @@ func (s *Service) Comments(ctx context.Context, in types.ListComments) (types.Pa
 // CommentStream to receive comments in realtime.
 func (s *Service) CommentStream(ctx context.Context, postID string) (<-chan types.Comment, error) {
 	if !types.ValidUUIDv4(postID) {
-		return nil, ErrInvalidPostID
+		return nil, errs.InvalidArgumentError("invalid post ID")
 	}
 
 	cc := make(chan types.Comment)
