@@ -4,8 +4,8 @@ import "time"
 
 type TimelineItem struct {
 	ID     string `json:"timelineItemID" db:"timeline_item_id"`
-	UserID string `json:"-" db:"-"`
-	PostID string `json:"-" db:"-"`
+	UserID string `json:"-" db:"user_id"`
+	PostID string `json:"-" db:"post_id"`
 	Post
 }
 
