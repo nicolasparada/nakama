@@ -9,7 +9,28 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgxutil"
 	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-db"
+	"github.com/nicolasparada/go-errs"
 )
+
+func (c *Cockroach) createTimelineItem(ctx context.Context, userID, postID string) (string, error) {
+	const query = `
+		INSERT INTO timeline (user_id, post_id)
+		VALUES (@user_id, @post_id)
+		RETURNING id
+	`
+	args := pgx.StrictNamedArgs{
+		"user_id": userID,
+		"post_id": postID,
+	}
+
+	timelineItemID, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	if err != nil {
+		return "", fmt.Errorf("sql insert timeline item: %w", err)
+	}
+
+	return timelineItemID, nil
+}
 
 func (c *Cockroach) Timeline(ctx context.Context, in types.ListTimeline) (types.Page[types.TimelineItem], error) {
 	var out types.Page[types.TimelineItem]
@@ -80,4 +101,51 @@ func (c *Cockroach) Timeline(ctx context.Context, in types.ListTimeline) (types.
 	})
 
 	return out, nil
+}
+
+func (c *Cockroach) FanoutTimeline(ctx context.Context, postID, followeeID string) ([]types.TimelineItem, error) {
+	const query = `
+		INSERT INTO timeline (user_id, post_id)
+		SELECT follower_id, @post_id
+		FROM follows
+		WHERE followee_id = @followee_id
+		RETURNING id AS timeline_item_id, post_id, user_id
+	`
+	args := pgx.StrictNamedArgs{
+		"post_id":     postID,
+		"followee_id": followeeID,
+	}
+
+	timeline, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.TimelineItem])
+	if err != nil {
+		return nil, fmt.Errorf("sql fanout timeline: %w", err)
+	}
+
+	return timeline, nil
+}
+
+func (c *Cockroach) TimelineItemUserID(ctx context.Context, timelineItemID string) (string, error) {
+	const query = `SELECT user_id FROM timeline WHERE id = @timeline_item_id`
+	args := pgx.StrictNamedArgs{"timeline_item_id": timelineItemID}
+
+	userID, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	if db.IsNotFoundError(err) {
+		return "", errs.NotFoundError("timeline item not found")
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("sql select timeline item user id: %w", err)
+	}
+
+	return userID, nil
+}
+
+func (c *Cockroach) DeleteTimelineItem(ctx context.Context, timelineItemID string) error {
+	const query = `DELETE FROM timeline WHERE id = @timeline_item_id`
+	args := pgx.StrictNamedArgs{"timeline_item_id": timelineItemID}
+	_, err := c.db.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("sql delete timeline item: %w", err)
+	}
+	return nil
 }

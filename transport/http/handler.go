@@ -60,7 +60,7 @@ func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, 
 	api.HandleFunc("DELETE", "/api/posts/:post_id", h.deletePost)
 	api.HandleFunc("POST", "/api/posts/:post_id/toggle_reaction", h.togglePostReaction)
 	api.HandleFunc("POST", "/api/posts/:post_id/toggle_subscription", h.togglePostSubscription)
-	api.HandleFunc("POST", "/api/timeline", h.createTimelineItem)
+	api.HandleFunc("POST", "/api/timeline", h.createPost)
 	api.HandleFunc("GET", "/api/timeline", h.timeline)
 	api.HandleFunc("DELETE", "/api/timeline/:timeline_item_id", h.deleteTimelineItem)
 	api.HandleFunc("POST", "/api/posts/:post_id/comments", h.createComment)

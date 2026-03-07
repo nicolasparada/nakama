@@ -10,8 +10,9 @@ import (
 type ResourceKind string
 
 const (
-	ResourceKindPost    ResourceKind = "post"
-	ResourceKindComment ResourceKind = "comment"
+	ResourceKindPost         ResourceKind = "post"
+	ResourceKindComment      ResourceKind = "comment"
+	ResourceKindTimelineItem ResourceKind = "timeline_item"
 )
 
 func (svc *Service) authorize(ctx context.Context, resourceKind ResourceKind, resourceID string) error {
@@ -28,6 +29,8 @@ func (svc *Service) authorize(ctx context.Context, resourceKind ResourceKind, re
 		resourceUserID, err = svc.Cockroach.PostUserID(ctx, resourceID)
 	case ResourceKindComment:
 		resourceUserID, err = svc.Cockroach.CommentUserID(ctx, resourceID)
+	case ResourceKindTimelineItem:
+		resourceUserID, err = svc.Cockroach.TimelineItemUserID(ctx, resourceID)
 	default:
 		return fmt.Errorf("unknown resource kind %q", resourceKind)
 	}

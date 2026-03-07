@@ -1,6 +1,7 @@
 package types
 
 import (
+	"io"
 	"time"
 	"unicode/utf8"
 
@@ -33,6 +34,58 @@ func (p *Post) SetMediaURLs(prefix string) {
 	for i, media := range p.MediaURLs {
 		p.MediaURLs[i] = joinPrefix(prefix, media)
 	}
+}
+
+type CreatePost struct {
+	Content      string          `json:"content"`
+	SpoilerOf    *string         `json:"spoilerOf"`
+	NSFW         bool            `json:"nsfw"`
+	MediaReaders []io.ReadSeeker `json:"-"`
+	userID       string
+	tags         []string
+	media        []string
+}
+
+func (in *CreatePost) SetUserID(userID string) {
+	in.userID = userID
+}
+
+func (in CreatePost) UserID() string {
+	return in.userID
+}
+
+func (in *CreatePost) SetTags(tags []string) {
+	in.tags = tags
+}
+
+func (in CreatePost) Tags() []string {
+	return in.tags
+}
+
+func (in *CreatePost) SetMedia(media []string) {
+	in.media = media
+}
+
+func (in CreatePost) Media() []string {
+	return in.media
+}
+
+func (in *CreatePost) Validate() error {
+	in.Content = textutil.SmartTrim(in.Content)
+
+	if in.Content == "" || utf8.RuneCountInString(in.Content) > PostContentMaxLength {
+		return errs.InvalidArgumentError("invalid content")
+	}
+
+	if in.SpoilerOf != nil {
+		*in.SpoilerOf = textutil.SmartTrim(*in.SpoilerOf)
+
+		if *in.SpoilerOf == "" || utf8.RuneCountInString(*in.SpoilerOf) > PostSpoilerMaxLength {
+			return errs.InvalidArgumentError("invalid spoiler")
+		}
+	}
+
+	return nil
 }
 
 type ListPosts struct {

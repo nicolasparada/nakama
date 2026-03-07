@@ -1,6 +1,6 @@
 module github.com/nakamauwu/nakama
 
-go 1.26.0
+go 1.26.1
 
 tool github.com/matryer/moq
 
@@ -22,7 +22,7 @@ require (
 	github.com/kyokomi/emoji/v2 v2.2.13
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/matryer/way v0.0.0-20180416093233-9632d0c407b0
-	github.com/minio/minio-go/v7 v7.0.98
+	github.com/minio/minio-go/v7 v7.0.99
 	github.com/nats-io/nats.go v1.49.0
 	github.com/nicolasparada/go-db v0.3.3
 	github.com/nicolasparada/go-errs v0.5.0
@@ -51,7 +51,7 @@ require (
 	github.com/eknkc/basex v1.0.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect

@@ -4,11 +4,85 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/matryer/way"
 
+	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
 )
+
+func (h *handler) createPost(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var in types.CreatePost
+
+	var closeFuncs []func() error
+
+	defer func() {
+		for _, f := range closeFuncs {
+			_ = f()
+		}
+	}()
+
+	mediatype, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err == nil && strings.Contains(strings.ToLower(mediatype), "multipart/form-data") {
+		if err := r.ParseMultipartForm(service.MaxMediaItemBytes); err != nil {
+			h.respondErr(w, errBadRequest)
+			return
+		}
+
+		defer r.MultipartForm.RemoveAll()
+
+		in.Content = r.FormValue("content")
+		if s := strings.TrimSpace(r.FormValue("spoiler_of")); s != "" {
+			in.SpoilerOf = &s
+		}
+		if v, err := strconv.ParseBool(r.FormValue("nsfw")); err == nil {
+			in.NSFW = v
+		}
+		if files, ok := r.MultipartForm.File["media"]; ok {
+			for _, header := range files {
+				if header.Size > service.MaxMediaItemBytes {
+					h.respondErr(w, service.ErrMediaItemTooLarge)
+					return
+				}
+
+				f, err := header.Open()
+				if err != nil {
+					h.respondErr(w, errBadRequest)
+					return
+				}
+
+				closeFuncs = append(closeFuncs, f.Close)
+
+				in.MediaReaders = append(in.MediaReaders, f)
+			}
+		}
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			h.respondErr(w, errBadRequest)
+			return
+		}
+	}
+
+	ti, err := h.svc.CreatePost(r.Context(), in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	if ti.Post.Reactions == nil {
+		ti.Post.Reactions = []types.Reaction{} // non null array
+	}
+
+	if ti.Post.MediaURLs == nil {
+		ti.Post.MediaURLs = []string{} // non null array
+	}
+
+	h.respond(w, ti, http.StatusCreated)
+}
 
 func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
 	// SSE support only for /api/posts endpoint

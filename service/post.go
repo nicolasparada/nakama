@@ -13,16 +13,74 @@ import (
 	"github.com/nicolasparada/go-errs"
 )
 
-const (
-	postContentMaxLength = 2048
-	postSpoilerMaxLength = 64
-	postEditWindow       = time.Minute * 15
-)
+const postEditWindow = time.Minute * 15
 
 var (
 	// ErrInvalidCursor denotes an invalid cursor, that is not base64 encoded and has a key and timestamp separated by comma.
 	ErrInvalidCursor = errs.InvalidArgumentError("invalid cursor")
 )
+
+func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.TimelineItem, error) {
+	var out types.TimelineItem
+
+	if err := in.Validate(); err != nil {
+		return out, err
+	}
+
+	uid, ok := ctx.Value(KeyAuthUserID).(string)
+	if !ok {
+		return out, errs.Unauthenticated
+	}
+
+	media, err := processMedia(in.MediaReaders)
+	if err != nil {
+		return out, err
+	}
+
+	if mediaTotalBytes(media) > MaxMediaBytes {
+		return out, errs.InvalidArgumentError("media too large")
+	}
+
+	mediaNames := collectMediaNames(media)
+
+	in.SetMedia(mediaNames)
+	in.SetUserID(uid)
+	in.SetTags(textutil.CollectTags(in.Content))
+
+	if err := s.storeMedia(ctx, media); err != nil {
+		return out, err
+	}
+
+	createdTimelineItem, err := s.Cockroach.CreatePost(ctx, in)
+	if err != nil {
+		go s.cleanupMedia(media)
+		return out, err
+	}
+
+	post := types.Post{
+		ID:         createdTimelineItem.PostID,
+		UserID:     uid,
+		Content:    in.Content,
+		SpoilerOf:  in.SpoilerOf,
+		NSFW:       in.NSFW,
+		MediaURLs:  mediaNames,
+		Mine:       true,
+		Subscribed: true,
+		CreatedAt:  createdTimelineItem.CreatedAt,
+		UpdatedAt:  createdTimelineItem.CreatedAt,
+	}
+	post.SetMediaURLs(s.MediaURLPrefix)
+
+	go s.postCreated(post)
+
+	out.ID = createdTimelineItem.TimelineItemID
+	out.UserID = uid
+	out.PostID = post.ID
+	out.Post = post
+
+	return out, nil
+
+}
 
 func (s *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
@@ -198,5 +256,34 @@ func (s *Service) broadcastPost(p types.Post) {
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not publish post: %w", err))
 		return
+	}
+}
+
+func (s *Service) postCreated(p types.Post) {
+	u, err := s.userByID(context.Background(), p.UserID)
+	if err != nil {
+		_ = s.Logger.Log("error", fmt.Errorf("could not fetch post user: %w", err))
+		return
+	}
+
+	p.User = &u
+	p.Mine = false
+	p.Subscribed = false
+
+	go s.broadcastPost(p)
+	go s.fanoutPost(p)
+	go s.notifyPostMention(p)
+}
+
+func (s *Service) fanoutPost(p types.Post) {
+	timeline, err := s.Cockroach.FanoutTimeline(context.Background(), p.ID, p.UserID)
+	if err != nil {
+		_ = s.Logger.Log("error", err)
+		return
+	}
+
+	for _, ti := range timeline {
+		ti.Post = p
+		go s.broadcastTimelineItem(ti)
 	}
 }

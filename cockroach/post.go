@@ -62,6 +62,63 @@ const sqlJoinPostReactions = `
 		GROUP BY post_reactions.post_id
 	) AS user_reactions ON user_reactions.post_id = posts.id`
 
+func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.CreatedTimelineItem, error) {
+	var out types.CreatedTimelineItem
+
+	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
+		createdPost, err := c.createPost(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		if err := c.upsertPostSubscription(ctx, in.UserID(), createdPost.ID); err != nil {
+			return err
+		}
+
+		if err := c.createPostTags(ctx, types.CreatePostTags{
+			PostID: createdPost.ID,
+			Tags:   in.Tags(),
+		}); err != nil {
+			return err
+		}
+
+		timelineItemID, err := c.createTimelineItem(ctx, in.UserID(), createdPost.ID)
+		if err != nil {
+			return err
+		}
+
+		out.TimelineItemID = timelineItemID
+		out.PostID = createdPost.ID
+		out.CreatedAt = createdPost.CreatedAt
+
+		return nil
+	})
+}
+
+func (c *Cockroach) createPost(ctx context.Context, in types.CreatePost) (types.Created, error) {
+	var out types.Created
+
+	const query = `
+		INSERT INTO posts (user_id, content, spoiler_of, nsfw, media)
+		VALUES (@user_id, @content, @spoiler_of, @nsfw, @media)
+		RETURNING id, created_at
+	`
+	args := pgx.StrictNamedArgs{
+		"user_id":    in.UserID(),
+		"content":    in.Content,
+		"spoiler_of": in.SpoilerOf,
+		"nsfw":       in.NSFW,
+		"media":      in.Media(),
+	}
+
+	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Created])
+	if err != nil {
+		return out, fmt.Errorf("sql insert post: %w", err)
+	}
+
+	return out, nil
+}
+
 func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[types.Post], error) {
 	var out types.Page[types.Post]
 

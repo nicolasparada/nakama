@@ -3,9 +3,6 @@ package service
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"mime"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -24,10 +21,6 @@ var queriesCache sync.Map
 
 func isUniqueViolation(err error) bool {
 	return db.IsUniqueViolationError(err)
-}
-
-func isForeignKeyViolation(err error) bool {
-	return db.IsForeignKeyViolationError(err)
 }
 
 func buildQuery(text string, data map[string]any) (string, []any, error) {
@@ -87,26 +80,4 @@ func cloneURL(u *url.URL) *url.URL {
 		*u2.User = *u.User
 	}
 	return u2
-}
-
-func detectContentType(r io.ReadSeeker) (string, error) {
-	// http.DetectContentType uses at most 512 bytes to make its decision.
-	h := make([]byte, 512)
-	_, err := r.Read(h)
-	if err != nil {
-		return "", fmt.Errorf("detect content type: read head: %w", err)
-	}
-
-	// Reset the reader so it can be used again.
-	_, err = r.Seek(0, io.SeekStart)
-	if err != nil {
-		return "", fmt.Errorf("detect content type: seek to start: %w", err)
-	}
-
-	mt, _, err := mime.ParseMediaType(http.DetectContentType(h))
-	if err != nil {
-		return "", fmt.Errorf("detect content type: %w", err)
-	}
-
-	return mt, nil
 }

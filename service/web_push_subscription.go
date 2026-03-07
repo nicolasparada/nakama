@@ -32,7 +32,7 @@ func (svc *Service) AddWebPushSubscription(ctx context.Context, sub webpush.Subs
 	}
 
 	query := "INSERT INTO user_web_push_subscriptions (user_id, sub) VALUES ($1, $2)"
-	_, err := svc.DB.Exec(ctx, query, uid, jsonValue{sub})
+	_, err := svc.DB.Exec(ctx, query, uid, sub)
 	if isUniqueViolation(err) {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (svc *Service) webPushSubscriptions(ctx context.Context, userID string) ([]
 	var subs []webpush.Subscription
 	for rows.Next() {
 		var sub webpush.Subscription
-		err := rows.Scan(&jsonValue{&sub})
+		err := rows.Scan(&sub)
 		if err != nil {
 			return nil, fmt.Errorf("could not sql scan user web push subscription: %w", err)
 		}
@@ -149,8 +149,8 @@ func (svc *Service) sendWebPushNotification(sub webpush.Subscription, message []
 }
 
 func (svc *Service) deleteWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
-	query := "DELETE FROM user_web_push_subscriptions WHERE user_id = $1 AND sub = $2"
-	_, err := svc.DB.Exec(ctx, query, userID, jsonValue{sub})
+	query := "DELETE FROM user_web_push_subscriptions WHERE user_id = $1 AND sub ->> 'endpoint' = $2"
+	_, err := svc.DB.Exec(ctx, query, userID, sub.Endpoint)
 	if err != nil {
 		return fmt.Errorf("sql delete user web push subscription: %w", err)
 	}
