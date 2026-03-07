@@ -433,7 +433,18 @@ function AddReactionBtn({ postID, type }) {
 // @ts-ignore
 customElements.define("add-reaction-btn", component(AddReactionBtn, { useShadowDOM: false }))
 
-const trustedOrigins = ["https://i.imgur.com", "https://puu.sh", location.origin]
+const trustedOrigins = [
+    location.origin,
+    "https://i.imgur.com",
+    "https://puu.sh",
+    "https://cdn.discordapp.com",
+    "https://media.discordapp.net",
+    "https://media.giphy.com",
+    "https://i.giphy.com",
+    "https://media1.giphy.com",
+    "https://i.redd.it",
+    "https://preview.redd.it",
+]
 const imageExts = ["jpg", "jpeg", "gif", "png", "webp", "avif"].map(ext => "." + ext)
 const audioExts = ["wav", "mp3", "flac"].map(ext => "." + ext)
 const videoExts = ["mp4", "webm", "mov", "3gp", "ogg"].map(ext => "." + ext)
@@ -544,6 +555,21 @@ function MediaScroller({ urls }) {
                             frameborder="0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowfullscreen></iframe>`)
+                        continue
+                    }
+                }
+
+                {
+                    const tenorMedia = await resolveTenorMedia(url)
+                    if (tenorMedia !== null) {
+                        switch (tenorMedia.kind) {
+                            case "image":
+                                items.push(html`<zoomable-img .src=${tenorMedia.src}></zoomable-img>`)
+                                break
+                            case "video":
+                                items.push(html`<video src="${tenorMedia.src}" preload="metadata" controls loop></video>`)
+                                break
+                        }
                         continue
                     }
                 }
@@ -796,6 +822,109 @@ function findCoubVideoID(url) {
     }
 
     return decodeURIComponent(parts[2])
+}
+
+/**
+ * @param {URL} url
+ * @returns {Promise<{kind:"image"|"video", src:string}|null>}
+ */
+async function resolveTenorMedia(url) {
+    if (url.hostname !== "tenor.com" && url.hostname !== "www.tenor.com") {
+        return null
+    }
+
+    try {
+        const resp = await fetch("/api/proxy?target=" + encodeURIComponent(url.toString()), {
+            headers: {
+                accept: "text/html,application/xhtml+xml",
+            },
+        })
+        if (!resp.ok) {
+            return null
+        }
+
+        const ct = resp.headers.get("content-type")
+        if (ct !== null && !ct.includes("text/html")) {
+            return null
+        }
+
+        const text = await resp.text()
+        const doc = new DOMParser().parseFromString(text, "text/html")
+
+        const imageURL = findMetaContent(doc, [
+            'meta[property="og:image"]',
+            'meta[name="twitter:image"]',
+            'meta[property="og:image:secure_url"]',
+        ])
+        if (imageURL !== null) {
+            return { kind: "image", src: imageURL }
+        }
+
+        const videoURL = findMetaContent(doc, [
+            'meta[property="og:video:secure_url"]',
+            'meta[property="og:video"]',
+            'meta[name="twitter:player:stream"]',
+        ])
+        if (videoURL !== null) {
+            return { kind: "video", src: videoURL }
+        }
+
+        const imageElementURL = findAttrContent(doc, [
+            'img[src*="tenor.com"]',
+            'img[src*="media.tenor.com"]',
+            'img[src*="media1.tenor.com"]',
+        ], "src")
+        if (imageElementURL !== null) {
+            return { kind: "image", src: imageElementURL }
+        }
+
+        const videoElementURL = findAttrContent(doc, [
+            'source[src*="tenor.com"]',
+            'video[src*="tenor.com"]',
+        ], "src")
+        if (videoElementURL !== null) {
+            return { kind: "video", src: videoElementURL }
+        }
+    } catch (err) {
+        console.error("failed to resolve tenor media", err)
+    }
+
+    return null
+}
+
+/**
+ * @param {Document} doc
+ * @param {string[]} selectors
+ * @returns {string|null}
+ */
+function findMetaContent(doc, selectors) {
+    for (const selector of selectors) {
+        const el = doc.querySelector(selector)
+        const content = el?.getAttribute("content")
+        if (content !== null && content !== undefined && content !== "") {
+            return content
+        }
+    }
+
+    return null
+}
+
+/**
+ * @param {Document} doc
+ * @param {string[]} selectors
+ * @param {string} attr
+ * @returns {string|null}
+ */
+function findAttrContent(doc, selectors, attr) {
+    for (const selector of selectors) {
+        const el = doc.querySelector(selector)
+        const value = el?.getAttribute(attr)
+        if (value !== null && value !== undefined && value !== "") {
+            return value
+        }
+    }
+
+    return null
 }
 
 /**

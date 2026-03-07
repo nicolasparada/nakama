@@ -3,8 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"image"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/nakamauwu/nakama/storage"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
+	"golang.org/x/image/webp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,6 +30,13 @@ const (
 )
 
 var ErrMediaItemTooLarge = errs.InvalidArgumentError("media item too large")
+
+var imageContentTypeToExtension = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
+}
 
 func (svc *Service) storeMedia(ctx context.Context, media []types.Media) error {
 	if len(media) == 0 {
@@ -68,13 +77,16 @@ func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
 				return errs.InvalidArgumentError("unsupported media item format")
 			}
 
-			img, err := decodeImage(io.LimitReader(r, MaxMediaItemBytes), ct)
-			if err != nil {
-				return err
+			contents, err := io.ReadAll(io.LimitReader(r, MaxMediaItemBytes+1))
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				return ErrMediaItemTooLarge
 			}
 
-			contents, err := encodeImage(img, ct)
 			if err != nil {
+				return fmt.Errorf("read media item contents: %w", err)
+			}
+
+			if err := validateImage(bytes.NewReader(contents), ct); err != nil {
 				return err
 			}
 
@@ -146,63 +158,47 @@ func mediaTotalBytes(media []types.Media) int64 {
 }
 
 func isMediaContentTypeSupported(ct string) bool {
-	switch ct {
-	case "image/jpeg", "image/png":
-		return true
-	default:
-		return false
-	}
+	_, ok := imageContentTypeToExtension[ct]
+	return ok
 }
 
-func decodeImage(r io.Reader, ct string) (image.Image, error) {
+func validateImage(r io.Reader, ct string) error {
 	switch ct {
 	case "image/jpeg":
-		img, err := jpeg.Decode(r)
+		_, err := jpeg.Decode(r)
 		if err != nil {
-			return nil, errs.InvalidArgumentError("invalid media item format")
+			return errs.InvalidArgumentError("invalid media item format")
 		}
-		return img, nil
+		return nil
 	case "image/png":
-		img, err := png.Decode(r)
+		_, err := png.Decode(r)
 		if err != nil {
-			return nil, errs.InvalidArgumentError("invalid media item format")
+			return errs.InvalidArgumentError("invalid media item format")
 		}
-		return img, nil
+		return nil
+	case "image/gif":
+		_, err := gif.DecodeAll(r)
+		if err != nil {
+			return errs.InvalidArgumentError("invalid media item format")
+		}
+		return nil
+	case "image/webp":
+		_, err := webp.Decode(r)
+		if err != nil {
+			return errs.InvalidArgumentError("invalid media item format")
+		}
+		return nil
 	default:
-		return nil, errs.InvalidArgumentError("unsupported media item format")
-	}
-}
-
-func encodeImage(img image.Image, ct string) ([]byte, error) {
-	buf := &bytes.Buffer{}
-
-	switch ct {
-	case "image/jpeg":
-		err := jpeg.Encode(buf, img, nil)
-		if err != nil {
-			return nil, fmt.Errorf("encode jpeg image: %w", err)
-		}
-		return buf.Bytes(), nil
-	case "image/png":
-		err := png.Encode(buf, img)
-		if err != nil {
-			return nil, fmt.Errorf("encode png image: %w", err)
-		}
-		return buf.Bytes(), nil
-	default:
-		return nil, errs.InvalidArgumentError("unsupported media item format")
+		return errs.InvalidArgumentError("unsupported media item format")
 	}
 }
 
 func contentTypeExtension(ct string) string {
-	switch ct {
-	case "image/jpeg":
-		return ".jpg"
-	case "image/png":
-		return ".png"
-	default:
+	ext, ok := imageContentTypeToExtension[ct]
+	if !ok {
 		return ".bin"
 	}
+	return ext
 }
 
 func detectContentType(r io.ReadSeeker) (string, error) {
