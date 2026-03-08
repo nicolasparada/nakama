@@ -6,7 +6,22 @@ import "./intersectable-comp.js"
 import "./toast-item.js"
 import "./user-item.js"
 
-const pageSize = 10
+/**
+ * @typedef {import("../types.js").ListUserProfiles} ListUserProfiles
+ */
+
+/**
+ * @typedef {import("../types.js").UserProfile} UserProfile
+ */
+
+/**
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
 
 export default function () {
     return html`<search-page></search-page>`
@@ -34,11 +49,11 @@ function SearchPage() {
         }
 
         setLoadingMore(true)
-        fetchUsers(getLocationSearchQuery(), usersEndCursor).then(({ items: users, endCursor }) => {
-            setUsers(uu => [...uu, ...users])
-            setUsersEndCursor(endCursor)
+        fetchUsers({search: getLocationSearchQuery(), pageArgs: {after: usersEndCursor}}).then(page => {
+            setUsers(uu => [...uu, ...page.items])
+            setUsersEndCursor(page.pageInfo.endCursor)
 
-            if (users.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreUsers(true)
                 setEndReached(true)
             }
@@ -53,11 +68,11 @@ function SearchPage() {
 
     useEffect(() => {
         setFetching(true)
-        fetchUsers(getLocationSearchQuery()).then(({ items: users, endCursor }) => {
-            setUsers(users)
-            setUsersEndCursor(endCursor)
+        fetchUsers({search: getLocationSearchQuery()}).then(page => {
+            setUsers(page.items)
+            setUsersEndCursor(page.pageInfo.endCursor)
 
-            if (users.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreUsers(true)
             }
         }, err => {
@@ -111,7 +126,7 @@ function SearchForm() {
         ev.preventDefault()
         history.pushState(history.state, document.title, "/search?q=" + encodeURIComponent(searchQuery))
         setFetching(true)
-        fetchUsers(searchQuery).then(dispatchNewResults, err => {
+        fetchUsers({search: searchQuery}).then(dispatchNewResults, err => {
             const msg = "could not fetch users: " + err.message
             console.error(msg)
             setToast({ type: "error", content: msg })
@@ -143,7 +158,27 @@ function getLocationSearchQuery() {
     }
 }
 
-function fetchUsers(search = "", after = "", first = pageSize) {
-    return request("GET", `/api/users?search=${encodeURIComponent(search)}&after=${encodeURIComponent(after)}&first=${encodeURIComponent(first)}`)
+/**
+ * @param {ListUserProfiles} input 
+ * @returns {Promise<Page<UserProfile>>}
+ */
+function fetchUsers(input) {
+    const u = new URL("/api/users", location.origin)
+    if (input.search != null && input.search.trim() !== "") {
+        u.searchParams.set("search", input.search)
+    }
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
 }

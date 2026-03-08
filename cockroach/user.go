@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgxutil"
@@ -25,6 +26,18 @@ const (
 			'username', users.username,
 			'avatarURL', users.avatar
 		) AS user
+	`
+	sqlUserProfileCols = `
+		  users.id
+		, users.email
+		, users.username
+		, users.avatar
+		, users.cover
+		, users.bio
+		, users.waifu
+		, users.husbando
+		, users.followers_count
+		, users.followees_count
 	`
 )
 
@@ -136,6 +149,86 @@ func (c *Cockroach) createUserWithProvider(ctx context.Context, email, username,
 	if err != nil {
 		return out, fmt.Errorf("sql insert user with provider: %w", err)
 	}
+
+	return out, nil
+}
+
+func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles) (types.Page[types.UserProfile], error) {
+	var out types.Page[types.UserProfile]
+
+	args := pgx.StrictNamedArgs{}
+	selects := []string{sqlUserProfileCols}
+	joins := []string{}
+	filters := []string{}
+
+	if in.SearchUsername != nil {
+		args["search_username"] = *in.SearchUsername
+		filters = append(filters, "users.username ILIKE '%' || @search_username || '%'")
+	}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
+		selects = append(selects,
+			`users.id = @viewer_id AS me`,
+			`followers.follower_id IS NOT NULL AS following`,
+			`followees.followee_id IS NOT NULL AS followeed`)
+		joins = append(joins,
+			`LEFT JOIN follows AS followers ON followers.follower_id = @viewer_id AND followers.followee_id = users.id`,
+			`LEFT JOIN follows AS followees ON followees.follower_id = users.id AND followees.followee_id = @viewer_id`)
+	}
+
+	pageArgs, err := ParsePageArgs[string](in.PageArgs)
+	if err != nil {
+		return out, err
+	}
+
+	if pageArgs.After != nil {
+		filters = append(filters, "(users.username, users.id) < (@after_username, @after_id)")
+		args["after_username"] = pageArgs.After.Value
+		args["after_id"] = pageArgs.After.ID
+	} else if pageArgs.Before != nil {
+		filters = append(filters, "(users.username, users.id) > (@before_username, @before_id)")
+		args["before_username"] = pageArgs.Before.Value
+		args["before_id"] = pageArgs.Before.ID
+	}
+
+	var order, limit string
+	if pageArgs.IsBackwards() {
+		order = "ORDER BY users.username ASC, users.id ASC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.Last, defaultPageSize)+1) // +1 to check if there's a next page
+	} else {
+		order = "ORDER BY users.username DESC, users.id DESC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.First, defaultPageSize)+1) // +1 to check if there's a next page
+	}
+
+	var condWhere string
+	if len(filters) > 0 {
+		condWhere = " WHERE " + strings.Join(filters, " AND ")
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM users
+		%s
+		%s
+		%s
+		%s`,
+		strings.Join(selects, ",\n\t\t"),
+		strings.Join(joins, "\n\t\t"),
+		condWhere,
+		order,
+		limit,
+	)
+
+	users, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.UserProfile])
+	if err != nil {
+		return out, fmt.Errorf("sql select user profiles: %w", err)
+	}
+
+	out.Items = users
+	applyPageInfo(&out, pageArgs, func(up types.UserProfile) Cursor[string] {
+		return Cursor[string]{ID: up.ID, Value: up.Username}
+	})
 
 	return out, nil
 }

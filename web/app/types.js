@@ -19,6 +19,12 @@
  */
 
 /**
+ * @typedef ListUserProfiles
+ * @prop {PageArgs=} pageArgs
+ * @prop {string=} search
+ */
+
+/**
  * @typedef DevLoginOutput
  * @prop {string} token
  * @prop {string|Date} expiresAt

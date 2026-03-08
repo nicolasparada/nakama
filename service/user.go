@@ -65,94 +65,30 @@ const (
 	ErrInvalidUserHusbando = errs.InvalidArgumentError("invalid user husbando")
 )
 
-// Users in ascending order with forward pagination and filtered by username.
-func (s *Service) Users(ctx context.Context, search string, first uint64, after *string) (types.UserProfiles, error) {
-	search = strings.TrimSpace(search)
-	first = normalizePageSize(first)
+func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (types.Page[types.UserProfile], error) {
+	var users types.Page[types.UserProfile]
 
-	var afterUsername string
-	if after != nil {
-		var err error
-		afterUsername, err = cursor.DecodeSimple(*after)
-		if err != nil || !types.ValidUsername(afterUsername) {
-			return nil, ErrInvalidCursor
-		}
+	if err := in.Validate(); err != nil {
+		return users, err
 	}
 
-	uid, auth := ctx.Value(KeyAuthUserID).(string)
-	query, args, err := buildQuery(`
-		SELECT id, email, username, avatar, cover, bio, waifu, husbando, followers_count, followees_count
-		{{ if .auth }}
-		, followers.follower_id IS NOT NULL AS following
-		, followees.followee_id IS NOT NULL AS followeed
-		{{ end }}
-		FROM users
-		{{ if .auth }}
-		LEFT JOIN follows AS followers
-			ON followers.follower_id = @uid AND followers.followee_id = users.id
-		LEFT JOIN follows AS followees
-			ON followees.follower_id = users.id AND followees.followee_id = @uid
-		{{ end }}
-		{{ if or .search .afterUsername }}WHERE{{ end }}
-		{{ if .search }}username ILIKE '%' || @search || '%'{{ end }}
-		{{ if and .search .afterUsername }}AND{{ end }}
-		{{ if .afterUsername }}username > @afterUsername{{ end }}
-		ORDER BY username ASC
-		LIMIT @first`, map[string]any{
-		"auth":          auth,
-		"uid":           uid,
-		"search":        search,
-		"first":         first,
-		"afterUsername": afterUsername,
-	})
+	if uid, ok := ctx.Value(KeyAuthUserID).(string); ok {
+		in.SetViewerID(uid)
+	}
+
+	users, err := s.Cockroach.UserProfiles(ctx, in)
 	if err != nil {
-		return nil, fmt.Errorf("could not build users sql query: %w", err)
+		return users, err
 	}
 
-	rows, err := s.DB.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("could not query select users: %w", err)
+	for i, u := range users.Items {
+		u.SetAvatarURL(s.AvatarURLPrefix)
+		u.SetCoverURL(s.CoverURLPrefix)
+		users.Items[i] = u
 	}
 
-	defer rows.Close()
+	return users, nil
 
-	var uu types.UserProfiles
-	for rows.Next() {
-		var u types.UserProfile
-		var avatar, cover sql.NullString
-		dest := []any{
-			&u.ID, &u.Email,
-			&u.Username,
-			&avatar,
-			&cover,
-			&u.Bio,
-			&u.Waifu,
-			&u.Husbando,
-			&u.FollowersCount,
-			&u.FolloweesCount,
-		}
-		if auth {
-			dest = append(dest, &u.Following, &u.Followeed)
-		}
-		if err = rows.Scan(dest...); err != nil {
-			return nil, fmt.Errorf("could not scan user: %w", err)
-		}
-
-		u.Me = auth && uid == u.ID
-		if !u.Me {
-			u.ID = ""
-			u.Email = ""
-		}
-		u.AvatarURL = s.avatarURL(avatar)
-		u.CoverURL = s.coverURL(cover)
-		uu = append(uu, u)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate user rows: %w", err)
-	}
-
-	return uu, nil
 }
 
 // Usernames to autocomplete a mention box or something.

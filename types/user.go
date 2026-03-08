@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/nakamauwu/nakama/cursor"
+	"github.com/nicolasparada/go-errs"
 )
 
 type User struct {
@@ -43,6 +44,31 @@ type CreateUser struct {
 type ToggleFollowOutput struct {
 	Following      bool `json:"following"`
 	FollowersCount int  `json:"followersCount"`
+}
+
+type ListUserProfiles struct {
+	SearchUsername *string
+	PageArgs
+	viewerID *string
+}
+
+func (in *ListUserProfiles) SetViewerID(viewerID string) {
+	in.viewerID = &viewerID
+}
+
+func (in ListUserProfiles) ViewerID() *string {
+	return in.viewerID
+}
+
+func (in *ListUserProfiles) Validate() error {
+	if in.SearchUsername != nil {
+		*in.SearchUsername = strings.TrimSpace(*in.SearchUsername)
+		if *in.SearchUsername == "" {
+			return errs.InvalidArgumentError("invalid search username")
+		}
+	}
+
+	return in.PageArgs.Validate()
 }
 
 type UserProfiles []UserProfile

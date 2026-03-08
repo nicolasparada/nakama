@@ -16,25 +16,33 @@ import (
 	"github.com/nakamauwu/nakama/types"
 )
 
-func (h *handler) users(w http.ResponseWriter, r *http.Request) {
+func (h *handler) userProfiles(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	search := q.Get("search")
-	first, _ := strconv.ParseUint(q.Get("first"), 10, 64)
-	after := emptyStrPtr(q.Get("after"))
-	uu, err := h.svc.Users(r.Context(), search, first, after)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if uu == nil {
-		uu = []types.UserProfile{} // non null array
+	in := types.ListUserProfiles{
+		PageArgs: pageArgs,
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     uu,
-		EndCursor: uu.EndCursor(),
-	}, http.StatusOK)
+	if q.Has("search") {
+		in.SearchUsername = new(q.Get("search"))
+	}
+
+	users, err := h.svc.UserProfiles(r.Context(), in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	if users.Items == nil {
+		users.Items = []types.UserProfile{} // non null array
+	}
+
+	h.respond(w, users, http.StatusOK)
 }
 
 func (h *handler) usernames(w http.ResponseWriter, r *http.Request) {

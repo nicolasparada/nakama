@@ -44,7 +44,7 @@ func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, 
 	api.HandleFunc("POST", "/api/dev_login", h.devLogin)
 	api.HandleFunc("GET", "/api/auth_user", h.authUser)
 	api.HandleFunc("GET", "/api/token", h.token)
-	api.HandleFunc("GET", "/api/users", h.users)
+	api.HandleFunc("GET", "/api/users", h.userProfiles)
 	api.HandleFunc("GET", "/api/usernames", h.usernames)
 	api.HandleFunc("GET", "/api/users/:username", h.user)
 	api.HandleFunc("PATCH", "/api/auth_user", h.updateUser)
