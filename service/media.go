@@ -29,7 +29,7 @@ const (
 	MaxMediaBytes     = 15 << 20 // 15MB
 )
 
-var ErrMediaItemTooLarge = errs.InvalidArgumentError("media item too large")
+const ErrMediaItemTooLarge = errs.InvalidArgumentError("media item too large")
 
 var imageContentTypeToExtension = map[string]string{
 	"image/jpeg": ".jpg",

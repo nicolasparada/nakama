@@ -28,37 +28,121 @@ const (
 	`
 )
 
-func (c *Cockroach) CreateUser(ctx context.Context, email, username string) (string, error) {
+func (c *Cockroach) createUser(ctx context.Context, in types.CreateUser) (types.Created, error) {
 	const query = `
 		INSERT INTO users (email, username)
 		VALUES (@email, @username)
-		RETURNING id
+		RETURNING id, created_at
 	`
 	args := pgx.StrictNamedArgs{
-		"email":    email,
-		"username": username,
+		"email":    in.Email,
+		"username": in.Username,
 	}
-	id, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Created])
 	if db.IsUniqueViolationError(err, "email") {
-		return "", errs.ConflictError("email taken")
+		return out, errs.ConflictError("email taken")
 	}
 
 	if db.IsUniqueViolationError(err, "username") {
-		return "", errs.ConflictError("username taken")
+		return out, errs.ConflictError("username taken")
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("sql insert user: %w", err)
+		return out, fmt.Errorf("sql insert user: %w", err)
 	}
 
-	return id, nil
+	return out, nil
+}
+
+func (c *Cockroach) CreateUserWithProvider(ctx context.Context, in types.ProvidedUser) (types.User, error) {
+	var out types.User
+	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
+		existsWithProvider, err := c.userExistsWithProvider(ctx, in.ProviderName, in.PrividerID)
+		if err != nil {
+			return err
+		}
+
+		if !existsWithProvider {
+			existsWithEmail, err := c.userExistsWithEmail(ctx, in.Email)
+			if err != nil {
+				return err
+			}
+
+			if !existsWithEmail {
+				// `user not found` is a signal to request the user for a username.
+				if in.Username == nil {
+					return errs.NotFoundError("user not found")
+				}
+
+				created, err := c.createUserWithProvider(ctx, in.Email, *in.Username, in.ProviderName, in.PrividerID)
+				if err != nil {
+					return err
+				}
+
+				out.ID = created.ID
+				out.Username = *in.Username
+
+				return nil
+			}
+
+			err = c.setProviderForUserEmail(ctx, in.Email, in.ProviderName, in.PrividerID)
+			if err != nil {
+				return err
+			}
+
+			user, err := c.UserByEmail(ctx, in.Email)
+			if err != nil {
+				return err
+			}
+
+			out = user
+			return nil
+		}
+
+		user, err := c.userByProvider(ctx, in.ProviderName, in.PrividerID)
+		if err != nil {
+			return err
+		}
+
+		out = user
+		return nil
+	})
+}
+
+func (c *Cockroach) createUserWithProvider(ctx context.Context, email, username, providerName, providerID string) (types.Created, error) {
+	query := fmt.Sprintf(`
+		INSERT INTO users (email, username, %s_provider_id)
+		VALUES (@email, @username, @provider_id)
+		RETURNING id, created_at
+	`, providerName)
+	args := pgx.StrictNamedArgs{
+		"email":       email,
+		"username":    username,
+		"provider_id": providerID,
+	}
+	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Created])
+	if db.IsUniqueViolationError(err, "email") {
+		return out, errs.ConflictError("email taken")
+	}
+
+	if db.IsUniqueViolationError(err, "username") {
+		return out, errs.ConflictError("username taken")
+	}
+
+	if db.IsUniqueViolationError(err, providerName+"_provider_id") {
+		return out, errs.ConflictError("account already linked with this provider")
+	}
+
+	if err != nil {
+		return out, fmt.Errorf("sql insert user with provider: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error) {
 	query := `SELECT ` + sqlUserCols + ` FROM users WHERE id = @user_id`
-	args := pgx.StrictNamedArgs{
-		"user_id": userID,
-	}
+	args := pgx.StrictNamedArgs{"user_id": userID}
 	user, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.User])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return user, errs.NotFoundError("user not found")
@@ -73,9 +157,7 @@ func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error)
 
 func (c *Cockroach) UserByEmail(ctx context.Context, email string) (types.User, error) {
 	query := `SELECT ` + sqlUserCols + ` FROM users WHERE email = @email`
-	args := pgx.StrictNamedArgs{
-		"email": email,
-	}
+	args := pgx.StrictNamedArgs{"email": email}
 	user, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.User])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return user, errs.NotFoundError("user not found")
@@ -88,14 +170,38 @@ func (c *Cockroach) UserByEmail(ctx context.Context, email string) (types.User, 
 	return user, nil
 }
 
-func (c *Cockroach) UserExistsWithEmail(ctx context.Context, email string) (bool, error) {
-	const query = "SELECT EXISTS (SELECT 1 FROM users WHERE email = @email)"
-	args := pgx.StrictNamedArgs{
-		"email": email,
+func (c *Cockroach) userByProvider(ctx context.Context, providerName, providerID string) (types.User, error) {
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE %s_provider_id = @provider_id`, sqlUserCols, providerName)
+	args := pgx.StrictNamedArgs{"provider_id": providerID}
+	user, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.User])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return user, errs.NotFoundError("user not found")
 	}
+
+	if err != nil {
+		return user, fmt.Errorf("sql query select user by provider: %w", err)
+	}
+
+	return user, nil
+}
+
+func (c *Cockroach) userExistsWithEmail(ctx context.Context, email string) (bool, error) {
+	const query = "SELECT EXISTS (SELECT 1 FROM users WHERE email = @email)"
+	args := pgx.StrictNamedArgs{"email": email}
 	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
 	if err != nil {
 		return false, fmt.Errorf("sql query select user existence by email: %w", err)
+	}
+
+	return exists, nil
+}
+
+func (c *Cockroach) userExistsWithProvider(ctx context.Context, providerName, providerID string) (bool, error) {
+	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM users WHERE %s_provider_id = @provider_id)", providerName)
+	args := pgx.StrictNamedArgs{"provider_id": providerID}
+	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
+	if err != nil {
+		return false, fmt.Errorf("sql query select user existence by provider id: %w", err)
 	}
 
 	return exists, nil
@@ -135,4 +241,22 @@ func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (
 	}
 
 	return user, nil
+}
+
+func (c *Cockroach) setProviderForUserEmail(ctx context.Context, email, providerName, providerID string) error {
+	query := fmt.Sprintf("UPDATE users SET %s_provider_id = @provider_id WHERE email = @email", providerName)
+	args := pgx.StrictNamedArgs{
+		"provider_id": providerID,
+		"email":       email,
+	}
+	cmd, err := c.db.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("sql query update user with provider id: %w", err)
+	}
+
+	if cmd.RowsAffected() == 0 {
+		return errs.NotFoundError("user not found")
+	}
+
+	return nil
 }

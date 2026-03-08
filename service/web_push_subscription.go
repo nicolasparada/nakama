@@ -21,7 +21,7 @@ const (
 	webPushNoticationContact     = "contact@service.social"
 )
 
-var (
+const (
 	errWebPushSubscriptionGone = errs.GoneError("web push subscription gone")
 )
 

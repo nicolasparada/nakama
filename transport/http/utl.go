@@ -22,11 +22,12 @@ import (
 
 const proxyCacheControl = time.Hour * 24 * 14
 
+const errInvalidTargetURL = errs.InvalidArgumentError("invalid target URL")
+
 var (
 	errBadRequest           = errors.New("bad request")
 	errStreamingUnsupported = errors.New("streaming unsupported")
 	errTeaPot               = errors.New("i am a teapot")
-	errInvalidTargetURL     = errs.InvalidArgumentError("invalid target URL")
 	errOauthTimeout         = errors.New("oauth timeout")
 	errEmailNotVerified     = errors.New("email not verified")
 	errEmailNotProvided     = errors.New("email not provided")

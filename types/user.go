@@ -35,6 +35,11 @@ func (u *UserProfile) SetCoverURL(prefix string) {
 	u.CoverURL = joinOptionalPrefix(prefix, u.CoverURL)
 }
 
+type CreateUser struct {
+	Email    string
+	Username string
+}
+
 type ToggleFollowOutput struct {
 	Following      bool `json:"following"`
 	FollowersCount int  `json:"followersCount"`

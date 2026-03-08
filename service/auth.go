@@ -28,7 +28,7 @@ const (
 	authTokenTTL             = time.Hour * 24 * 14
 )
 
-var (
+const (
 	// ErrInvalidRedirectURI denotes an invalid redirect URI.
 	ErrInvalidRedirectURI = errs.InvalidArgumentError("invalid redirect URI")
 	// ErrUntrustedRedirectURI denotes an untrusted redirect URI.

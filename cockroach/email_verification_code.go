@@ -101,7 +101,7 @@ func (c *Cockroach) UseEmailVerificationCode(ctx context.Context, in types.UseEm
 
 			user = updated
 		} else {
-			exists, err := c.UserExistsWithEmail(ctx, code.Email)
+			exists, err := c.userExistsWithEmail(ctx, code.Email)
 			if err != nil {
 				return err
 			}
@@ -111,13 +111,16 @@ func (c *Cockroach) UseEmailVerificationCode(ctx context.Context, in types.UseEm
 					return errs.NotFoundError("user not found")
 				}
 
-				id, err := c.CreateUser(ctx, code.Email, *in.Username)
+				created, err := c.createUser(ctx, types.CreateUser{
+					Email:    code.Email,
+					Username: *in.Username,
+				})
 				if err != nil {
 					return err
 				}
 
 				user = types.User{
-					ID:       id,
+					ID:       created.ID,
 					Username: *in.Username,
 				}
 			} else {

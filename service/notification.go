@@ -18,7 +18,7 @@ import (
 )
 
 // ErrInvalidNotificationID denotes an invalid notification id; that is not uuid.
-var ErrInvalidNotificationID = errs.InvalidArgumentError("invalid notification ID")
+const ErrInvalidNotificationID = errs.InvalidArgumentError("invalid notification ID")
 
 // Notifications from the authenticated user in descending order with backward pagination.
 func (s *Service) Notifications(ctx context.Context, last uint64, before *string) (types.Notifications, error) {

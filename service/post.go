@@ -15,7 +15,7 @@ import (
 
 const postEditWindow = time.Minute * 15
 
-var (
+const (
 	// ErrInvalidCursor denotes an invalid cursor, that is not base64 encoded and has a key and timestamp separated by comma.
 	ErrInvalidCursor = errs.InvalidArgumentError("invalid cursor")
 )

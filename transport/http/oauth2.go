@@ -132,7 +132,7 @@ var GithubUserFetcher = func(ctx context.Context, config *oauth2.Config, token *
 		return out, errEmailNotProvided
 	}
 
-	out.ID = fmt.Sprintf("%d", user.ID)
+	out.PrividerID = fmt.Sprintf("%d", user.ID)
 	out.Username = &user.Login
 
 	return out, nil
@@ -373,7 +373,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 				return
 			}
 
-			providedUser.ID = claims.Sub
+			providedUser.PrividerID = claims.Sub
 			providedUser.Email = claims.Email
 		} else {
 			var err error
@@ -402,8 +402,10 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 			providedUser.Username = &s
 		}
 
-		user, err := h.svc.LoginFromProvider(ctx, provider.Name, providedUser)
-		if err == service.ErrUserNotFound || err == service.ErrInvalidUsername || err == service.ErrUsernameTaken {
+		providedUser.ProviderName = provider.Name
+
+		user, err := h.svc.LoginFromProvider(ctx, providedUser)
+		if shouldRetryLoginWithProvider(err) {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
 				"error":          []string{err.Error()},
 				"retry_endpoint": []string{"/api/" + provider.Name + "_auth"},
@@ -460,4 +462,12 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 		}
 		redirectWithHashFragment(w, r, redirectURI, values, http.StatusSeeOther)
 	}
+}
+
+func shouldRetryLoginWithProvider(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return errors.Is(err, service.ErrUserNotFound) || errors.Is(err, service.ErrInvalidUsername) || errors.Is(err, service.ErrUsernameTaken)
 }

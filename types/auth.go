@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -25,9 +26,35 @@ type SendMagicLink struct {
 }
 
 type ProvidedUser struct {
-	ID       string
-	Email    string
-	Username *string
+	ProviderName string
+	PrividerID   string
+	Email        string
+	Username     *string
+}
+
+func (in *ProvidedUser) Validate() error {
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	if !ValidEmail(in.Email) {
+		return errs.InvalidArgumentError("invalid email")
+	}
+
+	if in.Username != nil {
+		*in.Username = strings.TrimSpace(*in.Username)
+
+		if !ValidUsername(*in.Username) {
+			return errs.InvalidArgumentError("invalid username")
+		}
+	}
+
+	if in.ProviderName == "" {
+		return errors.New("unexpected empty provider name on provided user")
+	}
+
+	if in.PrividerID == "" {
+		return errs.InvalidArgumentError("invalid provider ID")
+	}
+
+	return nil
 }
 
 type EmailVerificationCode struct {

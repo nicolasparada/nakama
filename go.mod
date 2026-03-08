@@ -25,7 +25,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.99
 	github.com/nats-io/nats.go v1.49.0
 	github.com/nicolasparada/go-db v0.3.3
-	github.com/nicolasparada/go-errs v0.5.0
+	github.com/nicolasparada/go-errs v0.6.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/resend/resend-go/v2 v2.28.0

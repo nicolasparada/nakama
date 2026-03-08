@@ -34,7 +34,7 @@ const (
 	CoversBucket  = "covers"
 )
 
-var (
+const (
 	// ErrInvalidUserID denotes an invalid user id; that is not uuid.
 	ErrInvalidUserID = errs.InvalidArgumentError("invalid user ID")
 	// ErrInvalidEmail denotes an invalid email address.
