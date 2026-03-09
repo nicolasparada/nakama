@@ -11,7 +11,6 @@ import (
 	"image/png"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/disintegration/imaging"
 	"github.com/jackc/pgx/v5"
@@ -126,114 +125,42 @@ func (s *Service) userByEmail(ctx context.Context, email string) (types.User, er
 	return user, nil
 }
 
-// User with the given username.
-func (s *Service) User(ctx context.Context, username string) (types.UserProfile, error) {
-	var u types.UserProfile
+// UserProfileByUsername with the given username.
+func (s *Service) UserProfileByUsername(ctx context.Context, in types.RetrieveUserProfile) (types.UserProfile, error) {
+	var user types.UserProfile
 
-	username = strings.TrimSpace(username)
-	if !types.ValidUsername(username) {
-		return u, ErrInvalidUsername
+	if err := in.Validate(); err != nil {
+		return user, err
 	}
 
-	uid, auth := ctx.Value(KeyAuthUserID).(string)
-	query, args, err := buildQuery(`
-		SELECT id, email, avatar, cover, bio, waifu, husbando, followers_count, followees_count
-		{{if .auth}}
-		, followers.follower_id IS NOT NULL AS following
-		, followees.followee_id IS NOT NULL AS followeed
-		{{end}}
-		FROM users
-		{{if .auth}}
-		LEFT JOIN follows AS followers
-			ON followers.follower_id = @uid AND followers.followee_id = users.id
-		LEFT JOIN follows AS followees
-			ON followees.follower_id = users.id AND followees.followee_id = @uid
-		{{end}}
-		WHERE username = @username`, map[string]any{
-		"auth":     auth,
-		"uid":      uid,
-		"username": username,
-	})
+	if uid, ok := ctx.Value(KeyAuthUserID).(string); ok {
+		in.SetViewerID(uid)
+	}
+
+	user, err := s.Cockroach.UserProfileByUsername(ctx, in)
 	if err != nil {
-		return u, fmt.Errorf("could not build user sql query: %w", err)
+		return user, err
 	}
 
-	var avatar, cover sql.NullString
-	dest := []any{&u.ID, &u.Email, &avatar, &cover, &u.Bio, &u.Waifu, &u.Husbando, &u.FollowersCount, &u.FolloweesCount}
-	if auth {
-		dest = append(dest, &u.Following, &u.Followeed)
-	}
-	err = s.DB.QueryRow(ctx, query, args...).Scan(dest...)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return u, ErrUserNotFound
-	}
+	user.SetAvatarURL(s.AvatarURLPrefix)
+	user.SetCoverURL(s.CoverURLPrefix)
 
-	if err != nil {
-		return u, fmt.Errorf("could not query select user: %w", err)
-	}
-
-	u.Username = username
-	u.Me = auth && uid == u.ID
-	if !u.Me {
-		u.ID = ""
-		u.Email = ""
-	}
-	u.AvatarURL = s.avatarURL(avatar)
-	u.CoverURL = s.coverURL(cover)
-	return u, nil
+	return user, nil
 }
 
-func (s *Service) UpdateUser(ctx context.Context, params types.UpdateUserParams) error {
+func (s *Service) UpdateUser(ctx context.Context, in types.UpdateUser) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
 		return errs.Unauthenticated
 	}
 
-	if params.Username != nil {
-		*params.Username = strings.TrimSpace(*params.Username)
-		if !types.ValidUsername(*params.Username) {
-			return ErrInvalidUsername
-		}
-	}
+	in.SetUserID(uid)
 
-	if params.Bio != nil {
-		*params.Bio = strings.TrimSpace(*params.Bio)
-		if !validUserBio(*params.Bio) {
-			return ErrInvalidUserBio
-		}
-	}
-
-	if params.Waifu != nil {
-		*params.Waifu = strings.TrimSpace(*params.Waifu)
-		if !validAnimeCharName(*params.Waifu) {
-			return ErrInvalidUserWaifu
-		}
-	}
-
-	if params.Husbando != nil {
-		*params.Husbando = strings.TrimSpace(*params.Husbando)
-		if !validAnimeCharName(*params.Husbando) {
-			return ErrInvalidUserHusbando
-		}
-	}
-
-	query := `
-		UPDATE users SET
-			username = COALESCE($1, username)
-			, bio = $2
-			, waifu = $3
-			, husbando = $4
-		WHERE id = $5`
-	_, err := s.DB.Exec(ctx, query, params.Username, params.Bio, params.Waifu, params.Husbando, uid)
-	if isUniqueViolation(err) {
-		return ErrUsernameTaken
-	}
-
-	if err != nil {
-		return fmt.Errorf("could not sql update user: %w", err)
-	}
-
-	return nil
+	return s.Cockroach.UpdateUser(ctx, in)
 }
 
 // UpdateAvatar of the authenticated user returning the new avatar URL.
@@ -289,13 +216,7 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 		return "", fmt.Errorf("could not store avatar file: %w", err)
 	}
 
-	var oldAvatar sql.NullString
-	query := `
-		UPDATE users SET avatar = $1 WHERE id = $2
-		RETURNING (SELECT avatar FROM users WHERE id = $2) AS old_avatar
-	`
-	row := s.DB.QueryRow(ctx, query, avatarFileName, uid)
-	err = row.Scan(&oldAvatar)
+	oldAvatar, err := s.Cockroach.UpdateAvatar(ctx, uid, avatarFileName)
 	if err != nil {
 		defer func() {
 			err := s.Store.Delete(context.Background(), AvatarsBucket, avatarFileName)
@@ -304,12 +225,12 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 			}
 		}()
 
-		return "", fmt.Errorf("could not update avatar: %w", err)
+		return "", err
 	}
 
-	if oldAvatar.Valid {
+	if oldAvatar != nil {
 		defer func() {
-			err := s.Store.Delete(context.Background(), AvatarsBucket, oldAvatar.String)
+			err := s.Store.Delete(context.Background(), AvatarsBucket, *oldAvatar)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not delete old avatar: %w", err))
 			}
@@ -704,12 +625,4 @@ func (s *Service) coverURL(cover sql.NullString) *string {
 
 	str := s.CoverURLPrefix + cover.String
 	return &str
-}
-
-func validUserBio(s string) bool {
-	return s != "" && utf8.RuneCountInString(s) <= 480
-}
-
-func validAnimeCharName(s string) bool {
-	return s != "" && utf8.RuneCountInString(s) <= 32
 }

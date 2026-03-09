@@ -333,6 +333,43 @@ func (c *Cockroach) userByProvider(ctx context.Context, providerName, providerID
 	return user, nil
 }
 
+func (c *Cockroach) UserProfileByUsername(ctx context.Context, in types.RetrieveUserProfile) (types.UserProfile, error) {
+	var user types.UserProfile
+
+	args := pgx.StrictNamedArgs{"username": in.Username}
+	selects := []string{sqlUserProfileCols}
+	joins := []string{}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
+		selects = append(selects,
+			`users.id = @viewer_id AS me`,
+			`followers.follower_id IS NOT NULL AS following`,
+			`followees.followee_id IS NOT NULL AS followeed`)
+		joins = append(joins,
+			`LEFT JOIN follows AS followers ON followers.follower_id = @viewer_id AND followers.followee_id = users.id`,
+			`LEFT JOIN follows AS followees ON followees.follower_id = users.id AND followees.followee_id = @viewer_id`)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM users
+		%s
+		WHERE users.username = @username
+	`, strings.Join(selects, ",\n\t\t"), strings.Join(joins, "\n\t\t"))
+
+	user, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.UserProfile])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return user, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return user, fmt.Errorf("sql query select user profile by username: %w", err)
+	}
+
+	return user, nil
+}
+
 func (c *Cockroach) userExistsWithEmail(ctx context.Context, email string) (bool, error) {
 	const query = "SELECT EXISTS (SELECT 1 FROM users WHERE email = @email)"
 	args := pgx.StrictNamedArgs{"email": email}
@@ -373,6 +410,39 @@ func (c *Cockroach) EmailTaken(ctx context.Context, email, userID string) (bool,
 	return exists, nil
 }
 
+func (c *Cockroach) UpdateUser(ctx context.Context, in types.UpdateUser) error {
+	const query = `
+		UPDATE users
+		SET
+			  username = COALESCE(@username, username)
+			, bio = COALESCE(@bio, bio)
+			, waifu = COALESCE(@waifu, waifu)
+			, husbando = COALESCE(@husbando, husbando)
+		WHERE id = @user_id
+	`
+	args := pgx.StrictNamedArgs{
+		"username": in.Username,
+		"bio":      in.Bio,
+		"waifu":    in.Waifu,
+		"husbando": in.Husbando,
+		"user_id":  in.UserID(),
+	}
+	cmd, err := c.db.Exec(ctx, query, args)
+	if db.IsUniqueViolationError(err, "username") {
+		return errs.ConflictError("username taken")
+	}
+
+	if err != nil {
+		return fmt.Errorf("sql query update user: %w", err)
+	}
+
+	if cmd.RowsAffected() == 0 {
+		return errs.NotFoundError("user not found")
+	}
+
+	return nil
+}
+
 func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (types.User, error) {
 	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING " + sqlUserCols
 	args := pgx.StrictNamedArgs{
@@ -389,6 +459,35 @@ func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (
 	}
 
 	return user, nil
+}
+
+func (c *Cockroach) UpdateAvatar(ctx context.Context, userID, avatar string) (*string, error) {
+	const query = `
+		WITH previous AS (
+			SELECT avatar
+			FROM users
+			WHERE id = @user_id
+		)
+		UPDATE users
+		SET avatar = @avatar
+		FROM previous
+		WHERE id = @user_id
+		RETURNING previous.avatar
+	`
+	args := pgx.StrictNamedArgs{
+		"avatar":  avatar,
+		"user_id": userID,
+	}
+	oldAvatar, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[*string])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("sql query update avatar: %w", err)
+	}
+
+	return oldAvatar, nil
 }
 
 func (c *Cockroach) setProviderForUserEmail(ctx context.Context, email, providerName, providerID string) error {

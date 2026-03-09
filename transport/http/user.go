@@ -71,30 +71,30 @@ func (h *handler) usernames(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, out, http.StatusOK)
 }
 
-func (h *handler) user(w http.ResponseWriter, r *http.Request) {
+func (h *handler) userProfileByUsername(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	username := way.Param(ctx, "username")
-	u, err := h.svc.User(ctx, username)
+	user, err := h.svc.UserProfileByUsername(ctx, types.RetrieveUserProfile{Username: username})
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	h.respond(w, u, http.StatusOK)
+	h.respond(w, user, http.StatusOK)
 }
 
 func (h *handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var reqBody types.UpdateUserParams
-	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	var in types.UpdateUser
+	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	err = h.svc.UpdateUser(ctx, reqBody)
+	err = h.svc.UpdateUser(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return

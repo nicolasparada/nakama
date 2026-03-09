@@ -3,6 +3,7 @@ package types
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nicolasparada/go-errs"
@@ -93,6 +94,28 @@ func (in *ListUsernames) Validate() error {
 	return in.PageArgs.Validate()
 }
 
+type RetrieveUserProfile struct {
+	Username string
+	viewerID *string
+}
+
+func (in *RetrieveUserProfile) SetViewerID(viewerID string) {
+	in.viewerID = &viewerID
+}
+
+func (in RetrieveUserProfile) ViewerID() *string {
+	return in.viewerID
+}
+
+func (in *RetrieveUserProfile) Validate() error {
+	in.Username = strings.TrimSpace(in.Username)
+	if !ValidUsername(in.Username) {
+		return errs.InvalidArgumentError("invalid username")
+	}
+
+	return nil
+}
+
 type UserProfiles []UserProfile
 
 func (uu UserProfiles) EndCursor() *string {
@@ -115,11 +138,52 @@ func (uu Usernames) EndCursor() *string {
 	return new(cursor.EncodeSimple(last))
 }
 
-type UpdateUserParams struct {
+type UpdateUser struct {
 	Username *string `json:"username"`
 	Bio      *string `json:"bio"`
 	Waifu    *string `json:"waifu"`
 	Husbando *string `json:"husbando"`
+	userID   string
+}
+
+func (u *UpdateUser) SetUserID(userID string) {
+	u.userID = userID
+}
+
+func (u UpdateUser) UserID() string {
+	return u.userID
+}
+
+func (u *UpdateUser) Validate() error {
+	if u.Username != nil {
+		*u.Username = strings.TrimSpace(*u.Username)
+		if !ValidUsername(*u.Username) {
+			return errs.InvalidArgumentError("invalid username")
+		}
+	}
+
+	if u.Bio != nil {
+		*u.Bio = strings.TrimSpace(*u.Bio)
+		if !validUserBio(*u.Bio) {
+			return errs.InvalidArgumentError("invalid user bio")
+		}
+	}
+
+	if u.Waifu != nil {
+		*u.Waifu = strings.TrimSpace(*u.Waifu)
+		if !validAnimeCharName(*u.Waifu) {
+			return errs.InvalidArgumentError("invalid waifu name")
+		}
+	}
+
+	if u.Husbando != nil {
+		*u.Husbando = strings.TrimSpace(*u.Husbando)
+		if !validAnimeCharName(*u.Husbando) {
+			return errs.InvalidArgumentError("invalid husbando name")
+		}
+	}
+
+	return nil
 }
 
 func joinOptionalPrefix(prefix string, path *string) *string {
@@ -153,4 +217,12 @@ var reUsername = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,17}$`)
 
 func ValidUsername(s string) bool {
 	return reUsername.MatchString(s)
+}
+
+func validUserBio(s string) bool {
+	return s != "" && utf8.RuneCountInString(s) <= 480
+}
+
+func validAnimeCharName(s string) bool {
+	return s != "" && utf8.RuneCountInString(s) <= 32
 }
