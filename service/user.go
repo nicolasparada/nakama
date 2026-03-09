@@ -92,62 +92,18 @@ func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (
 }
 
 // Usernames to autocomplete a mention box or something.
-func (s *Service) Usernames(ctx context.Context, startingWith string, first uint64, after *string) (types.Usernames, error) {
-	startingWith = strings.TrimSpace(startingWith)
-	if startingWith == "" {
-		return nil, nil
+func (s *Service) Usernames(ctx context.Context, in types.ListUsernames) (types.Page[string], error) {
+	var out types.Page[string]
+
+	if err := in.Validate(); err != nil {
+		return out, err
 	}
 
-	var afterUsername string
-	if after != nil {
-		var err error
-		afterUsername, err = cursor.DecodeSimple(*after)
-		if err != nil || !types.ValidUsername(afterUsername) {
-			return nil, ErrInvalidCursor
-		}
+	if uid, ok := ctx.Value(KeyAuthUserID).(string); ok {
+		in.SetViewerID(uid)
 	}
 
-	uid, auth := ctx.Value(KeyAuthUserID).(string)
-	first = normalizePageSize(first)
-	query, args, err := buildQuery(`
-		SELECT username FROM users
-		WHERE username ILIKE @startingWith || '%'
-		{{ if .auth }}AND users.id != @uid{{ end }}
-		{{ if .afterUsername }}AND username > @afterUsername{{ end }}
-		ORDER BY username ASC
-		LIMIT @first`, map[string]any{
-		"startingWith":  startingWith,
-		"auth":          auth,
-		"uid":           uid,
-		"first":         first,
-		"afterUsername": afterUsername,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not build usernames sql query: %w", err)
-	}
-
-	rows, err := s.DB.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("could not query select usernames: %w", err)
-	}
-
-	defer rows.Close()
-
-	var uu types.Usernames
-	for rows.Next() {
-		var u string
-		if err = rows.Scan(&u); err != nil {
-			return nil, fmt.Errorf("could not scan username: %w", err)
-		}
-
-		uu = append(uu, u)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate username rows: %w", err)
-	}
-
-	return uu, nil
+	return s.Cockroach.Usernames(ctx, in)
 }
 
 func (s *Service) userByID(ctx context.Context, id string) (types.User, error) {

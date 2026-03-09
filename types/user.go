@@ -71,6 +71,28 @@ func (in *ListUserProfiles) Validate() error {
 	return in.PageArgs.Validate()
 }
 
+type ListUsernames struct {
+	StartingWith string
+	PageArgs
+	viwerID *string
+}
+
+func (in *ListUsernames) SetViewerID(viewerID string) {
+	in.viwerID = &viewerID
+}
+
+func (in ListUsernames) ViewerID() *string {
+	return in.viwerID
+}
+
+func (in *ListUsernames) Validate() error {
+	if strings.TrimSpace(in.StartingWith) == "" {
+		return errs.InvalidArgumentError("invalid starting with")
+	}
+
+	return in.PageArgs.Validate()
+}
+
 type UserProfiles []UserProfile
 
 func (uu UserProfiles) EndCursor() *string {

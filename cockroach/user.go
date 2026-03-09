@@ -177,19 +177,17 @@ func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles)
 			`LEFT JOIN follows AS followees ON followees.follower_id = users.id AND followees.followee_id = @viewer_id`)
 	}
 
-	pageArgs, err := ParsePageArgs[string](in.PageArgs)
+	pageArgs, err := ParsePageArgs[any](in.PageArgs)
 	if err != nil {
 		return out, err
 	}
 
 	if pageArgs.After != nil {
-		filters = append(filters, "(users.username, users.id) < (@after_username, @after_id)")
-		args["after_username"] = pageArgs.After.Value
-		args["after_id"] = pageArgs.After.ID
+		filters = append(filters, "users.username < @after_username")
+		args["after_username"] = pageArgs.After.ID // Cursor ID is the username in this case
 	} else if pageArgs.Before != nil {
-		filters = append(filters, "(users.username, users.id) > (@before_username, @before_id)")
-		args["before_username"] = pageArgs.Before.Value
-		args["before_id"] = pageArgs.Before.ID
+		filters = append(filters, "users.username > @before_username")
+		args["before_username"] = pageArgs.Before.ID // Cursor ID is the username in this case
 	}
 
 	var order, limit string
@@ -226,8 +224,65 @@ func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles)
 	}
 
 	out.Items = users
-	applyPageInfo(&out, pageArgs, func(up types.UserProfile) Cursor[string] {
-		return Cursor[string]{ID: up.ID, Value: up.Username}
+	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
+		return Cursor[any]{ID: u.Username}
+	})
+
+	return out, nil
+}
+
+func (c *Cockroach) Usernames(ctx context.Context, in types.ListUsernames) (types.Page[string], error) {
+	var out types.Page[string]
+
+	args := pgx.StrictNamedArgs{"starting_with": in.StartingWith}
+	filters := []string{"users.username ILIKE @starting_with || '%'"}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
+		filters = append(filters, `users.id != @viewer_id`)
+	}
+
+	pageArgs, err := ParsePageArgs[any](in.PageArgs)
+	if err != nil {
+		return out, err
+	}
+
+	if pageArgs.After != nil {
+		filters = append(filters, "users.username < @after_username")
+		args["after_username"] = pageArgs.After.ID // Cursor ID is the username in this case
+	} else if pageArgs.Before != nil {
+		filters = append(filters, "users.username > @before_username")
+		args["before_username"] = pageArgs.Before.ID // Cursor ID is the username in this case
+	}
+
+	var order, limit string
+	if pageArgs.IsBackwards() {
+		order = "ORDER BY users.username ASC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.Last, defaultPageSize)+1) // +1 to check if there's a next page
+	} else {
+		order = "ORDER BY users.username DESC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.First, defaultPageSize)+1) // +1 to check if there's a next page
+	}
+
+	query := fmt.Sprintf(`
+		SELECT users.username
+		FROM users
+		WHERE %s
+		%s
+		%s`,
+		strings.Join(filters, " AND "),
+		order,
+		limit,
+	)
+
+	usernames, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	if err != nil {
+		return out, fmt.Errorf("sql select usernames: %w", err)
+	}
+
+	out.Items = usernames
+	applyPageInfo(&out, pageArgs, func(username string) Cursor[any] {
+		return Cursor[any]{ID: username}
 	})
 
 	return out, nil

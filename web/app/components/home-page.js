@@ -23,6 +23,10 @@ const pageSize = 10
  */
 
 /**
+ * @typedef {import("../types.js").ListUsernames} ListUsernames
+ */
+
+/**
  * @typedef {import("../types.js").Post} Post
  */
 
@@ -437,7 +441,7 @@ function PostForm() {
         textcompleteRef.current = new Textcomplete(editor, [{
             match: reMention,
             search: async (term, cb) => {
-                cb(await fetchUsernames(term).then(page => page.items, err => {
+                cb(await fetchUsernames({ startingWith: term }).then(page => page.items, err => {
                     console.error("could not fetch mentions usernames:", err)
                     return []
                 }))
@@ -659,7 +663,25 @@ function fetchPosts(input) {
         })
 }
 
-function fetchUsernames(startingWith = "", after = "", first = pageSize) {
-    return request("GET", `/api/usernames?starting_with=${encodeURIComponent(startingWith)}&after=${encodeURIComponent(after)}&first=${encodeURIComponent(first)}`)
+/**
+ * @param {ListUsernames} input 
+ * @returns {Promise<Page<string>>}
+ */
+function fetchUsernames(input) {
+    const u = new URL("/api/usernames", window.location.origin)
+    u.searchParams.set("starting_with", input.startingWith)
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
 }

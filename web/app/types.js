@@ -25,6 +25,12 @@
  */
 
 /**
+ * @typedef ListUsernames
+ * @prop {string} startingWith
+ * @prop {PageArgs=} pageArgs
+ */
+
+/**
  * @typedef DevLoginOutput
  * @prop {string} token
  * @prop {string|Date} expiresAt

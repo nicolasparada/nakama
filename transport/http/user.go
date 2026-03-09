@@ -47,23 +47,28 @@ func (h *handler) userProfiles(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) usernames(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	startingWith := q.Get("starting_with")
-	first, _ := strconv.ParseUint(q.Get("first"), 10, 64)
-	after := emptyStrPtr(q.Get("after"))
-	uu, err := h.svc.Usernames(r.Context(), startingWith, first, after)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if uu == nil {
-		uu = []string{} // non null array
+	in := types.ListUsernames{
+		StartingWith: q.Get("starting_with"),
+		PageArgs:     pageArgs,
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     uu,
-		EndCursor: uu.EndCursor(),
-	}, http.StatusOK)
+	out, err := h.svc.Usernames(r.Context(), in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	if out.Items == nil {
+		out.Items = []string{} // non null array
+	}
+
+	h.respond(w, out, http.StatusOK)
 }
 
 func (h *handler) user(w http.ResponseWriter, r *http.Request) {
