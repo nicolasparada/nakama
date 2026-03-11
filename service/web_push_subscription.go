@@ -31,49 +31,12 @@ func (svc *Service) AddWebPushSubscription(ctx context.Context, sub webpush.Subs
 		return errs.Unauthenticated
 	}
 
-	query := "INSERT INTO user_web_push_subscriptions (user_id, sub) VALUES ($1, $2)"
-	_, err := svc.DB.Exec(ctx, query, uid, sub)
-	if isUniqueViolation(err) {
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("could not sql insert user web push subscription: %w", err)
-	}
-
-	return nil
-}
-
-func (svc *Service) webPushSubscriptions(ctx context.Context, userID string) ([]webpush.Subscription, error) {
-	query := "SELECT sub FROM user_web_push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC"
-	rows, err := svc.DB.Query(ctx, query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("could not sql query select user web push susbcriptions: %w", err)
-	}
-
-	defer rows.Close()
-
-	var subs []webpush.Subscription
-	for rows.Next() {
-		var sub webpush.Subscription
-		err := rows.Scan(&sub)
-		if err != nil {
-			return nil, fmt.Errorf("could not sql scan user web push subscription: %w", err)
-		}
-
-		subs = append(subs, sub)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not sql query iterate over user web push subscriptions: %w", err)
-	}
-
-	return subs, nil
+	return svc.Cockroach.CreateWebPushSubscription(ctx, uid, sub)
 }
 
 func (svc *Service) sendWebPushNotifications(n types.Notification) {
 	ctx := context.Background()
-	subs, err := svc.webPushSubscriptions(ctx, n.UserID)
+	subs, err := svc.Cockroach.WebPushSubscriptions(ctx, n.UserID)
 	if err != nil {
 		_ = svc.Logger.Log("err", err)
 		return
@@ -106,7 +69,7 @@ func (svc *Service) sendWebPushNotifications(n types.Notification) {
 
 			err := svc.sendWebPushNotification(sub, message, topic)
 			if errors.Is(err, errWebPushSubscriptionGone) {
-				err = svc.deleteWebPushSubscription(ctx, n.UserID, sub)
+				err = svc.Cockroach.DeleteWebPushSubscription(ctx, n.UserID, sub.Endpoint)
 			}
 
 			if err != nil {
@@ -143,16 +106,6 @@ func (svc *Service) sendWebPushNotification(sub webpush.Subscription, message []
 		}
 
 		return fmt.Errorf("web push notification send failed with status code %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func (svc *Service) deleteWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
-	query := "DELETE FROM user_web_push_subscriptions WHERE user_id = $1 AND sub ->> 'endpoint' = $2"
-	_, err := svc.DB.Exec(ctx, query, userID, sub.Endpoint)
-	if err != nil {
-		return fmt.Errorf("sql delete user web push subscription: %w", err)
 	}
 
 	return nil
