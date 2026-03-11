@@ -31,7 +31,7 @@ func (svc *Service) AddWebPushSubscription(ctx context.Context, sub webpush.Subs
 		return errs.Unauthenticated
 	}
 
-	return svc.Cockroach.CreateWebPushSubscription(ctx, uid, sub)
+	return svc.Cockroach.UpsertWebPushSubscription(ctx, uid, sub)
 }
 
 func (svc *Service) sendWebPushNotifications(n types.Notification) {

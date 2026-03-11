@@ -9,9 +9,10 @@ import (
 	"github.com/jackc/pgxutil"
 )
 
-func (c *Cockroach) CreateWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
+func (c *Cockroach) UpsertWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
 	const query = `
 		INSERT INTO user_web_push_subscriptions (user_id, sub) VALUES (@user_id, @sub)
+		ON CONFLICT (user_id, sub ->> 'endpoint') DO UPDATE SET sub = EXCLUDED.sub
 	`
 
 	args := pgx.StrictNamedArgs{
@@ -21,7 +22,7 @@ func (c *Cockroach) CreateWebPushSubscription(ctx context.Context, userID string
 
 	_, err := c.db.Exec(ctx, query, args)
 	if err != nil {
-		return fmt.Errorf("ql insert user web push subscription: %w", err)
+		return fmt.Errorf("sql insert user web push subscription: %w", err)
 	}
 
 	return nil
@@ -41,27 +42,7 @@ func (c *Cockroach) WebPushSubscriptions(ctx context.Context, userID string) ([]
 		return nil, fmt.Errorf("sql select user web push susbcriptions: %w", err)
 	}
 
-	return dedupWebPushSubscriptions(subs), nil
-}
-
-// dedupWebPushSubscriptions by endpoint.
-// TODO: add a unique constraint on (user_id, sub ->> 'endpoint').
-func dedupWebPushSubscriptions(subs []webpush.Subscription) []webpush.Subscription {
-	if len(subs) == 0 {
-		return subs
-	}
-
-	seen := make(map[string]struct{})
-	var deduped []webpush.Subscription
-
-	for _, sub := range subs {
-		if _, ok := seen[sub.Endpoint]; !ok {
-			seen[sub.Endpoint] = struct{}{}
-			deduped = append(deduped, sub)
-		}
-	}
-
-	return deduped
+	return subs, nil
 }
 
 func (c *Cockroach) DeleteWebPushSubscription(ctx context.Context, userID string, endpoint string) error {
