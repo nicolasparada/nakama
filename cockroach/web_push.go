@@ -12,7 +12,7 @@ import (
 func (c *Cockroach) UpsertWebPushSubscription(ctx context.Context, userID string, sub webpush.Subscription) error {
 	const query = `
 		INSERT INTO user_web_push_subscriptions (user_id, sub) VALUES (@user_id, @sub)
-		ON CONFLICT (user_id, (sub ->> 'endpoint')) DO UPDATE SET sub = EXCLUDED.sub
+		ON CONFLICT ON CONSTRAINT unique_user_web_push_subscriptions DO UPDATE SET sub = excluded.sub
 	`
 
 	args := pgx.StrictNamedArgs{
