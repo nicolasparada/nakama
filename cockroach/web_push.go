@@ -22,7 +22,7 @@ func (c *Cockroach) UpsertWebPushSubscription(ctx context.Context, userID string
 
 	_, err := c.db.Exec(ctx, query, args)
 	if err != nil {
-		return fmt.Errorf("sql insert user web push subscription: %w", err)
+		return fmt.Errorf("sql upsert user web push subscription: %w", err)
 	}
 
 	return nil
