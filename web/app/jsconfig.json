@@ -1,11 +1,42 @@
 {
     "compilerOptions": {
+        "allowJs": true,
         "checkJs": true,
         "module": "ESNext",
         "target": "ESNext",
-        "moduleResolution": "node"
+        "moduleResolution": "Bundler",
+        "lib": [
+            "ESNext",
+            "DOM",
+            "DOM.Iterable"
+        ]
     },
     "exclude": [
         "node_modules"
     ]
 }
+// TODO: enable for more strict type checking.
+// {
+//     "compilerOptions": {
+//         "allowJs": true,
+//         "checkJs": true,
+//         "noEmit": true,
+//         "strict": true,
+//         "noImplicitAny": true,
+//         "strictNullChecks": true,
+//         "noUncheckedIndexedAccess": true,
+//         "exactOptionalPropertyTypes": true,
+//         "useUnknownInCatchVariables": true,
+//         "module": "ESNext",
+//         "target": "ESNext",
+//         "moduleResolution": "Bundler",
+//         "lib": [
+//             "ESNext",
+//             "DOM",
+//             "DOM.Iterable"
+//         ]
+//     },
+//     "exclude": [
+//         "node_modules"
+//     ]
+// }
