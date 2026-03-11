@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS user_web_push_subscriptions (
     user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
     sub JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE INDEX unique_user_web_push_subscriptions (user_id, (sub->>'endpoint'::TEXT))
+    UNIQUE INDEX unique_user_web_push_subscriptions (user_id, (sub->>'endpoint'))
 );
 
 -- INSERT INTO users (id, email, username) VALUES
