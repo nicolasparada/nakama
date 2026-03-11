@@ -27,11 +27,16 @@ function UserItem({ user: initialUser }) {
             <a href="/@${user.username}" class="user-info">
                 ${Avatar(user)}
                 <div class="user-text">
-                    <span class="username">${user.username}</span>
+                    <div class="username-row">
+                        <span class="username">${user.username}</span>
+                        ${user.followsViewer ? html`
+                            <span class="follows-viewer-badge">follows you</span>
+                        ` : null}
+                    </div>
                     <user-follow-counts .user=${user}></user-follow-counts>
                 </div>
             </a>
-            ${auth !== null && !user.me ? html`
+            ${auth !== null && !user.isMe ? html`
                 <user-follow-btn .user=${user} @follow-toggle=${onFollowToggle}></user-follow-btn>
             ` : null}
         </article>

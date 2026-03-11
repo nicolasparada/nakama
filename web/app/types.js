@@ -13,15 +13,27 @@
  * @prop {string=} avatarURL
  * @prop {number} followersCount
  * @prop {number} followeesCount
- * @prop {boolean} me
- * @prop {boolean} following
- * @prop {boolean} followeed
+ * @prop {boolean} isMe
+ * @prop {boolean} followedByViewer
+ * @prop {boolean} followsViewer
  */
 
 /**
  * @typedef ListUserProfiles
- * @prop {PageArgs=} pageArgs
  * @prop {string=} search
+ * @prop {PageArgs=} pageArgs
+ */
+
+/**
+ * @typedef ListFollowers
+ * @prop {string} username
+ * @prop {PageArgs=} pageArgs
+ */
+
+/**
+ * @typedef ListFollowees
+ * @prop {string} username
+ * @prop {PageArgs=} pageArgs
  */
 
 /**
@@ -150,9 +162,9 @@
  */
 
 /**
- * @typedef ToggleFollowOutput
+ * @typedef ToggledFollow
  * @prop {number} followersCount
- * @prop {boolean} following
+ * @prop {boolean} followedByViewer
  */
 
 /**

@@ -16,8 +16,6 @@ import "./toast-item.js"
 import "./user-follow-btn.js"
 import "./user-follow-counts.js"
 
-const pageSize = 10
-
 /**
  * @typedef {import("../types.js").TimelineItem} TimelineItem
  */
@@ -506,7 +504,12 @@ function UserProfile({ user: initialUser }) {
         <div class="user-profile">
             <div class="user-details-wrapper">
                 <div>
-                    <h1>${user.username}</h1>
+                    <h1>
+                        <span>${user.username}</span>
+                        ${user.followsViewer ? html`
+                            <span class="follows-viewer-badge">follows you</span>
+                        ` : null}
+                    </h1>
                     <user-follow-counts .user=${user}></user-follow-counts>
                 </div>
                 <div class="user-details">
@@ -527,7 +530,7 @@ function UserProfile({ user: initialUser }) {
             </div>
             ${Avatar(user)}
             <div class="user-controls">
-                ${user.me ? html`
+                ${user.isMe ? html`
                 <button @click=${onSettingsBtnClick}>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                         <g data-name="Layer 2">

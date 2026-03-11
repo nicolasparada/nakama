@@ -6,7 +6,22 @@ import "./intersectable-comp.js"
 import "./toast-item.js"
 import "./user-item.js"
 
-const pageSize = 10
+/**
+ * @typedef {import("../types.js").ListFollowees} ListFollowees
+ */
+
+/**
+ * @typedef {import("../types.js").UserProfile} UserProfile
+ */
+
+/**
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
 
 export default function ({ params }) {
     return html`<user-followees-page .username=${params.username}></user-followees-page>`
@@ -28,11 +43,11 @@ function UserFolloweesPage({ username }) {
         }
 
         setLoadingMore(true)
-        fetchFollowees(username, usersEndCursor).then(({ items: users, endCursor }) => {
-            setUsers(uu => [...uu, ...users])
-            setUsersEndCursor(endCursor)
+        fetchFollowees({ username, pageArgs: {after: usersEndCursor}}).then(page => {
+            setUsers(uu => [...uu, ...page.items])
+            setUsersEndCursor(page.pageInfo.endCursor)
 
-            if (users.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreUsers(true)
                 setEndReached(true)
             }
@@ -47,11 +62,11 @@ function UserFolloweesPage({ username }) {
 
     useEffect(() => {
         setFetching(true)
-        fetchFollowees(username).then(({ items: users, endCursor }) => {
-            setUsers(users)
-            setUsersEndCursor(endCursor)
+        fetchFollowees({ username }).then(page => {
+            setUsers(page.items)
+            setUsersEndCursor(page.pageInfo.endCursor)
 
-            if (users.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreUsers(true)
             }
         }, err => {
@@ -92,7 +107,24 @@ function UserFolloweesPage({ username }) {
 // @ts-ignore
 customElements.define("user-followees-page", component(UserFolloweesPage, { useShadowDOM: false }))
 
-function fetchFollowees(username, after = "", first = pageSize) {
-    return request("GET", `/api/users/${encodeURIComponent(username)}/followees?after=${encodeURIComponent(after)}&first=${encodeURIComponent(first)}`)
+/**
+ * @param {ListFollowees} input 
+ * @returns {Promise<Page<UserProfile>>}
+ */
+function fetchFollowees(input) {
+    const u = new URL("/api/users/" + encodeURIComponent(input.username) + "/followees", window.location.origin)
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
 }

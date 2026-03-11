@@ -53,7 +53,7 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 	in.Email = strings.TrimSpace(in.Email)
 	in.Email = strings.ToLower(in.Email)
 	if !types.ValidEmail(in.Email) {
-		return ErrInvalidEmail
+		return errs.InvalidArgumentError("invalid email")
 	}
 
 	_, err := s.ParseRedirectURI(in.RedirectURI)
@@ -73,7 +73,7 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 		}
 
 		if exists {
-			return ErrEmailTaken
+			return errs.ConflictError("email taken")
 		}
 	}
 
@@ -253,7 +253,7 @@ func (s *Service) DevLogin(ctx context.Context, email string) (types.AuthOutput,
 	email = strings.TrimSpace(email)
 	email = strings.ToLower(email)
 	if !types.ValidEmail(email) {
-		return out, ErrInvalidEmail
+		return out, errs.InvalidArgumentError("invalid email")
 	}
 
 	user, err := s.userByEmail(ctx, email)
@@ -294,7 +294,7 @@ func (s *Service) AuthUserIDFromToken(token string) (string, error) {
 	}
 
 	if !types.ValidUUIDv4(uid) {
-		return "", ErrInvalidUserID
+		return "", errs.InvalidArgumentError("invalid user ID")
 	}
 
 	return uid, nil

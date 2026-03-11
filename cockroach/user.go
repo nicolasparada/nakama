@@ -39,7 +39,19 @@ const (
 		, users.followers_count
 		, users.followees_count
 	`
+	sqlViewerFollowsUserJoin = `LEFT JOIN follows AS viewer_follows_user ON viewer_follows_user.follower_id = @viewer_id AND viewer_follows_user.followee_id = users.id`
+	sqlUserFollowsViewerJoin = `LEFT JOIN follows AS user_follows_viewer ON user_follows_viewer.follower_id = users.id AND user_follows_viewer.followee_id = @viewer_id`
 )
+
+func appendViewerRelationshipFields(selects, joins []string) ([]string, []string) {
+	selects = append(selects,
+		`users.id = @viewer_id AS is_me`,
+		`viewer_follows_user.follower_id IS NOT NULL AS followed_by_viewer`,
+		`user_follows_viewer.follower_id IS NOT NULL AS follows_viewer`)
+	joins = append(joins, sqlViewerFollowsUserJoin, sqlUserFollowsViewerJoin)
+
+	return selects, joins
+}
 
 func (c *Cockroach) createUser(ctx context.Context, in types.CreateUser) (types.Created, error) {
 	const query = `
@@ -168,13 +180,7 @@ func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles)
 
 	if in.ViewerID() != nil {
 		args["viewer_id"] = *in.ViewerID()
-		selects = append(selects,
-			`users.id = @viewer_id AS me`,
-			`followers.follower_id IS NOT NULL AS following`,
-			`followees.followee_id IS NOT NULL AS followeed`)
-		joins = append(joins,
-			`LEFT JOIN follows AS followers ON followers.follower_id = @viewer_id AND followers.followee_id = users.id`,
-			`LEFT JOIN follows AS followees ON followees.follower_id = users.id AND followees.followee_id = @viewer_id`)
+		selects, joins = appendViewerRelationshipFields(selects, joins)
 	}
 
 	pageArgs, err := ParsePageArgs[any](in.PageArgs)
@@ -221,6 +227,138 @@ func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles)
 	users, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.UserProfile])
 	if err != nil {
 		return out, fmt.Errorf("sql select user profiles: %w", err)
+	}
+
+	out.Items = users
+	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
+		return Cursor[any]{ID: u.Username}
+	})
+
+	return out, nil
+}
+
+func (c *Cockroach) Followers(ctx context.Context, in types.ListFollowers) (types.Page[types.UserProfile], error) {
+	var out types.Page[types.UserProfile]
+
+	args := pgx.StrictNamedArgs{"username": in.Username}
+	selects := []string{sqlUserProfileCols}
+	joins := []string{
+		`INNER JOIN users ON users.id = follows.follower_id`,
+	}
+	filters := []string{
+		`follows.followee_id = (SELECT id FROM users WHERE username = @username)`,
+	}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
+		selects, joins = appendViewerRelationshipFields(selects, joins)
+	}
+
+	pageArgs, err := ParsePageArgs[any](in.PageArgs)
+	if err != nil {
+		return out, err
+	}
+
+	if pageArgs.After != nil {
+		filters = append(filters, "users.username < @after_username")
+		args["after_username"] = pageArgs.After.ID // Cursor ID is the username in this case
+	} else if pageArgs.Before != nil {
+		filters = append(filters, "users.username > @before_username")
+		args["before_username"] = pageArgs.Before.ID // Cursor ID is the username in this case
+	}
+
+	var order, limit string
+	if pageArgs.IsBackwards() {
+		order = "ORDER BY users.username ASC, users.id ASC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.Last, defaultPageSize)+1) // +1 to check if there's a next page
+	} else {
+		order = "ORDER BY users.username DESC, users.id DESC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.First, defaultPageSize)+1) // +1 to check if there's a next page
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM follows
+		%s
+		WHERE %s
+		%s
+		%s`,
+		strings.Join(selects, ",\n\t\t"),
+		strings.Join(joins, "\n\t\t"),
+		strings.Join(filters, " AND "),
+		order,
+		limit,
+	)
+
+	users, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.UserProfile])
+	if err != nil {
+		return out, fmt.Errorf("sql select followers: %w", err)
+	}
+
+	out.Items = users
+	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
+		return Cursor[any]{ID: u.Username}
+	})
+
+	return out, nil
+}
+
+func (c *Cockroach) Followees(ctx context.Context, in types.ListFollowees) (types.Page[types.UserProfile], error) {
+	var out types.Page[types.UserProfile]
+
+	args := pgx.StrictNamedArgs{"username": in.Username}
+	selects := []string{sqlUserProfileCols}
+	joins := []string{
+		`INNER JOIN users ON users.id = follows.followee_id`,
+	}
+	filters := []string{
+		`follows.follower_id = (SELECT id FROM users WHERE username = @username)`,
+	}
+
+	if in.ViewerID() != nil {
+		args["viewer_id"] = *in.ViewerID()
+		selects, joins = appendViewerRelationshipFields(selects, joins)
+	}
+
+	pageArgs, err := ParsePageArgs[any](in.PageArgs)
+	if err != nil {
+		return out, err
+	}
+
+	if pageArgs.After != nil {
+		filters = append(filters, "users.username < @after_username")
+		args["after_username"] = pageArgs.After.ID // Cursor ID is the username in this case
+	} else if pageArgs.Before != nil {
+		filters = append(filters, "users.username > @before_username")
+		args["before_username"] = pageArgs.Before.ID // Cursor ID is the username in this case
+	}
+
+	var order, limit string
+	if pageArgs.IsBackwards() {
+		order = "ORDER BY users.username ASC, users.id ASC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.Last, defaultPageSize)+1) // +1 to check if there's a next page
+	} else {
+		order = "ORDER BY users.username DESC, users.id DESC"
+		limit = fmt.Sprintf("LIMIT %d", or(pageArgs.First, defaultPageSize)+1) // +1 to check if there's a next page
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM follows
+		%s
+		WHERE %s
+		%s
+		%s`,
+		strings.Join(selects, ",\n\t\t"),
+		strings.Join(joins, "\n\t\t"),
+		strings.Join(filters, " AND "),
+		order,
+		limit,
+	)
+
+	users, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.UserProfile])
+	if err != nil {
+		return out, fmt.Errorf("sql select followees: %w", err)
 	}
 
 	out.Items = users
@@ -297,7 +435,7 @@ func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error)
 	}
 
 	if err != nil {
-		return user, fmt.Errorf("sql query select user: %w", err)
+		return user, fmt.Errorf("sql select user: %w", err)
 	}
 
 	return user, nil
@@ -312,7 +450,7 @@ func (c *Cockroach) UserByEmail(ctx context.Context, email string) (types.User, 
 	}
 
 	if err != nil {
-		return user, fmt.Errorf("sql query select user by email: %w", err)
+		return user, fmt.Errorf("sql select user by email: %w", err)
 	}
 
 	return user, nil
@@ -327,7 +465,7 @@ func (c *Cockroach) userByProvider(ctx context.Context, providerName, providerID
 	}
 
 	if err != nil {
-		return user, fmt.Errorf("sql query select user by provider: %w", err)
+		return user, fmt.Errorf("sql select user by provider: %w", err)
 	}
 
 	return user, nil
@@ -342,13 +480,7 @@ func (c *Cockroach) UserProfileByUsername(ctx context.Context, in types.Retrieve
 
 	if in.ViewerID() != nil {
 		args["viewer_id"] = *in.ViewerID()
-		selects = append(selects,
-			`users.id = @viewer_id AS me`,
-			`followers.follower_id IS NOT NULL AS following`,
-			`followees.followee_id IS NOT NULL AS followeed`)
-		joins = append(joins,
-			`LEFT JOIN follows AS followers ON followers.follower_id = @viewer_id AND followers.followee_id = users.id`,
-			`LEFT JOIN follows AS followees ON followees.follower_id = users.id AND followees.followee_id = @viewer_id`)
+		selects, joins = appendViewerRelationshipFields(selects, joins)
 	}
 
 	query := fmt.Sprintf(`
@@ -364,10 +496,25 @@ func (c *Cockroach) UserProfileByUsername(ctx context.Context, in types.Retrieve
 	}
 
 	if err != nil {
-		return user, fmt.Errorf("sql query select user profile by username: %w", err)
+		return user, fmt.Errorf("sql select user profile by username: %w", err)
 	}
 
 	return user, nil
+}
+
+func (c *Cockroach) UserIDFromUsername(ctx context.Context, username string) (string, error) {
+	const query = "SELECT id FROM users WHERE username = @username"
+	args := pgx.StrictNamedArgs{"username": username}
+	userID, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("sql select user ID from username: %w", err)
+	}
+
+	return userID, nil
 }
 
 func (c *Cockroach) userExistsWithEmail(ctx context.Context, email string) (bool, error) {
@@ -375,7 +522,7 @@ func (c *Cockroach) userExistsWithEmail(ctx context.Context, email string) (bool
 	args := pgx.StrictNamedArgs{"email": email}
 	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
 	if err != nil {
-		return false, fmt.Errorf("sql query select user existence by email: %w", err)
+		return false, fmt.Errorf("sql select user existence by email: %w", err)
 	}
 
 	return exists, nil
@@ -386,7 +533,7 @@ func (c *Cockroach) userExistsWithProvider(ctx context.Context, providerName, pr
 	args := pgx.StrictNamedArgs{"provider_id": providerID}
 	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
 	if err != nil {
-		return false, fmt.Errorf("sql query select user existence by provider id: %w", err)
+		return false, fmt.Errorf("sql select user existence by provider id: %w", err)
 	}
 
 	return exists, nil
@@ -404,7 +551,7 @@ func (c *Cockroach) EmailTaken(ctx context.Context, email, userID string) (bool,
 	}
 	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
 	if err != nil {
-		return false, fmt.Errorf("sql query select email taken: %w", err)
+		return false, fmt.Errorf("sql select email taken: %w", err)
 	}
 
 	return exists, nil
@@ -433,7 +580,7 @@ func (c *Cockroach) UpdateUser(ctx context.Context, in types.UpdateUser) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("sql query update user: %w", err)
+		return fmt.Errorf("sql update user: %w", err)
 	}
 
 	if cmd.RowsAffected() == 0 {
@@ -443,7 +590,7 @@ func (c *Cockroach) UpdateUser(ctx context.Context, in types.UpdateUser) error {
 	return nil
 }
 
-func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (types.User, error) {
+func (c *Cockroach) UpdateEmail(ctx context.Context, userID, email string) (types.User, error) {
 	const query = "UPDATE users SET email = @email WHERE id = @user_id RETURNING " + sqlUserCols
 	args := pgx.StrictNamedArgs{
 		"email":   email,
@@ -455,7 +602,7 @@ func (c *Cockroach) UpdateUserEmail(ctx context.Context, userID, email string) (
 	}
 
 	if err != nil {
-		return user, fmt.Errorf("sql query update user email: %w", err)
+		return user, fmt.Errorf("sql update email: %w", err)
 	}
 
 	return user, nil
@@ -484,10 +631,39 @@ func (c *Cockroach) UpdateAvatar(ctx context.Context, userID, avatar string) (*s
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("sql query update avatar: %w", err)
+		return nil, fmt.Errorf("sql update avatar: %w", err)
 	}
 
 	return oldAvatar, nil
+}
+
+func (c *Cockroach) UpdateCover(ctx context.Context, userID, cover string) (*string, error) {
+	const query = `
+		WITH previous AS (
+			SELECT cover
+			FROM users
+			WHERE id = @user_id
+		)
+		UPDATE users
+		SET cover = @cover
+		FROM previous
+		WHERE id = @user_id
+		RETURNING previous.cover
+	`
+	args := pgx.StrictNamedArgs{
+		"cover":   cover,
+		"user_id": userID,
+	}
+	oldCover, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[*string])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("sql update cover: %w", err)
+	}
+
+	return oldCover, nil
 }
 
 func (c *Cockroach) setProviderForUserEmail(ctx context.Context, email, providerName, providerID string) error {
@@ -498,7 +674,7 @@ func (c *Cockroach) setProviderForUserEmail(ctx context.Context, email, provider
 	}
 	cmd, err := c.db.Exec(ctx, query, args)
 	if err != nil {
-		return fmt.Errorf("sql query update user with provider id: %w", err)
+		return fmt.Errorf("sql update user with provider id: %w", err)
 	}
 
 	if cmd.RowsAffected() == 0 {
@@ -506,4 +682,84 @@ func (c *Cockroach) setProviderForUserEmail(ctx context.Context, email, provider
 	}
 
 	return nil
+}
+
+func (c *Cockroach) increaseFollowersCount(ctx context.Context, userID string) (uint, error) {
+	const query = `
+		UPDATE users
+		SET followers_count = followers_count + 1
+		WHERE id = @user_id
+		RETURNING followers_count
+	`
+	args := pgx.StrictNamedArgs{"user_id": userID}
+	count, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[uint])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("sql increase followers count: %w", err)
+	}
+
+	return count, nil
+}
+
+func (c *Cockroach) decreaseFollowersCount(ctx context.Context, userID string) (uint, error) {
+	const query = `
+		UPDATE users
+		SET followers_count = followers_count - 1
+		WHERE id = @user_id AND followers_count > 0
+		RETURNING followers_count
+	`
+	args := pgx.StrictNamedArgs{"user_id": userID}
+	count, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[uint])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("sql decrease followers count: %w", err)
+	}
+
+	return count, nil
+}
+
+func (c *Cockroach) increaseFolloweesCount(ctx context.Context, userID string) (uint, error) {
+	const query = `
+		UPDATE users
+		SET followees_count = followees_count + 1
+		WHERE id = @user_id
+		RETURNING followees_count
+	`
+	args := pgx.StrictNamedArgs{"user_id": userID}
+	count, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[uint])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("sql increase followees count: %w", err)
+	}
+
+	return count, nil
+}
+
+func (c *Cockroach) decreaseFolloweesCount(ctx context.Context, userID string) (uint, error) {
+	const query = `
+		UPDATE users
+		SET followees_count = followees_count - 1
+		WHERE id = @user_id AND followees_count > 0
+		RETURNING followees_count
+	`
+	args := pgx.StrictNamedArgs{"user_id": userID}
+	count, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[uint])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, errs.NotFoundError("user not found")
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("sql decrease followees count: %w", err)
+	}
+
+	return count, nil
 }

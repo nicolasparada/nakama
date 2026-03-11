@@ -154,7 +154,7 @@ func (h *handler) oauth2Handler(provider OauthProvider) http.HandlerFunc {
 		username := q.Get("username")
 		if username != "" && !types.ValidUsername(username) {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
-				"error": []string{service.ErrInvalidUsername.Error()},
+				"error": []string{"invalid username"},
 			}, http.StatusSeeOther)
 			return
 		}
@@ -405,7 +405,7 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 		providedUser.ProviderName = provider.Name
 
 		user, err := h.svc.LoginFromProvider(ctx, providedUser)
-		if shouldRetryLoginWithProvider(err) {
+		if shouldAskUsername(err) {
 			redirectWithHashFragment(w, r, redirectURI, url.Values{
 				"error":          []string{err.Error()},
 				"retry_endpoint": []string{"/api/" + provider.Name + "_auth"},
@@ -462,12 +462,4 @@ func (h *handler) oauth2CallbackHandler(provider OauthProvider) http.HandlerFunc
 		}
 		redirectWithHashFragment(w, r, redirectURI, values, http.StatusSeeOther)
 	}
-}
-
-func shouldRetryLoginWithProvider(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return errors.Is(err, service.ErrUserNotFound) || errors.Is(err, service.ErrInvalidUsername) || errors.Is(err, service.ErrUsernameTaken)
 }

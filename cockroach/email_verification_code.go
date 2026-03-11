@@ -42,7 +42,7 @@ func (c *Cockroach) EmailVerificationCode(ctx context.Context, code string) (typ
 	}
 
 	if err != nil {
-		return out, fmt.Errorf("sql query select email verification code: %w", err)
+		return out, fmt.Errorf("sql select email verification code: %w", err)
 	}
 
 	return out, nil
@@ -75,7 +75,7 @@ func (c *Cockroach) EmailVerificationCodeRedirectURI(ctx context.Context, code s
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("sql query select email verification code redirect uri: %w", err)
+		return "", fmt.Errorf("sql select email verification code redirect uri: %w", err)
 	}
 
 	return redirectURI, nil
@@ -94,7 +94,7 @@ func (c *Cockroach) UseEmailVerificationCode(ctx context.Context, in types.UseEm
 		}
 
 		if code.UserID != nil {
-			updated, err := c.UpdateUserEmail(ctx, *code.UserID, code.Email)
+			updated, err := c.UpdateEmail(ctx, *code.UserID, code.Email)
 			if err != nil {
 				return err
 			}

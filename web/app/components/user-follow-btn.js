@@ -34,18 +34,18 @@ function UserFollowBtn({ user: initialUser }) {
         setUser(initialUser)
     }, [initialUser])
 
-    if (user.me) {
+    if (user.isMe) {
         return null
     }
 
     return html`
         <button aria-busy=${ifDefined(fetching ? "true" : undefined)} .disabled=${fetching} @click=${onClick}>
-            ${user.following ? html`
+            ${user.followedByViewer ? html`
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g data-name="Layer 2"><g data-name="person-done"><rect width="24" height="24" opacity="0"/><path d="M21.66 4.25a1 1 0 0 0-1.41.09l-1.87 2.15-.63-.71a1 1 0 0 0-1.5 1.33l1.39 1.56a1 1 0 0 0 .75.33 1 1 0 0 0 .74-.34l2.61-3a1 1 0 0 0-.08-1.41z"/><path d="M10 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0-6a2 2 0 1 1-2 2 2 2 0 0 1 2-2z"/><path d="M10 13a7 7 0 0 0-7 7 1 1 0 0 0 2 0 5 5 0 0 1 10 0 1 1 0 0 0 2 0 7 7 0 0 0-7-7z"/></g></g></svg>
             ` : html`
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g data-name="Layer 2"><g data-name="person-add"><rect width="24" height="24" opacity="0"/><path d="M21 6h-1V5a1 1 0 0 0-2 0v1h-1a1 1 0 0 0 0 2h1v1a1 1 0 0 0 2 0V8h1a1 1 0 0 0 0-2z"/><path d="M10 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0-6a2 2 0 1 1-2 2 2 2 0 0 1 2-2z"/><path d="M10 13a7 7 0 0 0-7 7 1 1 0 0 0 2 0 5 5 0 0 1 10 0 1 1 0 0 0 2 0 7 7 0 0 0-7-7z"/></g></g></svg>
             `}
-            <span>${user.following ? "Following" : "Follow"}</span>
+            <span>${user.followedByViewer ? "Following" : "Follow"}</span>
         </button>
         ${toast !== null ? html`<toast-item .toast=${toast}></toast-item>` : null}
     `

@@ -50,7 +50,7 @@ func (h *handler) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 		Username: emptyStrPtr(q.Get("username")),
 	}
 	auth, err := h.svc.VerifyMagicLink(ctx, in)
-	if err == service.ErrUserNotFound || err == service.ErrInvalidUsername || err == service.ErrUsernameTaken {
+	if shouldAskUsername(err) {
 		redirectWithHashFragment(w, r, redirectURI, url.Values{
 			"error":          []string{err.Error()},
 			"retry_endpoint": []string{r.RequestURI},

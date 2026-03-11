@@ -21,16 +21,16 @@ func (u *User) SetAvatarURL(prefix string) {
 
 type UserProfile struct {
 	User
-	Email          string  `json:"email,omitempty"`
-	CoverURL       *string `json:"coverURL" db:"cover"`
-	Bio            *string `json:"bio"`
-	Waifu          *string `json:"waifu"`
-	Husbando       *string `json:"husbando"`
-	FollowersCount int     `json:"followersCount" db:"followers_count"`
-	FolloweesCount int     `json:"followeesCount" db:"followees_count"`
-	Me             bool    `json:"me"`
-	Following      bool    `json:"following"`
-	Followeed      bool    `json:"followeed"`
+	Email            string  `json:"email,omitempty"`
+	CoverURL         *string `json:"coverURL" db:"cover"`
+	Bio              *string `json:"bio"`
+	Waifu            *string `json:"waifu"`
+	Husbando         *string `json:"husbando"`
+	FollowersCount   int     `json:"followersCount" db:"followers_count"`
+	FolloweesCount   int     `json:"followeesCount" db:"followees_count"`
+	IsMe             bool    `json:"isMe" db:"is_me"`
+	FollowedByViewer bool    `json:"followedByViewer" db:"followed_by_viewer"`
+	FollowsViewer    bool    `json:"followsViewer" db:"follows_viewer"`
 }
 
 func (u *UserProfile) SetCoverURL(prefix string) {
@@ -42,9 +42,9 @@ type CreateUser struct {
 	Username string
 }
 
-type ToggleFollowOutput struct {
-	Following      bool `json:"following"`
-	FollowersCount int  `json:"followersCount"`
+type ToggledFollow struct {
+	FollowedByViewer bool `json:"followedByViewer"`
+	FollowersCount   uint `json:"followersCount"`
 }
 
 type ListUserProfiles struct {
@@ -67,6 +67,53 @@ func (in *ListUserProfiles) Validate() error {
 		if *in.SearchUsername == "" {
 			return errs.InvalidArgumentError("invalid search username")
 		}
+	}
+
+	return in.PageArgs.Validate()
+}
+
+type ListFollowers struct {
+	Username string
+	PageArgs
+	viewerID *string
+}
+
+func (in *ListFollowers) SetViewerID(viewerID string) {
+	in.viewerID = &viewerID
+}
+
+func (in ListFollowers) ViewerID() *string {
+	return in.viewerID
+}
+
+func (in *ListFollowers) Validate() error {
+	in.Username = strings.TrimSpace(in.Username)
+	if !ValidUsername(in.Username) {
+		return errs.InvalidArgumentError("invalid username")
+	}
+
+	return in.PageArgs.Validate()
+}
+
+type ListFollowees struct {
+	Username string
+	PageArgs
+	viewerID *string
+}
+
+func (in *ListFollowees) SetViewerID(viewerID string) {
+	in.viewerID = &viewerID
+}
+
+func (in ListFollowees) ViewerID() *string {
+	return in.viewerID
+
+}
+
+func (in *ListFollowees) Validate() error {
+	in.Username = strings.TrimSpace(in.Username)
+	if !ValidUsername(in.Username) {
+		return errs.InvalidArgumentError("invalid username")
 	}
 
 	return in.PageArgs.Validate()

@@ -1153,6 +1153,11 @@ comments-list .post {
   font-size: 3rem;
   margin: 0;
   word-break: break-word;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .user-counts {
@@ -1354,6 +1359,27 @@ notification-item[read]+notification-item[read] .notification::before {
 
 .user-item .username {
   word-break: break-word;
+}
+
+.username-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.follows-viewer-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 .625rem;
+  height: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  background-color: var(--surface-1);
+  color: var(--hint);
+  font-size: 0.875rem;
+  font-weight: normal;
+  white-space: nowrap;
 }
 
 .user-item a {

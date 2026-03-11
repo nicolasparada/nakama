@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"syscall"
 
 	"github.com/matryer/way"
+	"github.com/nicolasparada/go-errs"
 
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
@@ -163,43 +163,59 @@ func (h *handler) toggleFollow(w http.ResponseWriter, r *http.Request) {
 func (h *handler) followers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	username := way.Param(ctx, "username")
-	first, _ := strconv.ParseUint(q.Get("first"), 10, 64)
-	after := emptyStrPtr(q.Get("after"))
-	uu, err := h.svc.Followers(ctx, username, first, after)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if uu == nil {
-		uu = []types.UserProfile{} // non null array
+	in := types.ListFollowers{
+		Username: way.Param(ctx, "username"),
+		PageArgs: pageArgs,
+	}
+	out, err := h.svc.Followers(ctx, in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     uu,
-		EndCursor: uu.EndCursor(),
-	}, http.StatusOK)
+	if out.Items == nil {
+		out.Items = []types.UserProfile{} // non null array
+	}
+
+	h.respond(w, out, http.StatusOK)
 }
 
 func (h *handler) followees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	username := way.Param(ctx, "username")
-	first, _ := strconv.ParseUint(q.Get("first"), 10, 64)
-	after := emptyStrPtr(q.Get("after"))
-	uu, err := h.svc.Followees(ctx, username, first, after)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if uu == nil {
-		uu = []types.UserProfile{} // non null array
+	in := types.ListFollowees{
+		Username: way.Param(ctx, "username"),
+		PageArgs: pageArgs,
+	}
+	out, err := h.svc.Followees(ctx, in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     uu,
-		EndCursor: uu.EndCursor(),
-	}, http.StatusOK)
+	if out.Items == nil {
+		out.Items = []types.UserProfile{} // non null array
+	}
+
+	h.respond(w, out, http.StatusOK)
+}
+
+func shouldAskUsername(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return errors.Is(err, errs.NotFoundError("user not found")) || errors.Is(err, errs.InvalidArgumentError("invalid username")) || errors.Is(err, errs.InvalidArgumentError("username taken"))
 }
