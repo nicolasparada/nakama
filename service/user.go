@@ -45,6 +45,11 @@ func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (
 	for i, u := range users.Items {
 		u.SetAvatarURL(s.AvatarURLPrefix)
 		u.SetCoverURL(s.CoverURLPrefix)
+
+		if !u.IsMe {
+			u.Email = ""
+		}
+
 		users.Items[i] = u
 	}
 
@@ -106,6 +111,9 @@ func (s *Service) UserProfileByUsername(ctx context.Context, in types.RetrieveUs
 
 	user.SetAvatarURL(s.AvatarURLPrefix)
 	user.SetCoverURL(s.CoverURLPrefix)
+	if !user.IsMe {
+		user.Email = ""
+	}
 
 	return user, nil
 }
@@ -332,6 +340,11 @@ func (s *Service) Followers(ctx context.Context, in types.ListFollowers) (types.
 	for i, u := range out.Items {
 		u.SetAvatarURL(s.AvatarURLPrefix)
 		u.SetCoverURL(s.CoverURLPrefix)
+
+		if !u.IsMe {
+			u.Email = ""
+		}
+
 		out.Items[i] = u
 	}
 
@@ -357,6 +370,11 @@ func (s *Service) Followees(ctx context.Context, in types.ListFollowees) (types.
 	for i, u := range out.Items {
 		u.SetAvatarURL(s.AvatarURLPrefix)
 		u.SetCoverURL(s.CoverURLPrefix)
+
+		if !u.IsMe {
+			u.Email = ""
+		}
+
 		out.Items[i] = u
 	}
 
