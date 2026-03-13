@@ -118,7 +118,7 @@ function notificationPathname(n) {
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
-    if (n.type === "follow") {
+    if (n.kind === "follow") {
         return "/@" + encodeURIComponent(n.actorUsernames[0])
     }
 
@@ -146,7 +146,7 @@ async function networkWithOfflineNavigationFallback(ev) {
  * @returns {string}
  */
 function notificationTitle(n) {
-    switch (n.type) {
+    switch (n.kind) {
         case "follow":
             return "New follow"
         case "comment":
@@ -155,8 +155,9 @@ function notificationTitle(n) {
             return "New post mention"
         case "comment_mention":
             return "New comment mention"
+        default:
+            return "New notification"
     }
-    return "New notification"
 }
 
 /**
@@ -179,7 +180,7 @@ function notificationBody(n) {
     }
 
     const getAction = () => {
-        switch (n.type) {
+        switch (n.kind) {
             case "follow":
                 return "followed you"
             case "comment":
@@ -188,8 +189,9 @@ function notificationBody(n) {
                 return "mentioned you in a post"
             case "comment_mention":
                 return "mentioned you in a comment"
+            default:
+                return "did something"
         }
-        return "did something"
     }
 
     return getActors() + " " + getAction()

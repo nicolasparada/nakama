@@ -188,7 +188,7 @@ function showNotification(n) {
  * @returns {string}
  */
 function notificationTitle(n) {
-    switch (n.type) {
+    switch (n.kind) {
         case "follow":
             return "New follow"
         case "comment":
@@ -222,7 +222,7 @@ function notificationBody(n) {
     }
 
     const getAction = () => {
-        switch (n.type) {
+        switch (n.kind) {
             case "follow":
                 return "followed you"
             case "comment":
@@ -248,7 +248,7 @@ function notificationPathname(n) {
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
-    if (n.type === "follow") {
+    if (n.kind === "follow") {
         return "/@" + encodeURIComponent(n.actorUsernames[0])
     }
 

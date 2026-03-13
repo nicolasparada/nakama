@@ -230,11 +230,8 @@ func (c *Cockroach) UserProfiles(ctx context.Context, in types.ListUserProfiles)
 	}
 
 	out.Items = users
-	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
-		return Cursor[any]{ID: u.Username}
-	})
 
-	return out, nil
+	return out, applyPageInfo(&out, pageArgs, userProfileCursor)
 }
 
 func (c *Cockroach) Followers(ctx context.Context, in types.ListFollowers) (types.Page[types.UserProfile], error) {
@@ -296,11 +293,8 @@ func (c *Cockroach) Followers(ctx context.Context, in types.ListFollowers) (type
 	}
 
 	out.Items = users
-	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
-		return Cursor[any]{ID: u.Username}
-	})
 
-	return out, nil
+	return out, applyPageInfo(&out, pageArgs, userProfileCursor)
 }
 
 func (c *Cockroach) Followees(ctx context.Context, in types.ListFollowees) (types.Page[types.UserProfile], error) {
@@ -362,11 +356,8 @@ func (c *Cockroach) Followees(ctx context.Context, in types.ListFollowees) (type
 	}
 
 	out.Items = users
-	applyPageInfo(&out, pageArgs, func(u types.UserProfile) Cursor[any] {
-		return Cursor[any]{ID: u.Username}
-	})
 
-	return out, nil
+	return out, applyPageInfo(&out, pageArgs, userProfileCursor)
 }
 
 func (c *Cockroach) Usernames(ctx context.Context, in types.ListUsernames) (types.Page[string], error) {
@@ -419,11 +410,10 @@ func (c *Cockroach) Usernames(ctx context.Context, in types.ListUsernames) (type
 	}
 
 	out.Items = usernames
-	applyPageInfo(&out, pageArgs, func(username string) Cursor[any] {
+
+	return out, applyPageInfo(&out, pageArgs, func(username string) Cursor[any] {
 		return Cursor[any]{ID: username}
 	})
-
-	return out, nil
 }
 
 func (c *Cockroach) User(ctx context.Context, userID string) (types.User, error) {
@@ -762,4 +752,8 @@ func (c *Cockroach) decreaseFolloweesCount(ctx context.Context, userID string) (
 	}
 
 	return count, nil
+}
+
+func userProfileCursor(u types.UserProfile) Cursor[any] {
+	return Cursor[any]{ID: u.Username}
 }

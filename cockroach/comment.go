@@ -174,11 +174,10 @@ func (c *Cockroach) Comments(ctx context.Context, in types.ListComments) (types.
 	}
 
 	out.Items = comments
-	applyPageInfo(&out, pageArgs, func(c types.Comment) Cursor[time.Time] {
+
+	return out, applyPageInfo(&out, pageArgs, func(c types.Comment) Cursor[time.Time] {
 		return Cursor[time.Time]{ID: c.ID, Value: c.CreatedAt}
 	})
-
-	return out, nil
 }
 
 func (c *Cockroach) CommentUserID(ctx context.Context, commentID string) (string, error) {

@@ -78,7 +78,7 @@
  * @typedef ListPosts
  * @prop {string=} username
  * @prop {string=} tag
- * @prop {PageArgs} pageArgs
+ * @prop {PageArgs=} pageArgs
  */
 
 /**
@@ -143,7 +143,7 @@
 /**
  * @typedef ListComments
  * @prop {string} postID
- * @prop {PageArgs} pageArgs
+ * @prop {PageArgs=} pageArgs
  */
 
 /**
@@ -173,10 +173,15 @@
  */
 
 /**
+ * @typedef ListNotifications
+ * @prop {PageArgs=} pageArgs
+ */
+
+/**
  * @typedef AppNotification
  * @prop {string} id
  * @prop {string[]} actorUsernames
- * @prop {"follow"|"comment"|"post_mention"|"comment_mention"} type
+ * @prop {"follow"|"comment"|"post_mention"|"comment_mention"} kind
  * @prop {string=} postID
  * @prop {boolean} read
  * @prop {string|Date} issuedAt

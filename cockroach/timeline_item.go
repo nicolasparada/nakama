@@ -96,11 +96,10 @@ func (c *Cockroach) Timeline(ctx context.Context, in types.ListTimeline) (types.
 	}
 
 	out.Items = posts
-	applyPageInfo(&out, pageArgs, func(ti types.TimelineItem) Cursor[time.Time] {
+
+	return out, applyPageInfo(&out, pageArgs, func(ti types.TimelineItem) Cursor[time.Time] {
 		return Cursor[time.Time]{ID: ti.ID, Value: ti.CreatedAt}
 	})
-
-	return out, nil
 }
 
 func (c *Cockroach) FanoutTimeline(ctx context.Context, postID, followeeID string) ([]types.TimelineItem, error) {

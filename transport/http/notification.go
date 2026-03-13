@@ -3,7 +3,6 @@ package http
 import (
 	"mime"
 	"net/http"
-	"strconv"
 
 	"github.com/matryer/way"
 	"github.com/nakamauwu/nakama/types"
@@ -16,22 +15,26 @@ func (h *handler) notifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	last, _ := strconv.ParseUint(q.Get("last"), 10, 64)
-	before := emptyStrPtr(q.Get("before"))
-	nn, err := h.svc.Notifications(r.Context(), last, before)
+	pageArgs, err := parsePageArgs(q)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	if nn == nil {
-		nn = []types.Notification{} // non null array
+	in := types.ListNotifications{
+		PageArgs: pageArgs,
+	}
+	out, err := h.svc.Notifications(r.Context(), in)
+	if err != nil {
+		h.respondErr(w, err)
+		return
 	}
 
-	h.respond(w, paginatedRespBody{
-		Items:     nn,
-		EndCursor: nn.EndCursor(),
-	}, http.StatusOK)
+	if out.Items == nil {
+		out.Items = []types.Notification{} // non null array
+	}
+
+	h.respond(w, out, http.StatusOK)
 }
 
 func (h *handler) notificationStream(w http.ResponseWriter, r *http.Request) {

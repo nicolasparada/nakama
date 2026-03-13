@@ -8,7 +8,22 @@ import "./intersectable-comp.js"
 import "./post-item.js"
 import "./toast-item.js"
 
-const pageSize = 10
+/**
+ * @typedef {import("../types.js").Post} Post
+ */
+
+/**
+ * @typedef {import("../types.js").ListPosts} ListPosts
+ */
+
+/**
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
 
 /**
  * @param {object} props
@@ -45,11 +60,11 @@ function TaggedPostsPage({ tag }) {
         }
 
         setLoadingMore(true)
-        fetchPosts(tag, endCursor).then(({ items: posts, endCursor }) => {
-            setPosts(tt => [...tt, ...posts])
-            setEndCursor(endCursor)
+        fetchPosts({ tag, pageArgs: { after: endCursor } }).then(page => {
+            setPosts(tt => [...tt, ...page.items])
+            setEndCursor(page.pageInfo.endCursor)
 
-            if (posts.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMore(true)
                 setEndReached(true)
             }
@@ -69,11 +84,11 @@ function TaggedPostsPage({ tag }) {
         setEndReached(false)
 
         setFetching(true)
-        fetchPosts(tag).then(({ items: posts, endCursor }) => {
-            setPosts(posts)
-            setEndCursor(endCursor)
+        fetchPosts({tag}).then(page => {
+            setPosts(page.items)
+            setEndCursor(page.pageInfo.endCursor)
 
-            if (posts.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMore(true)
             }
         }, err => {
@@ -128,10 +143,30 @@ function TaggedPostsPage({ tag }) {
 // @ts-ignore
 customElements.define("tagged-posts-page", component(TaggedPostsPage, { useShadowDOM: false }))
 
-function fetchPosts(tag, before = "", last = pageSize) {
-    return request("GET", `/api/posts?tag=${encodeURIComponent(tag)}&last=${encodeURIComponent(last)}&before=${encodeURIComponent(before)}`)
+/**
+ * @param {ListPosts} input
+ * @returns {Promise<Page<Post>>}
+ */
+function fetchPosts(input) {
+    const u = new URL("/api/posts", window.location.origin)
+    if (input.tag != null) {
+        u.searchParams.set("tag", input.tag)
+    }
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
-        .then(page => {
+        .then((/** @type {Page<Post>} */ page) => {
             page.items = page.items.map(p => ({
                 ...p,
                 createdAt: new Date(p.createdAt),

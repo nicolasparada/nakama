@@ -202,11 +202,10 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 	}
 
 	out.Items = posts
-	applyPageInfo(&out, pageArgs, func(p types.Post) Cursor[time.Time] {
+
+	return out, applyPageInfo(&out, pageArgs, func(p types.Post) Cursor[time.Time] {
 		return Cursor[time.Time]{ID: p.ID, Value: p.CreatedAt}
 	})
-
-	return out, nil
 }
 
 func (c *Cockroach) Post(ctx context.Context, in types.RetrievePost) (types.Post, error) {

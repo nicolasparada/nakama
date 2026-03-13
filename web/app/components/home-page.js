@@ -12,8 +12,6 @@ import "./intersectable-comp.js"
 import "./post-item.js"
 import "./toast-item.js"
 
-const pageSize = 10
-
 /**
  * @typedef {import("../types.js").TimelineItem} TimelineItem
  */
@@ -52,21 +50,21 @@ function HomePage() {
     const [mode, setMode] = useState(() => {
         return localStorage.getItem("home-page-mode") === "timeline" ? "timeline" : "posts"
     })
-    const [posts, setPosts] = useState(/** @type {import("../types.js").Post[]|import("../types.js").TimelineItem[]} */([]))
+    const [posts, setPosts] = useState(/** @type {Post[]|TimelineItem[]} */([]))
     const [endCursor, setEndCursor] = useState(/** @type {string|null} */(null))
     const [fetching, setFetching] = useState(posts.length === 0)
     const [err, setErr] = useState(/** @type {Error|null} */(null))
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMore, setNoMore] = useState(false)
     const [endReached, setEndReached] = useState(false)
-    const [queue, setQueue] = useState(/** @type {import("../types.js").Post[]|import("../types.js").TimelineItem[]} */([]))
-    const [toast, setToast] = useState(/** @type {import("./toast-item.js").Toast|null} */(null))
+    const [queue, setQueue] = useState(/** @type {Post[]|TimelineItem[]} */([]))
+    const [toast, setToast] = useState(/** @type {Toast|null} */(null))
     const postsRef = useRef(posts)
     const queueRef = useRef(queue)
 
     /**
-     * @param {import("../types.js").Post[]|import("../types.js").TimelineItem[]} items 
-     * @param {import("../types.js").TimelineItem} timelineItem 
+     * @param {Post[]|TimelineItem[]} items 
+     * @param {TimelineItem} timelineItem 
      * @returns {boolean}
      */
     const hasTimelineItem = (items, timelineItem) => {
@@ -77,8 +75,8 @@ function HomePage() {
     }
 
     /**
-     * @param {import("../types.js").Post[]} items 
-     * @param {import("../types.js").Post} post 
+     * @param {Post[]} items 
+     * @param {Post} post 
      * @returns {boolean}
      */
     const hasPost = (items, post) => {
@@ -86,12 +84,12 @@ function HomePage() {
     }
 
     const onTimelineItemCreated = ev => {
-        const payload = /** @type {import("../types.js").TimelineItem} */ (ev.detail)
+        const payload = /** @type {TimelineItem} */ (ev.detail)
         setPosts(pp => [payload, ...queue, ...pp])
         setQueue([])
     }
 
-    const onNewTimelineItemArrive = (/** @type {import("../types.js").TimelineItem} */ timelineItem) => {
+    const onNewTimelineItemArrive = (/** @type {TimelineItem} */ timelineItem) => {
         if (hasTimelineItem(postsRef.current, timelineItem) || hasTimelineItem(queueRef.current, timelineItem)) {
             return
         }
@@ -99,7 +97,7 @@ function HomePage() {
         setQueue(pp => [timelineItem, ...pp])
     }
 
-    const onNewPostArrive = (/** @type {import("../types.js").Post} */ post) => {
+    const onNewPostArrive = (/** @type {Post} */ post) => {
         if (hasPost(postsRef.current, post) || hasPost(queueRef.current, post)) {
             return
         }
@@ -108,7 +106,7 @@ function HomePage() {
     }
 
     const onRemovedFromTimeline = ev => {
-        const payload = /** @type {import("../types.js").TimelineItem} */ (ev.detail)
+        const payload = /** @type {TimelineItem} */ (ev.detail)
         setPosts(pp => pp.filter(p => !("timelineItemID" in p) || p.timelineItemID !== payload.timelineItemID))
     }
 

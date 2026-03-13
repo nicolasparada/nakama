@@ -34,12 +34,6 @@ var (
 	errServiceUnavailable   = errors.New("service unavailable")
 )
 
-type paginatedRespBody struct {
-	Items       any     `json:"items"`
-	StartCursor *string `json:"startCursor"`
-	EndCursor   *string `json:"endCursor"`
-}
-
 func (h *handler) respond(w http.ResponseWriter, v any, statusCode int) {
 	b, err := json.Marshal(v)
 	if err != nil {

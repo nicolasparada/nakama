@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nakamauwu/nakama/cockroach"
-	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nakamauwu/nakama/textutil"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
@@ -21,75 +19,21 @@ import (
 const ErrInvalidNotificationID = errs.InvalidArgumentError("invalid notification ID")
 
 // Notifications from the authenticated user in descending order with backward pagination.
-func (s *Service) Notifications(ctx context.Context, last uint64, before *string) (types.Notifications, error) {
+func (s *Service) Notifications(ctx context.Context, in types.ListNotifications) (types.Page[types.Notification], error) {
+	var out types.Page[types.Notification]
+
+	if err := in.Validate(); err != nil {
+		return out, err
+	}
+
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
 	if !ok {
-		return nil, errs.Unauthenticated
+		return out, errs.Unauthenticated
 	}
 
-	var beforeNotificationID string
-	var beforeIssuedAt time.Time
+	in.SetUserID(uid)
 
-	if before != nil {
-		var err error
-		beforeNotificationID, beforeIssuedAt, err = cursor.Decode(*before)
-		if err != nil || !types.ValidUUIDv4(beforeNotificationID) {
-			return nil, ErrInvalidCursor
-		}
-	}
-
-	last = normalizePageSize(last)
-	query, args, err := buildQuery(`
-		SELECT id
-		, actor_usernames
-		, kind
-		, post_id
-		, read_at
-		, issued_at
-		FROM notifications
-		WHERE user_id = @uid
-		{{ if and .beforeNotificationID .beforeIssuedAt }}
-			AND issued_at <= @beforeIssuedAt
-			AND (
-				id < @beforeNotificationID
-					OR issued_at < @beforeIssuedAt
-			)
-		{{ end }}
-		ORDER BY issued_at DESC
-		LIMIT @last`, map[string]any{
-		"uid":                  uid,
-		"last":                 last,
-		"beforeNotificationID": beforeNotificationID,
-		"beforeIssuedAt":       beforeIssuedAt,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not build notifications sql query: %w", err)
-	}
-
-	rows, err := s.DB.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("could not query select notifications: %w", err)
-	}
-
-	defer rows.Close()
-
-	var nn types.Notifications
-	for rows.Next() {
-		var n types.Notification
-		var readAt *time.Time
-		if err = rows.Scan(&n.ID, &n.ActorUsernames, &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
-			return nil, fmt.Errorf("could not scan notification: %w", err)
-		}
-
-		n.Read = readAt != nil && !readAt.IsZero()
-		nn = append(nn, n)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate over notification rows: %w", err)
-	}
-
-	return nn, nil
+	return s.Cockroach.Notifications(ctx, in)
 }
 
 // NotificationStream to receive notifications in realtime.
@@ -246,7 +190,7 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 		}
 
 		n.UserID = followeeID
-		n.Type = "follow"
+		n.Kind = "follow"
 
 		return nil
 	})
@@ -290,7 +234,7 @@ func (s *Service) notifyComment(c types.Comment) {
 			return
 		}
 
-		n.Type = "comment"
+		n.Kind = "comment"
 		n.PostID = &c.PostID
 
 		go s.broadcastNotification(n)
@@ -335,7 +279,7 @@ func (s *Service) notifyPostMention(p types.Post) {
 		}
 
 		n.ActorUsernames = actorUsernames
-		n.Type = "post_mention"
+		n.Kind = "post_mention"
 		n.PostID = &p.ID
 
 		go s.broadcastNotification(n)
@@ -383,7 +327,7 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 			return
 		}
 
-		n.Type = "comment_mention"
+		n.Kind = "comment_mention"
 		n.PostID = &c.PostID
 
 		go s.broadcastNotification(n)

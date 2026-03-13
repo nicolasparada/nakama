@@ -9,11 +9,23 @@ import "./intersectable-comp.js"
 import "./relative-datetime.js"
 import "./toast-item.js"
 
-const pageSize = 10
-
 /**
  * @typedef {import("../types.js").AppNotification} AppNotification
  */
+
+/**
+ * @typedef {import("../types.js").ListNotifications} ListNotifications
+ */
+
+/**
+ * @template T
+ * @typedef {import("../types.js").Page<T>} Page
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
+
 
 export default function () {
     return html`<notifications-page></notifications-page>`
@@ -64,11 +76,11 @@ function NotificationsPage() {
         }
 
         setLoadingMore(true)
-        fetchNotifications(notificationsEndCursor).then(({ items: notifications, endCursor }) => {
-            setNotifications(nn => [...nn, ...notifications])
-            setNotificationsEndCursor(endCursor)
+        fetchNotifications({pageArgs: { after: notificationsEndCursor }}).then(page => {
+            setNotifications(nn => [...nn, ...page.items])
+            setNotificationsEndCursor(page.pageInfo.endCursor)
 
-            if (notifications.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreNotifications(true)
                 setEndReached(true)
             }
@@ -173,11 +185,11 @@ function NotificationsPage() {
 
     useEffect(() => {
         setFething(true)
-        fetchNotifications().then(({ items: notifications, endCursor }) => {
-            setNotifications(notifications)
-            setNotificationsEndCursor(endCursor)
+        fetchNotifications({}).then(page => {
+            setNotifications(page.items)
+            setNotificationsEndCursor(page.pageInfo.endCursor)
 
-            if (notifications.length < pageSize) {
+            if (!page.pageInfo.hasNextPage) {
                 setNoMoreNotifications(true)
             }
         }, err => {
@@ -278,7 +290,7 @@ function NotificationItem({ notification: initialNotification }) {
             case 2:
                 return html`<a href="/@${aa[0]}">${aa[0]}</a> and <a href="/@${aa[1]}">${aa[1]}</a>`
             default:
-                return notification.type === "follow"
+                return notification.kind === "follow"
                     ? html`${repeat(aa.slice(0, aa.length - 1), u => u, (u, i) => html`${i > 0 ? ", " : ""}<a href="/@${u}">${u}</a>`)} and <a
     href="/@${aa[aa.length - 1]}">${aa[aa.length - 1]}</a>`
                     : html`<a href="/@${aa[0]}">${aa[0]}</a> and ${aa.length - 1} others`
@@ -286,7 +298,7 @@ function NotificationItem({ notification: initialNotification }) {
     }
 
     const getAction = () => {
-        switch (notification.type) {
+        switch (notification.kind) {
             case "follow":
                 return "followed you"
             case "comment":
@@ -362,10 +374,28 @@ function NotificationItem({ notification: initialNotification }) {
 
 customElements.define("notification-item", component(NotificationItem, { useShadowDOM: false }))
 
-function fetchNotifications(before = "", last = pageSize) {
-    return request("GET", `/api/notifications?last=${encodeURIComponent(last)}&before=${encodeURIComponent(before)}`)
+/**
+ * 
+ * @param {ListNotifications} input 
+ * @returns {Promise<Page<AppNotification>>}
+ */
+function fetchNotifications(input) {
+    const u = new URL("/api/notifications", window.location.origin)
+    if (input.pageArgs?.first != null) {
+        u.searchParams.set("first", input.pageArgs.first.toString())
+    }
+    if (input.pageArgs?.after != null) {
+        u.searchParams.set("after", input.pageArgs.after)
+    }
+    if (input.pageArgs?.last != null) {
+        u.searchParams.set("last", input.pageArgs.last.toString())
+    }
+    if (input.pageArgs?.before != null) {
+        u.searchParams.set("before", input.pageArgs.before)
+    }
+    return request("GET", u.toString())
         .then(resp => resp.body)
-        .then(page => {
+        .then((/** @type {Page<AppNotification>} */ page) => {
             page.items = page.items.map(n => ({
                 ...n,
                 issuedAt: new Date(n.issuedAt),

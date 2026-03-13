@@ -14,8 +14,24 @@ import "./relative-datetime.js"
 import "./toast-item.js"
 
 /**
+ * @typedef {import("../types.js").TimelineItem} TimelineItem
+ */
+
+/**
+ * @typedef {import("../types.js").Post} Post
+ */
+
+/**
+ * @typedef {import("../types.js").Comment} Comment
+ */
+
+/**
+ * @typedef {import("./toast-item.js").Toast} Toast
+ */
+
+/**
  * @param {object} props
- * @param {import("../types.js").Post|import("../types.js").Comment|import("../types.js").TimelineItem} props.post
+ * @param {Post|Comment|TimelineItem} props.post
  * @param {"timeline_item"|"post"|"comment"} props.type
  */
 function PostItem({ post: initialPost, type }) {
@@ -29,7 +45,7 @@ function PostItem({ post: initialPost, type }) {
     const [deleting, setDeleting] = useState(false)
     const [displaySpoiler, setDisplaySpoiler] = useState(false)
     const [displayNSFW, setDisplayNSFW] = useState(false)
-    const [toast, setToast] = useState(null)
+    const [toast, setToast] = useState(/** @type {Toast|null} */(null))
     const [postCanBeUpdated, setPostCanBeUpdated] = useState(canUpdatePost(post))
 
     const onMenuBtnClick = () => {
@@ -88,7 +104,7 @@ function PostItem({ post: initialPost, type }) {
     }
 
     const onRemoveFromTimelineBtnClick = () => {
-        const ti = /** @type {import("../types.js").TimelineItem} */ (post)
+        const ti = /** @type {TimelineItem} */ (post)
         if (type !== "timeline_item") {
             return
         }
