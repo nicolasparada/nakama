@@ -119,13 +119,13 @@ CREATE TABLE IF NOT EXISTS post_tags (
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
-    actor_usernames VARCHAR[] NOT NULL,
-    kind VARCHAR NOT NULL,
+    actors VARCHAR[] NOT NULL,
+    type VARCHAR NOT NULL,
     post_id UUID REFERENCES posts ON DELETE CASCADE,
     read_at TIMESTAMPTZ,
     issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     INDEX sorted_notifications (issued_at DESC, id),
-    UNIQUE INDEX unique_notifications (user_id, kind, post_id, read_at)
+    UNIQUE INDEX unique_notifications (user_id, type, post_id, read_at)
 );
 
 ALTER TABLE IF EXISTS notifications RENAME COLUMN actors TO actor_usernames;
