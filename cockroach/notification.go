@@ -19,7 +19,7 @@ const notificationsCols = `
 	, notifications.post_id
 	, notifications.read_at
 	, notifications.issued_at
-	, (notifications.read_at IS NOT NULL) AS read
+	, (notifications.read_at IS NOT NULL AND notifications.read_at != '0001-01-01 00:00:00') AS read
 `
 
 func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotifications) (types.Page[types.Notification], error) {
