@@ -2,6 +2,10 @@ const OFFLINE_VERSION = 1
 const CACHE_NAME = "offline"
 const OFFLINE_URL = "/offline.html"
 
+/**
+ * @typedef {import("../app/types.js").AppNotification} AppNotification
+ */
+
 self.addEventListener("install", ev => {
     ev.waitUntil(cacheOfflinePage())
     self.skipWaiting()
@@ -47,6 +51,9 @@ self.addEventListener("notificationclick", ev => {
     ev.waitUntil(openNotificationsPage(ev.notification.data))
 })
 
+/**
+ * @param {AppNotification} n 
+ */
 async function showNotification(n) {
     const title = notificationTitle(n)
     const body = notificationBody(n)
@@ -102,13 +109,17 @@ async function openNotificationsPage(n) {
     }))
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationPathname(n) {
     if (typeof n.postID === "string" && n.postID !== "") {
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
     if (n.type === "follow") {
-        return "/@" + encodeURIComponent(n.actors[0])
+        return "/@" + encodeURIComponent(n.actorUsernames[0])
     }
 
     return "/notifications"
@@ -130,6 +141,10 @@ async function networkWithOfflineNavigationFallback(ev) {
     }
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationTitle(n) {
     switch (n.type) {
         case "follow":
@@ -144,9 +159,13 @@ function notificationTitle(n) {
     return "New notification"
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationBody(n) {
     const getActors = () => {
-        const aa = n.actors
+        const aa = n.actorUsernames
         switch (aa.length) {
             case 0:
                 return "Someone"

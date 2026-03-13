@@ -41,8 +41,8 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 	last = normalizePageSize(last)
 	query, args, err := buildQuery(`
 		SELECT id
-		, actors
-		, type
+		, actor_usernames
+		, kind
 		, post_id
 		, read_at
 		, issued_at
@@ -77,7 +77,7 @@ func (s *Service) Notifications(ctx context.Context, last uint64, before *string
 	for rows.Next() {
 		var n types.Notification
 		var readAt *time.Time
-		if err = rows.Scan(&n.ID, &n.Actors, &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.ActorUsernames, &n.Type, &n.PostID, &readAt, &n.IssuedAt); err != nil {
 			return nil, fmt.Errorf("could not scan notification: %w", err)
 		}
 
@@ -188,20 +188,20 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 	var notified bool
 
 	err := cockroach.ExecuteTx(ctx, s.DB, func(tx pgx.Tx) error {
-		var actor string
+		var actorUsername string
 		query := "SELECT username FROM users WHERE id = $1"
-		err := tx.QueryRow(ctx, query, followerID).Scan(&actor)
+		err := tx.QueryRow(ctx, query, followerID).Scan(&actorUsername)
 		if err != nil {
-			return fmt.Errorf("could not query select follow notification actor: %w", err)
+			return fmt.Errorf("could not query select follow notification actor username: %w", err)
 		}
 
 		query = `SELECT EXISTS (
 			SELECT 1 FROM notifications
 			WHERE user_id = $1
-				AND $2:::VARCHAR = ANY(actors)
-				AND type = 'follow'
+				AND $2:::VARCHAR = ANY(actor_usernames)
+				AND kind = 'follow'
 		)`
-		err = tx.QueryRow(ctx, query, followeeID, actor).Scan(&notified)
+		err = tx.QueryRow(ctx, query, followeeID, actorUsername).Scan(&notified)
 		if err != nil {
 			return fmt.Errorf("could not query select follow notification existence: %w", err)
 		}
@@ -211,33 +211,33 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 		}
 
 		var nid string
-		query = "SELECT id FROM notifications WHERE user_id = $1 AND type = 'follow' AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')"
+		query = "SELECT id FROM notifications WHERE user_id = $1 AND kind = 'follow' AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')"
 		err = tx.QueryRow(ctx, query, followeeID).Scan(&nid)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("could not query select unread follow notification: %w", err)
 		}
 
 		if errors.Is(err, pgx.ErrNoRows) {
-			actors := []string{actor}
+			actorUsernames := []string{actorUsername}
 			query = `
-				INSERT INTO notifications (user_id, actors, type) VALUES ($1, $2, 'follow')
+				INSERT INTO notifications (user_id, actor_usernames, kind) VALUES ($1, $2, 'follow')
 				RETURNING id, issued_at`
-			row := tx.QueryRow(ctx, query, followeeID, actors)
+			row := tx.QueryRow(ctx, query, followeeID, actorUsernames)
 			err = row.Scan(&n.ID, &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not insert follow notification: %w", err)
 			}
 
-			n.Actors = actors
+			n.ActorUsernames = actorUsernames
 		} else {
 			query = `
 				UPDATE notifications SET
-					actors = array_prepend($1, notifications.actors),
+					actor_usernames = array_prepend($1, notifications.actor_usernames),
 					issued_at = now()
 				WHERE id = $2
-				RETURNING actors, issued_at`
-			row := tx.QueryRow(ctx, query, actor, nid)
-			err = row.Scan(&n.Actors, &n.IssuedAt)
+				RETURNING actor_usernames, issued_at`
+			row := tx.QueryRow(ctx, query, actorUsername, nid)
+			err = row.Scan(&n.ActorUsernames, &n.IssuedAt)
 			if err != nil {
 				return fmt.Errorf("could not update follow notification: %w", err)
 			}
@@ -261,20 +261,20 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 }
 
 func (s *Service) notifyComment(c types.Comment) {
-	actor := c.User.Username
+	actorUsername := c.User.Username
 	rows, err := s.DB.Query(context.Background(), `
-		INSERT INTO notifications (user_id, actors, type, post_id, read_at)
+		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, read_at)
 		SELECT user_id, $1, 'comment', $2, '0001-01-01 00:00:00' FROM post_subscriptions
 		WHERE post_subscriptions.user_id != $3
 			AND post_subscriptions.post_id = $2
-		ON CONFLICT (user_id, type, post_id, read_at) DO UPDATE SET
-			actors = array_prepend($4, array_remove(notifications.actors, $4)),
+		ON CONFLICT (user_id, kind, post_id, read_at) DO UPDATE SET
+			actor_usernames = array_prepend($4, array_remove(notifications.actor_usernames, $4)),
 			issued_at = now()
-		RETURNING id, user_id, actors, issued_at`,
-		[]string{actor},
+		RETURNING id, user_id, actor_usernames, issued_at`,
+		[]string{actorUsername},
 		c.PostID,
 		c.UserID,
-		actor,
+		actorUsername,
 	)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not insert comment notifications: %w", err))
@@ -285,7 +285,7 @@ func (s *Service) notifyComment(c types.Comment) {
 
 	for rows.Next() {
 		var n types.Notification
-		if err = rows.Scan(&n.ID, &n.UserID, &n.Actors, &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.UserID, &n.ActorUsernames, &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment notification: %w", err))
 			return
 		}
@@ -308,14 +308,14 @@ func (s *Service) notifyPostMention(p types.Post) {
 		return
 	}
 
-	actors := []string{p.User.Username}
+	actorUsernames := []string{p.User.Username}
 	rows, err := s.DB.Query(context.Background(), `
-		INSERT INTO notifications (user_id, actors, type, post_id)
+		INSERT INTO notifications (user_id, actor_usernames, kind, post_id)
 		SELECT users.id, $1, 'post_mention', $2 FROM users
 		WHERE users.id != $3
 			AND username = ANY($4)
 		RETURNING id, user_id, issued_at`,
-		actors,
+		actorUsernames,
 		p.ID,
 		p.UserID,
 		mentions,
@@ -334,7 +334,7 @@ func (s *Service) notifyPostMention(p types.Post) {
 			return
 		}
 
-		n.Actors = actors
+		n.ActorUsernames = actorUsernames
 		n.Type = "post_mention"
 		n.PostID = &p.ID
 
@@ -353,21 +353,21 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 		return
 	}
 
-	actor := c.User.Username
+	actorUsername := c.User.Username
 	rows, err := s.DB.Query(context.Background(), `
-		INSERT INTO notifications (user_id, actors, type, post_id, read_at)
+		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, read_at)
 		SELECT users.id, $1, 'comment_mention', $2, '0001-01-01 00:00:00' FROM users
 		WHERE users.id != $3
 			AND username = ANY($4)
-		ON CONFLICT (user_id, type, post_id, read_at) DO UPDATE SET
-			actors = array_prepend($5, array_remove(notifications.actors, $5)),
+		ON CONFLICT (user_id, kind, post_id, read_at) DO UPDATE SET
+			actor_usernames = array_prepend($5, array_remove(notifications.actor_usernames, $5)),
 			issued_at = now()
-		RETURNING id, user_id, actors, issued_at`,
-		[]string{actor},
+		RETURNING id, user_id, actor_usernames, issued_at`,
+		[]string{actorUsername},
 		c.PostID,
 		c.UserID,
 		mentions,
-		actor,
+		actorUsername,
 	)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not insert comment mention notifications: %w", err))
@@ -378,7 +378,7 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 
 	for rows.Next() {
 		var n types.Notification
-		if err = rows.Scan(&n.ID, &n.UserID, &n.Actors, &n.IssuedAt); err != nil {
+		if err = rows.Scan(&n.ID, &n.UserID, &n.ActorUsernames, &n.IssuedAt); err != nil {
 			_ = s.Logger.Log("error", fmt.Errorf("could not scan comment mention notification: %w", err))
 			return
 		}

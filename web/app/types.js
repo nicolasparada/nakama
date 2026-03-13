@@ -173,9 +173,9 @@
  */
 
 /**
- * @typedef Notification
+ * @typedef AppNotification
  * @prop {string} id
- * @prop {string[]} actors
+ * @prop {string[]} actorUsernames
  * @prop {"follow"|"comment"|"post_mention"|"comment_mention"} type
  * @prop {string=} postID
  * @prop {boolean} read

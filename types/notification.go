@@ -7,13 +7,13 @@ import (
 )
 
 type Notification struct {
-	ID       string    `json:"id"`
-	UserID   string    `json:"-"`
-	Actors   []string  `json:"actors"`
-	Type     string    `json:"type"`
-	PostID   *string   `json:"postID,omitempty" db:"post_id,omitempty"`
-	Read     bool      `json:"read"`
-	IssuedAt time.Time `json:"issuedAt" db:"issued_at"`
+	ID             string    `json:"id"`
+	UserID         string    `json:"-"`
+	ActorUsernames []string  `json:"actorUsernames"`
+	Type           string    `json:"type"`
+	PostID         *string   `json:"postID,omitempty" db:"post_id,omitempty"`
+	Read           bool      `json:"read"`
+	IssuedAt       time.Time `json:"issuedAt" db:"issued_at"`
 }
 
 type Notifications []Notification

@@ -11,6 +11,10 @@ import "./toast-item.js"
 
 const pageSize = 10
 
+/**
+ * @typedef {import("../types.js").AppNotification} AppNotification
+ */
+
 export default function () {
     return html`<notifications-page></notifications-page>`
 }
@@ -256,7 +260,7 @@ customElements.define("notifications-page", component(NotificationsPage, { useSh
 
 /**
  * @param {Object} props
- * @param {import("../types.js").Notification} props.notification
+ * @param {AppNotification} props.notification
  */
 function NotificationItem({ notification: initialNotification }) {
     const [_, setHasUnreadNotifications] = useStore(hasUnreadNotificationsStore)
@@ -265,7 +269,7 @@ function NotificationItem({ notification: initialNotification }) {
     const [toast, setToast] = useState(null)
 
     const getActors = () => {
-        const aa = notification.actors
+        const aa = notification.actorUsernames
         switch (aa.length) {
             case 0:
                 return "Someone"

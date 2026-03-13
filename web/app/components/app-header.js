@@ -7,6 +7,10 @@ import { Avatar } from "./avatar.js"
 
 const rePostPagePath = /^\/posts\/(?<postID>[^\/]+)$/
 
+/**
+ * @typedef {import("../types.js").AppNotification} AppNotification
+ */
+
 function AppHeader() {
     const [auth] = useStore(authStore)
     const [hasUnreadNotifications, setHasUnreadNotifications] = useStore(hasUnreadNotificationsStore)
@@ -179,6 +183,10 @@ function showNotification(n) {
     sysn.addEventListener("click", onSysnClick, { once: true })
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationTitle(n) {
     switch (n.type) {
         case "follow":
@@ -194,9 +202,13 @@ function notificationTitle(n) {
     }
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationBody(n) {
     const getActors = () => {
-        const aa = n.actors
+        const aa = n.actorUsernames
         switch (aa.length) {
             case 0:
                 return "Someone"
@@ -227,18 +239,26 @@ function notificationBody(n) {
     return getActors() + " " + getAction()
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {string}
+ */
 function notificationPathname(n) {
     if (typeof n.postID === "string" && n.postID !== "") {
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
     if (n.type === "follow") {
-        return "/@" + encodeURIComponent(n.actors[0])
+        return "/@" + encodeURIComponent(n.actorUsernames[0])
     }
 
     return "/notifications"
 }
 
+/**
+ * @param {AppNotification} n 
+ * @returns {boolean}
+ */
 function viewingNotificationPage(n) {
     if (!document.hasFocus()) {
         return false
@@ -259,6 +279,9 @@ function fetchHasUnreadNotifications() {
         .then(v => Boolean(v))
 }
 
+/**
+ * @param {(Notification) => any} cb 
+ */
 function subscribeToNotifications(cb) {
     return subscribe("/api/notifications", n => {
         n.issuedAt = new Date(n.issuedAt)
@@ -266,6 +289,9 @@ function subscribeToNotifications(cb) {
     })
 }
 
+/**
+ * @param {AppNotification} n 
+ */
 function dispatchNewNotificationArrived(n) {
     dispatchEvent(new CustomEvent("new-notification-arrived", { bubbles: true, detail: n }))
 }
