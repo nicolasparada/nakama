@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 	"text/template"
-
-	"github.com/nicolasparada/go-db"
 )
 
 const (
@@ -18,10 +16,6 @@ const (
 )
 
 var queriesCache sync.Map
-
-func isUniqueViolation(err error) bool {
-	return db.IsUniqueViolationError(err)
-}
 
 func buildQuery(text string, data map[string]any) (string, []any, error) {
 	var t *template.Template
