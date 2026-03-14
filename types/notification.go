@@ -66,3 +66,46 @@ func (in ListNotifications) UserID() string {
 func (in *ListNotifications) Validate() error {
 	return in.PageArgs.Validate()
 }
+
+type NotificationExists struct {
+	UserID        *string
+	ActorUsername *string
+	Kind          *NotificationKind
+	PostID        *string
+}
+
+func (in NotificationExists) IsEmpty() bool {
+	var empty NotificationExists
+	return in == empty
+}
+
+type CreateNotification struct {
+	UserID         string
+	ActorUsernames []string
+	Kind           NotificationKind
+	PostID         *string
+}
+
+type CreatedNotification struct {
+	ID       string    `db:"id"`
+	IssuedAt time.Time `db:"issued_at"`
+}
+
+type AddedNotificationActor struct {
+	ActorUsernames []string  `db:"actor_usernames"`
+	IssuedAt       time.Time `db:"issued_at"`
+}
+
+type FanoutCommentNotification struct {
+	ActorUserID   string
+	ActorUsername string
+	PostID        string
+}
+
+type CreateMentionNotifications struct {
+	ActorUserID   string
+	ActorUsername string
+	PostID        string
+	Kind          NotificationKind
+	Mentions      []string
+}

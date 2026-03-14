@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/go-kit/log"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
@@ -20,7 +19,6 @@ import (
 // You must call RunBackgroundJobs afterward.
 type Service struct {
 	Logger           log.Logger
-	DB               *pgxpool.Pool
 	Cockroach        *cockroach.Cockroach
 	Sender           mailing.Sender
 	Origin           *url.URL

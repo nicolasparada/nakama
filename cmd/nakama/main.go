@@ -200,7 +200,6 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 
 	svc := &service.Service{
 		Logger:           logger,
-		DB:               db,
 		Cockroach:        cockroach,
 		Sender:           sender,
 		Origin:           origin,
