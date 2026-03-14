@@ -75,6 +75,17 @@
  */
 
 /**
+ * @typedef PostPreview
+ * @prop {string} id
+ * @prop {string} userID
+ * @prop {string} content
+ * @prop {string=} spoilerOf
+ * @prop {boolean} nsfw
+ * @prop {string[]} mediaURLs
+ * @prop {boolean} mine
+ */
+
+/**
  * @typedef ListPosts
  * @prop {string=} username
  * @prop {string=} tag
@@ -141,6 +152,14 @@
  */
 
 /**
+ * @typedef CommentPreview
+ * @prop {string} id
+ * @prop {string} userID
+ * @prop {string} postID
+ * @prop {string} content
+ */
+
+/**
  * @typedef ListComments
  * @prop {string} postID
  * @prop {PageArgs=} pageArgs
@@ -181,10 +200,17 @@
  * @typedef AppNotification
  * @prop {string} id
  * @prop {string[]} actorUsernames
- * @prop {"follow"|"comment"|"post_mention"|"comment_mention"} kind
+ * @prop {NotificationKind} kind
  * @prop {string=} postID
+ * @prop {string=} commentID
  * @prop {boolean} read
  * @prop {string|Date} issuedAt
+ * @prop {PostPreview=} post
+ * @prop {CommentPreview=} comment
+ */
+
+/**
+ * @typedef {"follow"|"comment"|"post_mention"|"comment_mention"} NotificationKind
  */
 
 export default undefined

@@ -25,6 +25,25 @@ const sqlPostCols = `
 	, posts.updated_at
 `
 
+func sqlSelectPostPreview(args pgx.StrictNamedArgs, viewerID string) string {
+	args["viewer_id"] = viewerID
+	return `
+		CASE 
+			WHEN posts.id IS NOT NULL 
+			THEN json_build_object(
+				  'id', posts.id
+				, 'userID', posts.user_id
+				, 'content', posts.content
+				, 'spoilerOf', posts.spoiler_of
+				, 'nsfw', posts.nsfw
+				, 'mediaURLs', posts.media
+				, 'mine', (posts.user_id = @viewer_id)
+			)
+			ELSE NULL
+		END AS post
+	`
+}
+
 // sqlSelectPostsReactions adds a `reacted` field to each reaction, producing something like this:
 //
 //	[
@@ -52,15 +71,19 @@ const sqlSelectPostsReactions = `
 //	{
 //		"emoji:❤️": true
 //	}
-const sqlJoinPostReactions = `
-	LEFT JOIN (
-		SELECT
-			post_reactions.post_id,
-			jsonb_object_agg(post_reactions.kind || ':' || post_reactions.reaction, true) AS reactions
-		FROM post_reactions
-		WHERE post_reactions.user_id = @viewer_id
-		GROUP BY post_reactions.post_id
-	) AS user_reactions ON user_reactions.post_id = posts.id`
+func sqlJoinPostReactions(args pgx.StrictNamedArgs, viewerID string) string {
+	args["viewer_id"] = viewerID
+	return `
+		LEFT JOIN (
+			SELECT
+				post_reactions.post_id,
+				jsonb_object_agg(post_reactions.kind || ':' || post_reactions.reaction, true) AS reactions
+			FROM post_reactions
+			WHERE post_reactions.user_id = @viewer_id
+			GROUP BY post_reactions.post_id
+		) AS user_reactions ON user_reactions.post_id = posts.id
+	`
+}
 
 func (c *Cockroach) CreatePost(ctx context.Context, in types.CreatePost) (types.CreatedTimelineItem, error) {
 	var out types.CreatedTimelineItem
@@ -145,7 +168,7 @@ func (c *Cockroach) Posts(ctx context.Context, in types.ListPosts) (types.Page[t
 			sqlSelectPostsReactions)
 		joins = append(joins,
 			`LEFT JOIN post_subscriptions ON post_subscriptions.post_id = posts.id AND post_subscriptions.user_id = @viewer_id`,
-			sqlJoinPostReactions)
+			sqlJoinPostReactions(args, *in.ViewerID()))
 	} else {
 		selects = append(selects,
 			`false AS mine`,
@@ -224,7 +247,7 @@ func (c *Cockroach) Post(ctx context.Context, in types.RetrievePost) (types.Post
 			sqlSelectPostsReactions)
 		joins = append(joins,
 			`LEFT JOIN post_subscriptions ON post_subscriptions.post_id = posts.id AND post_subscriptions.user_id = @viewer_id`,
-			sqlJoinPostReactions)
+			sqlJoinPostReactions(args, *in.ViewerID()))
 	} else {
 		selects = append(selects,
 			`false AS mine`,
@@ -501,15 +524,15 @@ func (c *Cockroach) refreshPostReactions(ctx context.Context, postID string) err
 }
 
 func (c *Cockroach) postReactions(ctx context.Context, postID, viewerID string) ([]types.Reaction, error) {
-	query := fmt.Sprintf(`
-		SELECT %s FROM posts %s WHERE posts.id = @post_id`,
-		sqlSelectPostsReactions,
-		sqlJoinPostReactions,
-	)
 	args := pgx.StrictNamedArgs{
 		"post_id":   postID,
 		"viewer_id": viewerID,
 	}
+	query := fmt.Sprintf(`
+		SELECT %s FROM posts %s WHERE posts.id = @post_id`,
+		sqlSelectPostsReactions,
+		sqlJoinPostReactions(args, viewerID),
+	)
 	reactions, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[[]types.Reaction])
 	if err != nil {
 		return nil, fmt.Errorf("sql select post reactions: %w", err)

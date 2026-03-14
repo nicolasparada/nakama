@@ -19,6 +19,7 @@ const notificationsCols = `
 	, notifications.actor_usernames
 	, notifications.kind
 	, notifications.post_id
+	, notifications.comment_id
 	, notifications.read_at
 	, notifications.issued_at
 	, (notifications.read_at IS NOT NULL AND notifications.read_at != '0001-01-01 00:00:00') AS read
@@ -28,6 +29,15 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	var out types.Page[types.Notification]
 
 	args := pgx.StrictNamedArgs{"user_id": in.UserID()}
+	selects := []string{
+		notificationsCols,
+		sqlSelectPostPreview(args, in.UserID()),
+		sqlSelectCommentPreview,
+	}
+	joins := []string{
+		`LEFT JOIN posts ON notifications.post_id = posts.id`,
+		`LEFT JOIN comments ON notifications.comment_id = comments.id`,
+	}
 	filters := []string{"notifications.user_id = @user_id"}
 
 	pageArgs, err := ParsePageArgs[time.Time](in.PageArgs)
@@ -57,10 +67,12 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM notifications
+		%s
 		WHERE %s
 		%s
 		%s
-	`, notificationsCols,
+	`, strings.Join(selects, ", "),
+		strings.Join(joins, "\n"),
 		strings.Join(filters, " AND "),
 		order,
 		limit,
@@ -147,14 +159,17 @@ func (c *Cockroach) CreateFollowNotification(ctx context.Context, userID, actorI
 			return err
 		}
 
-		exists, err := c.notificationExists(ctx, types.NotificationExists{
+		existsReadOrNot, err := c.notificationExists(ctx, types.NotificationExists{
 			UserID:        &userID,
 			ActorUsername: &actorUsername,
 			Kind:          new(types.NotificationKindFollow),
 		})
+		if err != nil {
+			return err
+		}
 
 		// prevent spamming follow notification since following is a toggle.
-		if exists {
+		if existsReadOrNot {
 			return nil
 		}
 
@@ -204,12 +219,12 @@ func (c *Cockroach) CreateFollowNotification(ctx context.Context, userID, actorI
 
 func (c *Cockroach) FanoutCommentNotification(ctx context.Context, in types.FanoutCommentNotification) ([]types.Notification, error) {
 	query := fmt.Sprintf(`
-		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, read_at)
-		SELECT post_subscriptions.user_id, @actor_usernames, @kind, @post_id, '0001-01-01 00:00:00'
+		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, comment_id, read_at)
+		SELECT post_subscriptions.user_id, @actor_usernames, @kind, @post_id, @comment_id, '0001-01-01 00:00:00'
 		FROM post_subscriptions
 		WHERE post_subscriptions.user_id != @actor_user_id
 		  AND post_subscriptions.post_id = @post_id
-		ON CONFLICT (user_id, kind, post_id, read_at) DO UPDATE SET
+		ON CONFLICT (user_id, kind, post_id, comment_id, read_at) DO UPDATE SET
 			actor_usernames = array_prepend(@actor_username, array_remove(notifications.actor_usernames, @actor_username)),
 			issued_at = now()
 		RETURNING %s
@@ -221,6 +236,7 @@ func (c *Cockroach) FanoutCommentNotification(ctx context.Context, in types.Fano
 		"actor_user_id":   in.ActorUserID,
 		"kind":            types.NotificationKindComment,
 		"post_id":         in.PostID,
+		"comment_id":      in.CommentID,
 	}
 
 	notifications, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Notification])
@@ -237,12 +253,12 @@ func (c *Cockroach) CreateMentionNotifications(ctx context.Context, in types.Cre
 	}
 
 	query := fmt.Sprintf(`
-		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, read_at)
-		SELECT users.id, @actor_usernames, @kind, @post_id, '0001-01-01 00:00:00'
+		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, comment_id, read_at)
+		SELECT users.id, @actor_usernames, @kind, @post_id, @comment_id, '0001-01-01 00:00:00'
 		FROM users
 		WHERE users.username = ANY(@mentions)
 		  AND users.id != @actor_user_id
-		ON CONFLICT (user_id, kind, post_id, read_at) DO UPDATE SET
+		ON CONFLICT (user_id, kind, post_id, comment_id, read_at) DO UPDATE SET
 			actor_usernames = array_prepend(@actor_username, array_remove(notifications.actor_usernames, @actor_username)),
 			issued_at = now()
 		RETURNING %s
@@ -254,6 +270,7 @@ func (c *Cockroach) CreateMentionNotifications(ctx context.Context, in types.Cre
 		"actor_user_id":   in.ActorUserID,
 		"kind":            in.Kind,
 		"post_id":         in.PostID,
+		"comment_id":      in.CommentID,
 		"mentions":        in.Mentions,
 	}
 
@@ -347,13 +364,13 @@ func (c *Cockroach) notificationExists(ctx context.Context, in types.Notificatio
 	}
 
 	if in.ActorUsername != nil {
-		filters = append(filters, "@actor_username = ANY(actor_usernames)")
+		filters = append(filters, "@actor_username::varchar = ANY(actor_usernames)")
 		args["actor_username"] = *in.ActorUsername
 	}
 
 	if in.Kind != nil {
 		filters = append(filters, "kind = @kind")
-		args["kind"] = *in.Kind
+		args["kind"] = in.Kind.String()
 	}
 
 	if in.PostID != nil {

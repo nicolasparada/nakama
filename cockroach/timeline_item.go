@@ -49,7 +49,7 @@ func (c *Cockroach) Timeline(ctx context.Context, in types.ListTimeline) (types.
 		"INNER JOIN posts ON timeline.post_id = posts.id",
 		"INNER JOIN users ON posts.user_id = users.id",
 		`LEFT JOIN post_subscriptions ON post_subscriptions.post_id = posts.id AND post_subscriptions.user_id = @viewer_id`,
-		sqlJoinPostReactions}
+		sqlJoinPostReactions(args, in.UserID())}
 	filters := []string{"timeline.user_id = @viewer_id"}
 
 	pageArgs, err := ParsePageArgs[time.Time](in.PageArgs)

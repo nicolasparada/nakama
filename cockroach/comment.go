@@ -22,6 +22,19 @@ const sqlCommentCols = `
 	, comments.created_at
 `
 
+const sqlSelectCommentPreview = `
+	CASE 
+		WHEN comments.id IS NOT NULL 
+		THEN json_build_object(
+			  'id', comments.id
+			, 'userID', comments.user_id
+			, 'postID', comments.post_id
+			, 'content', comments.content
+		)
+		ELSE NULL 
+	END AS comment
+`
+
 // sqlSelectCommentsReactions adds a `reacted` field to each reaction, producing something like this:
 //
 //	[

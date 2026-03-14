@@ -1263,14 +1263,13 @@ label,
 .notification {
   background-color: var(--surface-0);
   color: var(--on-surface);
-  padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+  padding: 0.75rem 0.875rem 0.75rem 1rem;
   border-radius: 1rem;
 
   display: grid;
-  grid-auto-flow: column;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
 }
 
 notification-item[read] .notification {
@@ -1280,7 +1279,7 @@ notification-item[read] .notification {
   background-color: transparent;
 }
 
-notification-item[read] .notification p {
+notification-item[read] .notification .notification-summary {
   text-decoration: line-through;
 }
 
@@ -1306,6 +1305,71 @@ notification-item[read]+notification-item[read] .notification::before {
 
 .notification p {
   margin: 0;
+}
+
+.notification > div {
+  min-width: 0;
+}
+
+.notification-main {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: row;
+}
+
+.notification-copy {
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: row;
+  gap: 0.5rem;
+}
+
+.notification-summary {
+  line-height: 1.4;
+}
+
+.notification-preview {
+  width: 100%;
+  max-width: none;
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--surface-1);
+  border: 1px solid var(--line);
+  display: grid;
+  grid-auto-flow: row;
+  gap: 0.5rem;
+}
+
+.notification-preview-content {
+  color: var(--on-surface);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.notification-issued-at {
+  color: var(--hint);
+  font-size: 0.875rem;
+}
+
+.notification-preview-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.notification-preview-images img {
+  display: block;
+  width: auto;
+  max-width: min(100%, 12rem);
+  max-height: 8rem;
+  object-fit: cover;
+  border-radius: 0.75rem;
+  background-color: var(--surface-0);
+}
+
+.notification-read-btn {
+  align-self: start;
 }
 
 .search-page {

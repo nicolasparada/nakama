@@ -34,17 +34,17 @@ export default function () {
 function NotificationsPage() {
     const [_, setAuth] = useStore(authStore)
     const [notificationsEnabled, setNotificationsEnabled] = useStore(notificationsEnabledStore)
-    const [notifications, setNotifications] = useState([])
-    const [notificationsEndCursor, setNotificationsEndCursor] = useState(null)
+    const [notifications, setNotifications] = useState(/** @type {AppNotification[]} */ ([]))
+    const [notificationsEndCursor, setNotificationsEndCursor] = useState(/** @type {string|null} */ (null))
     const [fetching, setFething] = useState(notifications.length === 0)
-    const [err, setErr] = useState(null)
+    const [err, setErr] = useState(/** @type {Error|null} */ (null))    
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMoreNotifications, setNoMoreNotifications] = useState(false)
     const [endReached, setEndReached] = useState(false)
-    const [queue, setQueue] = useState([])
+    const [queue, setQueue] = useState(/** @type {AppNotification[]} */ ([]))
     const [markingAllAsRead, setMarkingAllAsRead] = useState(false)
     const [__, setHasUnreadNotifications] = useStore(hasUnreadNotificationsStore)
-    const [toast, setToast] = useState(null)
+    const [toast, setToast] = useState(/** @type {Toast|null} */ (null))    
 
     const onNotifyInputChange = ev => {
         ev.currentTarget.checked = false
@@ -279,6 +279,7 @@ function NotificationItem({ notification: initialNotification }) {
     const [notification, setNotification] = useState(initialNotification)
     const [fetching, setFetching] = useState(false)
     const [toast, setToast] = useState(null)
+    const preview = getNotificationPreview(notification)
 
     const getActors = () => {
         const aa = notification.actorUsernames
@@ -347,12 +348,22 @@ function NotificationItem({ notification: initialNotification }) {
 
     return html`
         <div class="notification" @click=${onClick}>
-            <div>
-                <p>${getActors()} ${getAction()}.</p>
-                <relative-datetime .datetime=${notification.issuedAt}></relative-datetime>
+            <div class="notification-main">
+                <div class="notification-copy">
+                    <p class="notification-summary">${getActors()} ${getAction()}.</p>
+                    ${preview !== null ? html`
+                        <div class="notification-preview">
+                            ${trimPreviewContent(preview.content) !== "" ? html`
+                                <p class="notification-preview-content">${trimPreviewContent(preview.content)}</p>
+                            ` : null}
+                            ${"mediaURLs" in preview ? renderNotificationPreviewImages(preview.mediaURLs) : null}
+                        </div>
+                    ` : null}
+                    <relative-datetime class="notification-issued-at" .datetime=${notification.issuedAt}></relative-datetime>
+                </div>
             </div>
             ${!notification.read ? html`
-            <button .disabled=${fetching}>
+            <button class="notification-read-btn" .disabled=${fetching}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                     <g data-name="Layer 2">
                         <g data-name="checkmark-circle">
@@ -373,6 +384,53 @@ function NotificationItem({ notification: initialNotification }) {
 }
 
 customElements.define("notification-item", component(NotificationItem, { useShadowDOM: false }))
+
+const notificationPreviewMaxLength = 180
+const notificationPreviewMaxImages = 3
+
+/**
+ * @param {AppNotification} notification
+ */
+function getNotificationPreview(notification) {
+    if (notification.comment != null) {
+        return notification.comment
+    }
+
+    if (notification.post != null) {
+        return notification.post
+    }
+
+    return null
+}
+
+/**
+ * @param {string} content
+ */
+function trimPreviewContent(content) {
+    const normalized = content.trim().replace(/\s+/g, " ")
+    if (normalized.length <= notificationPreviewMaxLength) {
+        return normalized
+    }
+
+    return normalized.slice(0, notificationPreviewMaxLength - 1).trimEnd() + "…"
+}
+
+/**
+ * @param {string[]} mediaURLs
+ */
+function renderNotificationPreviewImages(mediaURLs) {
+    const imageURLs = mediaURLs.slice(0, notificationPreviewMaxImages)
+
+    if (imageURLs.length === 0) {
+        return null
+    }
+
+    return html`
+        <div class="notification-preview-images">
+            ${repeat(imageURLs, url => url, url => html`<img src=${url} alt="" loading="lazy">`)}
+        </div>
+    `
+}
 
 /**
  * 

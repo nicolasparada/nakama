@@ -34,9 +34,13 @@ type Notification struct {
 	ActorUsernames []string         `json:"actorUsernames" db:"actor_usernames"`
 	Kind           NotificationKind `json:"kind" db:"kind"`
 	PostID         *string          `json:"postID,omitempty" db:"post_id,omitempty"`
+	CommentID      *string          `json:"commentID,omitempty" db:"comment_id,omitempty"`
 	ReadAt         *time.Time       `json:"readAt" db:"read_at"`
 	IssuedAt       time.Time        `json:"issuedAt" db:"issued_at"`
 	Read           bool             `json:"read"`
+
+	Post    *PostPreview    `json:"post,omitempty"`
+	Comment *CommentPreview `json:"comment,omitempty"`
 }
 
 type Notifications []Notification
@@ -100,12 +104,14 @@ type FanoutCommentNotification struct {
 	ActorUserID   string
 	ActorUsername string
 	PostID        string
+	CommentID     string
 }
 
 type CreateMentionNotifications struct {
 	ActorUserID   string
 	ActorUsername string
 	PostID        string
+	CommentID     *string
 	Kind          NotificationKind
 	Mentions      []string
 }

@@ -21,6 +21,13 @@ type Comment struct {
 	Mine      bool       `json:"mine" db:"mine,omitempty"`
 }
 
+type CommentPreview struct {
+	ID      string `json:"id"`
+	UserID  string `json:"userID"`
+	PostID  string `json:"postID"`
+	Content string `json:"content"`
+}
+
 type CreateComment struct {
 	PostID  string `json:"-"`
 	Content string `json:"content"`

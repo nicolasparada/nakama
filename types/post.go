@@ -20,9 +20,9 @@ type Post struct {
 	Content       string     `json:"content"`
 	SpoilerOf     *string    `json:"spoilerOf" db:"spoiler_of"`
 	NSFW          bool       `json:"nsfw"`
+	MediaURLs     []string   `json:"mediaURLs" db:"media"`
 	Reactions     []Reaction `json:"reactions"`
 	CommentsCount int        `json:"commentsCount" db:"comments_count"`
-	MediaURLs     []string   `json:"mediaURLs" db:"media"`
 	CreatedAt     time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt     time.Time  `json:"updatedAt" db:"updated_at"`
 	User          *User      `json:"user,omitempty"`
@@ -31,6 +31,23 @@ type Post struct {
 }
 
 func (p *Post) SetMediaURLs(prefix string) {
+	for i, media := range p.MediaURLs {
+		p.MediaURLs[i] = joinPrefix(prefix, media)
+	}
+}
+
+type PostPreview struct {
+	ID        string   `json:"id"`
+	UserID    string   `json:"userID"`
+	Content   string   `json:"content"`
+	SpoilerOf *string  `json:"spoilerOf"`
+	NSFW      bool     `json:"nsfw"`
+	MediaURLs []string `json:"mediaURLs"`
+
+	Mine bool `json:"mine"`
+}
+
+func (p *PostPreview) SetMediaURLs(prefix string) {
 	for i, media := range p.MediaURLs {
 		p.MediaURLs[i] = joinPrefix(prefix, media)
 	}

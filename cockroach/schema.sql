@@ -124,9 +124,13 @@ CREATE TABLE IF NOT EXISTS notifications (
     post_id UUID REFERENCES posts ON DELETE CASCADE,
     read_at TIMESTAMPTZ,
     issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    INDEX sorted_notifications (issued_at DESC, id),
-    UNIQUE INDEX unique_notifications (user_id, kind, post_id, read_at)
+    INDEX sorted_notifications (issued_at DESC, id)
 );
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments ON DELETE CASCADE;
+DROP INDEX IF EXISTS notifications@unique_notifications CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS unique_notifications
+ON notifications (user_id, kind, post_id, comment_id, read_at);
 
 CREATE TABLE IF NOT EXISTS user_web_push_subscriptions (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -27,7 +27,19 @@ func (s *Service) Notifications(ctx context.Context, in types.ListNotifications)
 
 	in.SetUserID(uid)
 
-	return s.Cockroach.Notifications(ctx, in)
+	nn, err := s.Cockroach.Notifications(ctx, in)
+	if err != nil {
+		return out, err
+	}
+
+	for i, n := range nn.Items {
+		if n.Post != nil {
+			n.Post.SetMediaURLs(s.MediaURLPrefix)
+		}
+		nn.Items[i] = n
+	}
+
+	return nn, nil
 }
 
 // NotificationStream to receive notifications in realtime.
@@ -115,17 +127,30 @@ func (s *Service) notifyFollow(followerID, followeeID string) {
 
 func (s *Service) notifyComment(c types.Comment) {
 	ctx := context.Background()
-	notifications, err := s.Cockroach.FanoutCommentNotification(ctx, types.FanoutCommentNotification{
+	nn, err := s.Cockroach.FanoutCommentNotification(ctx, types.FanoutCommentNotification{
 		ActorUserID:   c.UserID,
 		ActorUsername: c.User.Username,
 		PostID:        c.PostID,
+		CommentID:     c.ID,
 	})
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not fanout comment notification: %w", err))
 		return
 	}
 
-	for _, n := range notifications {
+	for i, n := range nn {
+		if n.Comment == nil {
+			n.Comment = &types.CommentPreview{
+				ID:      c.ID,
+				UserID:  c.UserID,
+				PostID:  c.PostID,
+				Content: c.Content,
+			}
+		}
+		nn[i] = n
+	}
+
+	for _, n := range nn {
 		go s.broadcastNotification(n)
 	}
 }
@@ -146,11 +171,19 @@ func (s *Service) notifyPostMention(p types.Post) {
 	}
 
 	for _, n := range nn {
-		go s.broadcastNotification(n)
-	}
+		if n.Post == nil {
+			n.Post = &types.PostPreview{
+				ID:        p.ID,
+				UserID:    p.UserID,
+				Content:   p.Content,
+				SpoilerOf: p.SpoilerOf,
+				NSFW:      p.NSFW,
+				MediaURLs: p.MediaURLs,
+			}
+			n.Post.SetMediaURLs(s.MediaURLPrefix)
+		}
 
-	if len(mentions) == 0 {
-		return
+		go s.broadcastNotification(n)
 	}
 }
 
@@ -161,6 +194,7 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 		ActorUserID:   c.UserID,
 		ActorUsername: c.User.Username,
 		PostID:        c.PostID,
+		CommentID:     &c.ID,
 		Kind:          types.NotificationKindCommentMention,
 		Mentions:      mentions,
 	})
@@ -170,6 +204,15 @@ func (s *Service) notifyCommentMention(c types.Comment) {
 	}
 
 	for _, n := range nn {
+		if n.Comment == nil {
+			n.Comment = &types.CommentPreview{
+				ID:      c.ID,
+				UserID:  c.UserID,
+				PostID:  c.PostID,
+				Content: c.Content,
+			}
+		}
+
 		go s.broadcastNotification(n)
 	}
 }
