@@ -122,13 +122,12 @@ CREATE TABLE IF NOT EXISTS notifications (
     actor_usernames VARCHAR[] NOT NULL,
     kind VARCHAR NOT NULL,
     post_id UUID REFERENCES posts ON DELETE CASCADE,
+    comment_id UUID REFERENCES comments ON DELETE CASCADE,
     read_at TIMESTAMPTZ,
     issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     INDEX sorted_notifications (issued_at DESC, id)
 );
 
-ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments ON DELETE CASCADE;
-DROP INDEX IF EXISTS notifications@unique_notifications CASCADE;
 CREATE UNIQUE INDEX IF NOT EXISTS unique_notifications
 ON notifications (user_id, kind, post_id, comment_id, read_at);
 
