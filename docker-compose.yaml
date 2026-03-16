@@ -39,9 +39,12 @@ services:
     #   - 3000
     restart: "always"
     depends_on:
-      - loki
-      - cockroach
-      - nats
+      loki:
+        condition: service_started
+      cockroach:
+        condition: service_healthy
+      nats:
+        condition: service_started
     labels:
       - "traefik.enable=true"
 
@@ -64,6 +67,11 @@ services:
       - 26257
       - 8080
     restart: "always"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   nats:
     image: "nats:latest"
