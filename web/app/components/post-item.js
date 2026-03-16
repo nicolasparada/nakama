@@ -47,6 +47,7 @@ function PostItem({ post: initialPost, type }) {
     const [displayNSFW, setDisplayNSFW] = useState(false)
     const [toast, setToast] = useState(/** @type {Toast|null} */(null))
     const [postCanBeUpdated, setPostCanBeUpdated] = useState(canUpdatePost(post))
+    const [highlighted, setHighlighted] = useState(type === "comment" && location.hash === "#c-" + post.id)
 
     const onMenuBtnClick = () => {
         setShowMenu(v => !v)
@@ -178,8 +179,25 @@ function PostItem({ post: initialPost, type }) {
         setPost(initialPost)
     }, [initialPost])
 
+    useEffect(() => {
+        if (type !== "comment") {
+            setHighlighted(false)
+            return
+        }
+
+        const syncHighlighted = () => {
+            setHighlighted(location.hash === "#c-" + post.id)
+        }
+
+        syncHighlighted()
+        addEventListener("hashchange", syncHighlighted)
+        return () => {
+            removeEventListener("hashchange", syncHighlighted)
+        }
+    }, [type, post.id])
+
     return html`
-        <article class="post">
+        <article class="post${highlighted ? " highlighted" : ""}">
             <div class="post-header">
                 <a href="/@${post.user.username}" class="post-author">
                     ${Avatar(post.user)}

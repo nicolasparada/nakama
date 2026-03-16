@@ -2,8 +2,6 @@ package types
 
 import (
 	"time"
-
-	"github.com/nakamauwu/nakama/cursor"
 )
 
 type NotificationKind string
@@ -29,29 +27,20 @@ func (k NotificationKind) String() string {
 }
 
 type Notification struct {
-	ID             string           `json:"id"`
-	UserID         string           `json:"-"`
-	ActorUsernames []string         `json:"actorUsernames" db:"actor_usernames"`
-	Kind           NotificationKind `json:"kind" db:"kind"`
-	PostID         *string          `json:"postID,omitempty" db:"post_id,omitempty"`
-	CommentID      *string          `json:"commentID,omitempty" db:"comment_id,omitempty"`
-	ReadAt         *time.Time       `json:"readAt" db:"read_at"`
-	IssuedAt       time.Time        `json:"issuedAt" db:"issued_at"`
-	Read           bool             `json:"read"`
+	ID           string           `json:"id"`
+	UserID       string           `json:"userID" db:"user_id"`
+	ActorUserIDs []string         `json:"actorUserIDs" db:"actor_user_ids"`
+	ActorsCount  int              `json:"actorsCount" db:"actors_count"`
+	Kind         NotificationKind `json:"kind" db:"kind"`
+	PostID       *string          `json:"postID,omitempty" db:"post_id,omitempty"`
+	CommentID    *string          `json:"commentID,omitempty" db:"comment_id,omitempty"`
+	ReadAt       *time.Time       `json:"readAt" db:"read_at"`
+	IssuedAt     time.Time        `json:"issuedAt" db:"issued_at"`
+	Read         bool             `json:"read"`
 
+	Actors  []User          `json:"actors"`
 	Post    *PostPreview    `json:"post,omitempty"`
 	Comment *CommentPreview `json:"comment,omitempty"`
-}
-
-type Notifications []Notification
-
-func (pp Notifications) EndCursor() *string {
-	if len(pp) == 0 {
-		return nil
-	}
-
-	last := pp[len(pp)-1]
-	return new(cursor.Encode(last.ID, last.IssuedAt))
 }
 
 type ListNotifications struct {
@@ -71,23 +60,11 @@ func (in *ListNotifications) Validate() error {
 	return in.PageArgs.Validate()
 }
 
-type NotificationExists struct {
-	UserID        *string
-	ActorUsername *string
-	Kind          *NotificationKind
-	PostID        *string
-}
-
-func (in NotificationExists) IsEmpty() bool {
-	var empty NotificationExists
-	return in == empty
-}
-
 type CreateNotification struct {
-	UserID         string
-	ActorUsernames []string
-	Kind           NotificationKind
-	PostID         *string
+	UserID    string
+	Kind      NotificationKind
+	PostID    *string
+	CommentID *string
 }
 
 type CreatedNotification struct {
@@ -95,23 +72,15 @@ type CreatedNotification struct {
 	IssuedAt time.Time `db:"issued_at"`
 }
 
-type AddedNotificationActor struct {
-	ActorUsernames []string  `db:"actor_usernames"`
-	IssuedAt       time.Time `db:"issued_at"`
-}
-
 type FanoutCommentNotification struct {
-	ActorUserID   string
-	ActorUsername string
-	PostID        string
-	CommentID     string
+	ActorUserID string
+	PostID      string
 }
 
 type CreateMentionNotifications struct {
-	ActorUserID   string
-	ActorUsername string
-	PostID        string
-	CommentID     *string
-	Kind          NotificationKind
-	Mentions      []string
+	ActorUserID string
+	PostID      string
+	CommentID   *string
+	Kind        NotificationKind
+	Mentions    []string
 }

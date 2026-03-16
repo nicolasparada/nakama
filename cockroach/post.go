@@ -25,25 +25,6 @@ const sqlPostCols = `
 	, posts.updated_at
 `
 
-func sqlSelectPostPreview(args pgx.StrictNamedArgs, viewerID string) string {
-	args["viewer_id"] = viewerID
-	return `
-		CASE 
-			WHEN posts.id IS NOT NULL 
-			THEN json_build_object(
-				  'id', posts.id
-				, 'userID', posts.user_id
-				, 'content', posts.content
-				, 'spoilerOf', posts.spoiler_of
-				, 'nsfw', posts.nsfw
-				, 'mediaURLs', posts.media
-				, 'mine', (posts.user_id = @viewer_id)
-			)
-			ELSE NULL
-		END AS post
-	`
-}
-
 // sqlSelectPostsReactions adds a `reacted` field to each reaction, producing something like this:
 //
 //	[

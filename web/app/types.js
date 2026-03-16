@@ -199,7 +199,7 @@
 /**
  * @typedef AppNotification
  * @prop {string} id
- * @prop {string[]} actorUsernames
+ * @prop {number} actorsCount
  * @prop {NotificationKind} kind
  * @prop {string=} postID
  * @prop {string=} commentID
@@ -207,6 +207,7 @@
  * @prop {string|Date} issuedAt
  * @prop {PostPreview=} post
  * @prop {CommentPreview=} comment
+ * @prop {User[]} actors
  */
 
 /**

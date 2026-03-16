@@ -2,7 +2,6 @@ package cockroach
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,18 +10,49 @@ import (
 	"github.com/jackc/pgxutil"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-db"
+	"github.com/nicolasparada/go-errs"
 )
 
 const notificationsCols = `
 	  notifications.id
 	, notifications.user_id
-	, notifications.actor_usernames
+	, notifications.actor_user_ids
+	, notifications.actors_count
 	, notifications.kind
 	, notifications.post_id
 	, notifications.comment_id
 	, notifications.read_at
 	, notifications.issued_at
-	, (notifications.read_at IS NOT NULL AND notifications.read_at != '0001-01-01 00:00:00') AS read
+	, (notifications.read_at IS NOT NULL) AS read
+`
+
+const sqlSelectNotificationActors = `
+	COALESCE(
+		json_agg(
+			json_build_object(
+				  'id', actor_users.id
+				, 'username', actor_users.username
+				, 'avatarURL', actor_users.avatar
+			) ORDER BY array_position(notifications.actor_user_ids, actor_users.id)
+		) FILTER (WHERE actor_users.id IS NOT NULL),
+		'[]'::json
+	) AS actors
+`
+
+const sqlSelectNotificationPostPreview = `
+	CASE 
+		WHEN posts.id IS NOT NULL 
+		THEN json_build_object(
+			  'id', posts.id
+			, 'userID', posts.user_id
+			, 'content', posts.content
+			, 'spoilerOf', posts.spoiler_of
+			, 'nsfw', posts.nsfw
+			, 'mediaURLs', posts.media
+			, 'mine', (posts.user_id = notifications.user_id)
+		)
+		ELSE NULL
+	END AS post
 `
 
 func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotifications) (types.Page[types.Notification], error) {
@@ -31,10 +61,12 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	args := pgx.StrictNamedArgs{"user_id": in.UserID()}
 	selects := []string{
 		notificationsCols,
-		sqlSelectPostPreview(args, in.UserID()),
+		sqlSelectNotificationActors,
+		sqlSelectNotificationPostPreview,
 		sqlSelectCommentPreview,
 	}
 	joins := []string{
+		`LEFT JOIN users actor_users ON actor_users.id = ANY(notifications.actor_user_ids)`,
 		`LEFT JOIN posts ON notifications.post_id = posts.id`,
 		`LEFT JOIN comments ON notifications.comment_id = comments.id`,
 	}
@@ -69,6 +101,7 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 		FROM notifications
 		%s
 		WHERE %s
+		GROUP BY notifications.id, posts.id, comments.id
 		%s
 		%s
 	`, strings.Join(selects, ", "),
@@ -90,13 +123,44 @@ func (c *Cockroach) Notifications(ctx context.Context, in types.ListNotification
 	})
 }
 
+func (c *Cockroach) Notification(ctx context.Context, notificationID string) (types.Notification, error) {
+	args := pgx.StrictNamedArgs{"notification_id": notificationID}
+	selects := []string{
+		notificationsCols,
+		sqlSelectNotificationActors,
+		sqlSelectNotificationPostPreview,
+		sqlSelectCommentPreview,
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM notifications
+		LEFT JOIN users actor_users ON actor_users.id = ANY(notifications.actor_user_ids)
+		LEFT JOIN posts ON notifications.post_id = posts.id
+		LEFT JOIN comments ON notifications.comment_id = comments.id
+		WHERE notifications.id = @notification_id
+		GROUP BY notifications.id, posts.id, comments.id
+	`, strings.Join(selects, ", "))
+
+	notification, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Notification])
+	if db.IsNotFoundError(err) {
+		return notification, errs.NotFoundError("notification not found")
+	}
+
+	if err != nil {
+		return notification, fmt.Errorf("sql select notification by ID: %w", err)
+	}
+
+	return notification, nil
+}
+
 func (c *Cockroach) HasUnreadNotifications(ctx context.Context, userID string) (bool, error) {
 	const query = `
 		SELECT EXISTS (
 			SELECT 1
 			FROM notifications
 			WHERE user_id = @user_id
-			  AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
+			  AND read_at IS NULL
 		)
 	`
 
@@ -116,7 +180,7 @@ func (c *Cockroach) MarkNotificationAsRead(ctx context.Context, notificationID, 
 		SET read_at = now()
 		WHERE id = @notification_id
 		  AND user_id = @user_id
-		  AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
+		  AND read_at IS NULL
 	`
 
 	args := pgx.StrictNamedArgs{
@@ -137,7 +201,7 @@ func (c *Cockroach) MarkNotificationsAsRead(ctx context.Context, userID string) 
 		UPDATE notifications
 		SET read_at = now()
 		WHERE user_id = @user_id
-		  AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
+		  AND read_at IS NULL
 	`
 
 	args := pgx.StrictNamedArgs{"user_id": userID}
@@ -150,96 +214,105 @@ func (c *Cockroach) MarkNotificationsAsRead(ctx context.Context, userID string) 
 	return nil
 }
 
-func (c *Cockroach) CreateFollowNotification(ctx context.Context, userID, actorID string) (*types.Notification, error) {
-	var out *types.Notification
+func (c *Cockroach) CreateFollowNotification(ctx context.Context, userID, actorUserID string) (*string, error) {
+	var notificationID *string
 
-	return out, c.db.RunTx(ctx, func(ctx context.Context) error {
-		actorUsername, err := c.usernameFromUserID(ctx, actorID)
-		if err != nil {
-			return err
-		}
-
-		existsReadOrNot, err := c.notificationExists(ctx, types.NotificationExists{
-			UserID:        &userID,
-			ActorUsername: &actorUsername,
-			Kind:          new(types.NotificationKindFollow),
-		})
+	return notificationID, c.db.RunTx(ctx, func(ctx context.Context) error {
+		actorExists, err := c.notificationActorExists(ctx, userID, actorUserID, types.NotificationKindFollow)
 		if err != nil {
 			return err
 		}
 
 		// prevent spamming follow notification since following is a toggle.
-		if existsReadOrNot {
+		if actorExists {
 			return nil
 		}
 
-		// groupping follow notifications by reusing the same notification and prepending new actors to the actor_usernames array.
-		notificationID, err := c.notificationIDFromUnreadFollow(ctx, userID)
+		notificationID, err = c.notificationIDFromUnreadFollow(ctx, userID)
 		if err != nil {
 			return err
 		}
 
-		if notificationID != nil {
-			addedActor, err := c.addNotificationActor(ctx, *notificationID, actorUsername)
+		// if there is no unread notification, then create a new one.
+		if notificationID == nil {
+			created, err := c.createNotification(ctx, types.CreateNotification{
+				UserID: userID,
+				Kind:   types.NotificationKindFollow,
+			})
 			if err != nil {
 				return err
 			}
 
-			out = &types.Notification{
-				ID:             *notificationID,
-				UserID:         userID,
-				ActorUsernames: addedActor.ActorUsernames,
-				Kind:           types.NotificationKindFollow,
-				IssuedAt:       addedActor.IssuedAt,
-			}
-
-			return nil
+			notificationID = &created.ID
 		}
 
-		created, err := c.createNotification(ctx, types.CreateNotification{
-			UserID:         userID,
-			ActorUsernames: []string{actorUsername},
-			Kind:           types.NotificationKindFollow,
-		})
+		return c.upsertNotificationActor(ctx, *notificationID, actorUserID)
+	})
+}
+
+func (c *Cockroach) FanoutCommentNotification(ctx context.Context, in types.FanoutCommentNotification) ([]types.CreatedNotification, error) {
+	var createdList []types.CreatedNotification
+	return createdList, c.db.RunTx(ctx, func(ctx context.Context) error {
+		var err error
+		createdList, err = c.fanoutCommentNotification(ctx, in)
 		if err != nil {
 			return err
 		}
 
-		out = &types.Notification{
-			ID:             created.ID,
-			UserID:         userID,
-			ActorUsernames: []string{actorUsername},
-			Kind:           types.NotificationKindFollow,
-			IssuedAt:       created.IssuedAt,
-		}
-
-		return nil
+		return c.upsertManyNotificationsActor(ctx, createdList, in.ActorUserID)
 	})
 }
 
-func (c *Cockroach) FanoutCommentNotification(ctx context.Context, in types.FanoutCommentNotification) ([]types.Notification, error) {
+func (c *Cockroach) NotificationsByIDs(ctx context.Context, notificationIDs []string) ([]types.Notification, error) {
+	if len(notificationIDs) == 0 {
+		return nil, nil
+	}
+
+	args := pgx.StrictNamedArgs{"notification_ids": notificationIDs}
+	selects := []string{
+		notificationsCols,
+		sqlSelectNotificationActors,
+		sqlSelectNotificationPostPreview,
+		sqlSelectCommentPreview,
+	}
+
 	query := fmt.Sprintf(`
-		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, comment_id, read_at)
-		SELECT post_subscriptions.user_id, @actor_usernames, @kind, @post_id, @comment_id, '0001-01-01 00:00:00'
+		SELECT %s
+		FROM notifications
+		LEFT JOIN users actor_users ON actor_users.id = ANY(notifications.actor_user_ids)
+		LEFT JOIN posts ON notifications.post_id = posts.id
+		LEFT JOIN comments ON notifications.comment_id = comments.id
+		WHERE notifications.id = ANY(@notification_ids)
+		GROUP BY notifications.id, posts.id, comments.id
+		ORDER BY array_position(@notification_ids::UUID[], notifications.id)
+	`, strings.Join(selects, ", "))
+
+	notifications, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Notification])
+	if err != nil {
+		return nil, fmt.Errorf("sql select notifications by IDs: %w", err)
+	}
+
+	return notifications, nil
+}
+
+func (c *Cockroach) fanoutCommentNotification(ctx context.Context, in types.FanoutCommentNotification) ([]types.CreatedNotification, error) {
+	const query = `
+		INSERT INTO notifications (user_id, kind, post_id)
+		SELECT post_subscriptions.user_id, @kind, post_subscriptions.post_id
 		FROM post_subscriptions
 		WHERE post_subscriptions.user_id != @actor_user_id
 		  AND post_subscriptions.post_id = @post_id
-		ON CONFLICT (user_id, kind, post_id, comment_id, read_at) DO UPDATE SET
-			actor_usernames = array_prepend(@actor_username, array_remove(notifications.actor_usernames, @actor_username)),
-			issued_at = now()
-		RETURNING %s
-	`, notificationsCols)
+		ON CONFLICT (user_id, kind, post_id) WHERE kind = 'comment' AND read_at IS NULL DO UPDATE SET issued_at = now()
+		RETURNING id, issued_at
+	`
 
 	args := pgx.StrictNamedArgs{
-		"actor_usernames": []string{in.ActorUsername},
-		"actor_username":  in.ActorUsername,
-		"actor_user_id":   in.ActorUserID,
-		"kind":            types.NotificationKindComment,
-		"post_id":         in.PostID,
-		"comment_id":      in.CommentID,
+		"actor_user_id": in.ActorUserID,
+		"kind":          types.NotificationKindComment,
+		"post_id":       in.PostID,
 	}
 
-	notifications, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Notification])
+	notifications, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.CreatedNotification])
 	if err != nil {
 		return nil, fmt.Errorf("sql fanout comment notifications: %w", err)
 	}
@@ -247,76 +320,60 @@ func (c *Cockroach) FanoutCommentNotification(ctx context.Context, in types.Fano
 	return notifications, nil
 }
 
-func (c *Cockroach) CreateMentionNotifications(ctx context.Context, in types.CreateMentionNotifications) ([]types.Notification, error) {
+func (c *Cockroach) CreateMentionNotifications(ctx context.Context, in types.CreateMentionNotifications) ([]types.CreatedNotification, error) {
+	var createdList []types.CreatedNotification
+	return createdList, c.db.RunTx(ctx, func(ctx context.Context) error {
+		var err error
+		createdList, err = c.createMentionNotifications(ctx, in)
+		if err != nil {
+			return err
+		}
+
+		return c.upsertManyNotificationsActor(ctx, createdList, in.ActorUserID)
+	})
+}
+
+func (c *Cockroach) createMentionNotifications(ctx context.Context, in types.CreateMentionNotifications) ([]types.CreatedNotification, error) {
 	if len(in.Mentions) == 0 {
 		return nil, nil
 	}
 
-	query := fmt.Sprintf(`
-		INSERT INTO notifications (user_id, actor_usernames, kind, post_id, comment_id, read_at)
-		SELECT users.id, @actor_usernames, @kind, @post_id, @comment_id, '0001-01-01 00:00:00'
+	const query = `
+		INSERT INTO notifications (user_id, kind, post_id, comment_id)
+		SELECT users.id, @kind, @post_id, @comment_id
 		FROM users
-		WHERE users.username = ANY(@mentions)
-		  AND users.id != @actor_user_id
-		ON CONFLICT (user_id, kind, post_id, comment_id, read_at) DO UPDATE SET
-			actor_usernames = array_prepend(@actor_username, array_remove(notifications.actor_usernames, @actor_username)),
-			issued_at = now()
-		RETURNING %s
-	`, notificationsCols)
-
-	args := pgx.StrictNamedArgs{
-		"actor_usernames": []string{in.ActorUsername},
-		"actor_username":  in.ActorUsername,
-		"actor_user_id":   in.ActorUserID,
-		"kind":            in.Kind,
-		"post_id":         in.PostID,
-		"comment_id":      in.CommentID,
-		"mentions":        in.Mentions,
-	}
-
-	notifications, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.Notification])
-	if err != nil {
-		return nil, fmt.Errorf("sql create %q mention notifications: %w", in.Kind, err)
-	}
-
-	return notifications, nil
-}
-
-func (c *Cockroach) addNotificationActor(ctx context.Context, notificationID, actorUsername string) (types.AddedNotificationActor, error) {
-	const query = `
-		UPDATE notifications
-		SET
-			actor_usernames = array_prepend(@actor_username, notifications.actor_usernames),
-			issued_at = now()
-		WHERE id = @notification_id
-		RETURNING actor_usernames, issued_at
-	`
-
-	args := pgx.StrictNamedArgs{
-		"actor_username":  actorUsername,
-		"notification_id": notificationID,
-	}
-
-	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.AddedNotificationActor])
-	if err != nil {
-		return out, fmt.Errorf("sql update notification and add actor: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *Cockroach) createNotification(ctx context.Context, in types.CreateNotification) (types.CreatedNotification, error) {
-	const query = `
-		INSERT INTO notifications (user_id, actor_usernames, kind, post_id)
-		VALUES (@user_id, @actor_usernames, @kind, @post_id)
+		WHERE users.username = ANY(@mentions) AND users.id != @actor_user_id
 		RETURNING id, issued_at
 	`
 
 	args := pgx.StrictNamedArgs{
-		"user_id":         in.UserID,
-		"actor_usernames": in.ActorUsernames,
-		"kind":            in.Kind,
-		"post_id":         in.PostID,
+		"actor_user_id": in.ActorUserID,
+		"kind":          in.Kind,
+		"post_id":       in.PostID,
+		"comment_id":    in.CommentID,
+		"mentions":      in.Mentions,
+	}
+
+	createdList, err := pgxutil.Select(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.CreatedNotification])
+	if err != nil {
+		return nil, fmt.Errorf("sql create %q mention notifications: %w", in.Kind, err)
+	}
+
+	return createdList, nil
+}
+
+func (c *Cockroach) createNotification(ctx context.Context, in types.CreateNotification) (types.CreatedNotification, error) {
+	const query = `
+		INSERT INTO notifications (user_id, kind, post_id, comment_id)
+		VALUES (@user_id, @kind, @post_id, @comment_id)
+		RETURNING id, issued_at
+	`
+
+	args := pgx.StrictNamedArgs{
+		"user_id":    in.UserID,
+		"kind":       in.Kind,
+		"post_id":    in.PostID,
+		"comment_id": in.CommentID,
 	}
 
 	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.CreatedNotification])
@@ -332,11 +389,14 @@ func (c *Cockroach) notificationIDFromUnreadFollow(ctx context.Context, userID s
 		SELECT id
 		FROM notifications
 		WHERE user_id = @user_id
-		  AND kind = 'follow'
-		  AND (read_at IS NULL OR read_at = '0001-01-01 00:00:00')
+		  AND kind = @kind
+		  AND read_at IS NULL
 	`
 
-	args := pgx.StrictNamedArgs{"user_id": userID}
+	args := pgx.StrictNamedArgs{
+		"user_id": userID,
+		"kind":    types.NotificationKindFollow,
+	}
 
 	notificationID, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
 	if db.IsNotFoundError(err) {
@@ -350,46 +410,74 @@ func (c *Cockroach) notificationIDFromUnreadFollow(ctx context.Context, userID s
 	return &notificationID, nil
 }
 
-func (c *Cockroach) notificationExists(ctx context.Context, in types.NotificationExists) (bool, error) {
-	if in.IsEmpty() {
-		return false, errors.New("notification existence check requires at least one field to be set")
-	}
-
-	args := pgx.StrictNamedArgs{}
-	filters := []string{}
-
-	if in.UserID != nil {
-		filters = append(filters, "user_id = @user_id")
-		args["user_id"] = *in.UserID
-	}
-
-	if in.ActorUsername != nil {
-		filters = append(filters, "@actor_username::varchar = ANY(actor_usernames)")
-		args["actor_username"] = *in.ActorUsername
-	}
-
-	if in.Kind != nil {
-		filters = append(filters, "kind = @kind")
-		args["kind"] = in.Kind.String()
-	}
-
-	if in.PostID != nil {
-		filters = append(filters, "post_id = @post_id")
-		args["post_id"] = *in.PostID
-	}
-
-	query := fmt.Sprintf(`
+func (c *Cockroach) notificationActorExists(ctx context.Context, userID, actorUserID string, kind types.NotificationKind) (bool, error) {
+	const q = `
 		SELECT EXISTS (
-			SELECT 1
-			FROM notifications
-			WHERE %s
+			SELECT 1 FROM notification_actors
+			INNER JOIN notifications ON notification_actors.notification_id = notifications.id
+			WHERE notifications.user_id = @user_id AND notifications.kind = @kind AND notification_actors.user_id = @actor_user_id
 		)
-	`, strings.Join(filters, " AND "))
+	`
 
-	exists, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[bool])
-	if err != nil {
-		return false, fmt.Errorf("sql select notification existence: %w", err)
+	row := c.db.QueryRow(ctx, q, pgx.StrictNamedArgs{
+		"user_id":       userID,
+		"kind":          kind,
+		"actor_user_id": actorUserID,
+	})
+
+	var exists bool
+	if err := row.Scan(&exists); err != nil {
+		return false, fmt.Errorf("sql check follow notification by actor exists: %w", err)
 	}
 
 	return exists, nil
+}
+
+func (c *Cockroach) upsertNotificationActor(ctx context.Context, notificationID, actorUserID string) error {
+	const query = `
+		INSERT INTO notification_actors (user_id, notification_id)
+		VALUES (@user_id, @notification_id)
+		ON CONFLICT (user_id, notification_id) DO NOTHING
+	`
+
+	args := pgx.StrictNamedArgs{
+		"user_id":         actorUserID,
+		"notification_id": notificationID,
+	}
+
+	_, err := c.db.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("sql upsert notification actor: %w", err)
+	}
+
+	return nil
+}
+func (c *Cockroach) upsertManyNotificationsActor(ctx context.Context, notifications []types.CreatedNotification, actorUserID string) error {
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	var values []string
+	args := pgx.StrictNamedArgs{}
+	for i, notification := range notifications {
+		userIDArg := fmt.Sprintf("user_id_%d", i)
+		notificationIDArg := fmt.Sprintf("notification_id_%d", i)
+
+		values = append(values, fmt.Sprintf("(@%s, @%s)", userIDArg, notificationIDArg))
+		args[userIDArg] = actorUserID
+		args[notificationIDArg] = notification.ID
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO notification_actors (user_id, notification_id)
+		VALUES %s
+		ON CONFLICT (user_id, notification_id) DO NOTHING
+	`, strings.Join(values, ", "))
+
+	_, err := c.db.Exec(ctx, query, args)
+	if err != nil {
+		return fmt.Errorf("sql upsert many notifications actor: %w", err)
+	}
+
+	return nil
 }

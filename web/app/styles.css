@@ -803,6 +803,13 @@ header .profile-link {
   display: grid;
   grid-auto-flow: row;
   gap: 1rem;
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+
+.post:target,
+.post.highlighted {
+  background-color: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--surface-primary);
 }
 
 .post-header {
@@ -1189,6 +1196,12 @@ label,
   box-shadow: var(--box-shadow);
 }
 
+.notification .avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+}
+
 .user-controls {
   align-self: flex-end;
   display: grid;
@@ -1267,8 +1280,7 @@ label,
   border-radius: 1rem;
 
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  grid-auto-flow: row;
   gap: 0.75rem;
 }
 
@@ -1311,11 +1323,11 @@ notification-item[read]+notification-item[read] .notification::before {
   min-width: 0;
 }
 
-.notification-main {
-  width: 100%;
-  min-width: 0;
+.notification-top-row {
   display: grid;
-  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
 }
 
 .notification-copy {
@@ -1327,6 +1339,15 @@ notification-item[read]+notification-item[read] .notification::before {
 
 .notification-summary {
   line-height: 1.4;
+}
+
+.notification-actor-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: inherit;
+  text-decoration: none;
+  vertical-align: middle;
 }
 
 .notification-preview {
@@ -1341,10 +1362,19 @@ notification-item[read]+notification-item[read] .notification::before {
   gap: 0.5rem;
 }
 
+notification-item[read] .notification-preview {
+  background-color: transparent;
+  border-color: var(--line);
+}
+
 .notification-preview-content {
   color: var(--on-surface);
   line-height: 1.5;
   word-break: break-word;
+}
+
+notification-item[read] .notification-preview-content {
+  color: var(--hint);
 }
 
 .notification-issued-at {
@@ -1366,6 +1396,10 @@ notification-item[read]+notification-item[read] .notification::before {
   object-fit: cover;
   border-radius: 0.75rem;
   background-color: var(--surface-0);
+}
+
+notification-item[read] .notification-preview-images img {
+  opacity: 0.7;
 }
 
 .notification-read-btn {

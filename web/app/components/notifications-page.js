@@ -8,6 +8,7 @@ import { navigate } from "../router.js"
 import "./intersectable-comp.js"
 import "./relative-datetime.js"
 import "./toast-item.js"
+import { Avatar } from "./avatar.js"
 
 /**
  * @typedef {import("../types.js").AppNotification} AppNotification
@@ -155,7 +156,9 @@ function NotificationsPage() {
     }
 
     useEffect(() => {
-        if (!notificationsEnabled || typeof window.Notification === "undefined" || Notification.permission !== "granted") {
+        const regKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+
+        if (!notificationsEnabled || typeof window.Notification === "undefined" || Notification.permission !== "granted" || regKey === undefined) {
             setNotificationsEnabled(false)
             return
         }
@@ -172,7 +175,7 @@ function NotificationsPage() {
                 }
 
                 return reg.pushManager.subscribe({
-                    applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+                    applicationServerKey: regKey,
                     userVisibleOnly: true,
                 })
             }).then(addWebPushSubscription).catch(err => {
@@ -281,20 +284,24 @@ function NotificationItem({ notification: initialNotification }) {
     const [toast, setToast] = useState(null)
     const preview = getNotificationPreview(notification)
 
+    const renderActor = actor => html`
+        <a href="/@${actor.username}" class="notification-actor-link">
+            ${Avatar(actor)}
+            <span>${actor.username}</span>
+        </a>
+    `
+
     const getActors = () => {
-        const aa = notification.actorUsernames
-        switch (aa.length) {
+        const actors = notification.actors // only has 2 latest actors.
+        switch (notification.actorsCount) {
             case 0:
                 return "Someone"
             case 1:
-                return html`<a href="/@${aa[0]}">${aa[0]}</a>`
+                return renderActor(actors[0])
             case 2:
-                return html`<a href="/@${aa[0]}">${aa[0]}</a> and <a href="/@${aa[1]}">${aa[1]}</a>`
+                return html`${renderActor(actors[0])} and ${renderActor(actors[1])}`
             default:
-                return notification.kind === "follow"
-                    ? html`${repeat(aa.slice(0, aa.length - 1), u => u, (u, i) => html`${i > 0 ? ", " : ""}<a href="/@${u}">${u}</a>`)} and <a
-    href="/@${aa[aa.length - 1]}">${aa[aa.length - 1]}</a>`
-                    : html`<a href="/@${aa[0]}">${aa[0]}</a> and ${aa.length - 1} others`
+                return html`${renderActor(actors[0])} and ${notification.actorsCount - 1} others`
         }
     }
 
@@ -303,11 +310,18 @@ function NotificationItem({ notification: initialNotification }) {
             case "follow":
                 return "followed you"
             case "comment":
-                return html`commented in a <a href="/posts/${notification.postID}">post</a>`
+                return notification.post?.mine
+                    ? html`commented on your <a href="/posts/${notification.postID}">post</a>`
+                    : html`commented on a <a href="/posts/${notification.postID}">post</a> you commented`
+
             case "post_mention":
-                return html`mentioned you in a <a href="/posts/${notification.postID}">post</a>`
+                return notification.post?.mine
+                    ? html`mentioned you in your <a href="/posts/${notification.postID}">post</a>`
+                    : html`mentioned you in a <a href="/posts/${notification.postID}">post</a> you commented`
             case "comment_mention":
-                return html`mentioned you in a <a href="/posts/${notification.postID}">comment</a>`
+                return notification.post?.mine
+                    ? html`mentioned you in a <a href="/posts/${notification.postID}#c-${notification.commentID}">comment</a> on your post`
+                    : html`mentioned you in a <a href="/posts/${notification.postID}#c-${notification.commentID}">comment</a>`
             default:
                 return "did something"
         }
@@ -348,21 +362,12 @@ function NotificationItem({ notification: initialNotification }) {
 
     return html`
         <div class="notification" @click=${onClick}>
-            <div class="notification-main">
+            <div class="notification-top-row">
                 <div class="notification-copy">
                     <p class="notification-summary">${getActors()} ${getAction()}.</p>
-                    ${preview !== null ? html`
-                        <div class="notification-preview">
-                            ${trimPreviewContent(preview.content) !== "" ? html`
-                                <p class="notification-preview-content">${trimPreviewContent(preview.content)}</p>
-                            ` : null}
-                            ${"mediaURLs" in preview ? renderNotificationPreviewImages(preview.mediaURLs) : null}
-                        </div>
-                    ` : null}
                     <relative-datetime class="notification-issued-at" .datetime=${notification.issuedAt}></relative-datetime>
                 </div>
-            </div>
-            ${!notification.read ? html`
+                ${!notification.read ? html`
             <button class="notification-read-btn" .disabled=${fetching}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                     <g data-name="Layer 2">
@@ -377,6 +382,15 @@ function NotificationItem({ notification: initialNotification }) {
                 </svg>
                 <span>Read</span>
             </button>
+                ` : null}
+            </div>
+            ${preview !== null ? html`
+                <div class="notification-preview">
+                    ${trimPreviewContent(preview.content) !== "" ? html`
+                        <p class="notification-preview-content">${trimPreviewContent(preview.content)}</p>
+                    ` : null}
+                    ${"mediaURLs" in preview ? renderNotificationPreviewImages(preview.mediaURLs) : null}
+                </div>
             ` : null}
         </div>
         ${toast !== null ? html`<toast-item .toast=${toast}></toast-item>` : null}

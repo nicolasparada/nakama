@@ -5,7 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/nakamauwu/nakama/cursor"
 	"github.com/nicolasparada/go-errs"
 )
 
@@ -161,28 +160,6 @@ func (in *RetrieveUserProfile) Validate() error {
 	}
 
 	return nil
-}
-
-type UserProfiles []UserProfile
-
-func (uu UserProfiles) EndCursor() *string {
-	if len(uu) == 0 {
-		return nil
-	}
-
-	last := uu[len(uu)-1]
-	return new(cursor.EncodeSimple(last.Username))
-}
-
-type Usernames []string
-
-func (uu Usernames) EndCursor() *string {
-	if len(uu) == 0 {
-		return nil
-	}
-
-	last := uu[len(uu)-1]
-	return new(cursor.EncodeSimple(last))
 }
 
 type UpdateUser struct {

@@ -17,6 +17,9 @@ function AppHeader() {
     const [notificationsEnabled] = useStore(notificationsEnabledStore)
     const [activePath, setActivePath] = useState(location.pathname)
 
+    /**
+     * @param {AppNotification} n 
+     */
     const onNewNotificationArrive = n => {
         if (viewingNotificationPage(n)) {
             markNotificationAsRead(n.id).then(() => {
@@ -96,14 +99,18 @@ function AppHeader() {
         }
     }, [])
 
-    const isCurrentPage = pathname => ifDefined(activePath === pathname ? "page" : undefined)
+    /**
+     * @param {string} pathname 
+     * @returns {"page"|undefined}
+     */
+    const pageAttr = pathname => activePath === pathname ? "page" : undefined
 
     return html`
         <header>
             <nav class="container">
                 <ul>
                     <li>
-                        <a href="/" class="btn" title="Home" aria-current="${isCurrentPage("/")}" @click=${onLinkClick}>
+                        <a href="/" class="btn" title="Home" aria-current=${ifDefined(pageAttr("/"))} @click=${onLinkClick}>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                                 <g data-name="Layer 2">
                                     <g data-name="home">
@@ -118,7 +125,7 @@ function AppHeader() {
                     ${auth !== null ? html`
                     <li>
                         <a href="/notifications" class="btn${hasUnreadNotifications ? " has-unread-notifications" : ""}"
-                            title="Notifications" aria-current="${isCurrentPage("/notifications")}" @click=${onLinkClick}>
+                            title="Notifications" aria-current=${ifDefined(pageAttr("/notifications"))} @click=${onLinkClick}>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                                 <g data-name="Layer 2">
                                     <g data-name="bell">
@@ -132,7 +139,7 @@ function AppHeader() {
                     </li>
                     ` : null}
                     <li>
-                        <a href="/search" class="btn" title="Search" aria-current="${isCurrentPage("/search")}"
+                        <a href="/search" class="btn" title="Search" aria-current=${ifDefined(pageAttr("/search"))}
                             @click=${onLinkClick}>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                                 <g data-name="Layer 2">
@@ -148,7 +155,7 @@ function AppHeader() {
                     ${auth !== null ? html`
                     <li class="profile-link-item">
                         <a href="/@${auth.user.username}" class="btn profile-link" title="Profile"
-                            aria-current="${isCurrentPage("/@" + auth.user.username)}" @click=${onLinkClick}>
+                            aria-current=${ifDefined(pageAttr("/@" + auth.user.username))} @click=${onLinkClick}>
                             ${Avatar(auth.user)}
                         </a>
                     </li>
@@ -161,14 +168,18 @@ function AppHeader() {
 
 customElements.define("app-header", component(AppHeader, { useShadowDOM: false }))
 
+/**
+ * @param {AppNotification} n 
+ */
 function showNotification(n) {
+    const icon = n.actors?.[0]?.avatarURL ?? location.origin + "/icons/logo-circle-512.png"
     const title = notificationTitle(n)
     const body = notificationBody(n)
     const sysn = new Notification(title, {
         body,
         tag: n.id,
         data: n,
-        icon: location.origin + "/icons/logo-circle-512.png",
+        icon,
     })
     const onSysnClick = ev => {
         ev.preventDefault()
@@ -208,16 +219,15 @@ function notificationTitle(n) {
  */
 function notificationBody(n) {
     const getActors = () => {
-        const aa = n.actorUsernames
-        switch (aa.length) {
+        switch (n.actorsCount) {
             case 0:
                 return "Someone"
             case 1:
-                return aa[0]
+                return n.actors[0].username
             case 2:
-                return `${aa[0]} and ${aa[1]}`
+                return `${n.actors[0].username} and ${n.actors[1].username}`
             default:
-                return `${aa[0]} and ${aa.length - 1} others`
+                return `${n.actors[0].username} and ${n.actorsCount - 1} others`
         }
     }
 
@@ -226,11 +236,11 @@ function notificationBody(n) {
             case "follow":
                 return "followed you"
             case "comment":
-                return "commented in a post"
+                return n.post?.mine ? "commented on your post" : "commented on a post you commented"
             case "post_mention":
-                return "mentioned you in a post"
+                return n.post?.mine ? "mentioned you in your post" : "mentioned you in a post you commented"
             case "comment_mention":
-                return "mentioned you in a comment"
+                return n.post?.mine ? "mentioned you in a comment on your post" : "mentioned you in a comment"
             default:
                 return "did something"
         }
@@ -244,12 +254,16 @@ function notificationBody(n) {
  * @returns {string}
  */
 function notificationPathname(n) {
-    if (typeof n.postID === "string" && n.postID !== "") {
+    if (n.postID != null) {
+        if (n.commentID != null) {
+            return "/posts/" + encodeURIComponent(n.postID) + "#c-" + encodeURIComponent(n.commentID)
+        }
+
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
     if (n.kind === "follow") {
-        return "/@" + encodeURIComponent(n.actorUsernames[0])
+        return "/@" + encodeURIComponent(n.actors[0].username)
     }
 
     return "/notifications"

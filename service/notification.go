@@ -33,6 +33,10 @@ func (s *Service) Notifications(ctx context.Context, in types.ListNotifications)
 	}
 
 	for i, n := range nn.Items {
+		for j, actor := range n.Actors {
+			actor.SetAvatarURL(s.AvatarURLPrefix)
+			n.Actors[j] = actor
+		}
 		if n.Post != nil {
 			n.Post.SetMediaURLs(s.MediaURLPrefix)
 		}
@@ -114,43 +118,43 @@ func (s *Service) MarkNotificationsAsRead(ctx context.Context) error {
 
 func (s *Service) notifyFollow(followerID, followeeID string) {
 	ctx := context.Background()
-	n, err := s.Cockroach.CreateFollowNotification(ctx, followeeID, followerID)
+	notificationID, err := s.Cockroach.CreateFollowNotification(ctx, followeeID, followerID)
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not create follow notification: %w", err))
 		return
 	}
 
-	if n != nil {
-		go s.broadcastNotification(*n)
+	if notificationID == nil {
+		return
 	}
+
+	n, err := s.notification(ctx, *notificationID)
+	if err != nil {
+		_ = s.Logger.Log("error", fmt.Errorf("could not get follow notification: %w", err))
+		return
+	}
+
+	go s.broadcastNotification(n)
 }
 
 func (s *Service) notifyComment(c types.Comment) {
 	ctx := context.Background()
-	nn, err := s.Cockroach.FanoutCommentNotification(ctx, types.FanoutCommentNotification{
-		ActorUserID:   c.UserID,
-		ActorUsername: c.User.Username,
-		PostID:        c.PostID,
-		CommentID:     c.ID,
+	createdList, err := s.Cockroach.FanoutCommentNotification(ctx, types.FanoutCommentNotification{
+		ActorUserID: c.UserID,
+		PostID:      c.PostID,
 	})
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not fanout comment notification: %w", err))
 		return
 	}
 
-	for i, n := range nn {
-		if n.Comment == nil {
-			n.Comment = &types.CommentPreview{
-				ID:      c.ID,
-				UserID:  c.UserID,
-				PostID:  c.PostID,
-				Content: c.Content,
-			}
-		}
-		nn[i] = n
+	notifications, err := s.notificationsByIDs(ctx, collectNotificationIDs(createdList))
+	if err != nil {
+		_ = s.Logger.Log("error", fmt.Errorf("could not get notifications by IDs: %w", err))
+		return
 	}
 
-	for _, n := range nn {
+	for _, n := range notifications {
 		go s.broadcastNotification(n)
 	}
 }
@@ -158,31 +162,24 @@ func (s *Service) notifyComment(c types.Comment) {
 func (s *Service) notifyPostMention(p types.Post) {
 	ctx := context.Background()
 	mentions := textutil.CollectMentions(p.Content)
-	nn, err := s.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
-		ActorUserID:   p.UserID,
-		ActorUsername: p.User.Username,
-		PostID:        p.ID,
-		Kind:          types.NotificationKindPostMention,
-		Mentions:      mentions,
+	createdList, err := s.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
+		ActorUserID: p.UserID,
+		PostID:      p.ID,
+		Kind:        types.NotificationKindPostMention,
+		Mentions:    mentions,
 	})
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not create post mention notifications: %w", err))
 		return
 	}
 
-	for _, n := range nn {
-		if n.Post == nil {
-			n.Post = &types.PostPreview{
-				ID:        p.ID,
-				UserID:    p.UserID,
-				Content:   p.Content,
-				SpoilerOf: p.SpoilerOf,
-				NSFW:      p.NSFW,
-				MediaURLs: p.MediaURLs,
-			}
-			n.Post.SetMediaURLs(s.MediaURLPrefix)
-		}
+	notifications, err := s.notificationsByIDs(ctx, collectNotificationIDs(createdList))
+	if err != nil {
+		_ = s.Logger.Log("error", fmt.Errorf("could not get notifications by IDs: %w", err))
+		return
+	}
 
+	for _, n := range notifications {
 		go s.broadcastNotification(n)
 	}
 }
@@ -190,31 +187,64 @@ func (s *Service) notifyPostMention(p types.Post) {
 func (s *Service) notifyCommentMention(c types.Comment) {
 	ctx := context.Background()
 	mentions := textutil.CollectMentions(c.Content)
-	nn, err := s.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
-		ActorUserID:   c.UserID,
-		ActorUsername: c.User.Username,
-		PostID:        c.PostID,
-		CommentID:     &c.ID,
-		Kind:          types.NotificationKindCommentMention,
-		Mentions:      mentions,
+	createdList, err := s.Cockroach.CreateMentionNotifications(ctx, types.CreateMentionNotifications{
+		ActorUserID: c.UserID,
+		PostID:      c.PostID,
+		CommentID:   &c.ID,
+		Kind:        types.NotificationKindCommentMention,
+		Mentions:    mentions,
 	})
 	if err != nil {
 		_ = s.Logger.Log("error", fmt.Errorf("could not create comment mention notifications: %w", err))
 		return
 	}
 
-	for _, n := range nn {
-		if n.Comment == nil {
-			n.Comment = &types.CommentPreview{
-				ID:      c.ID,
-				UserID:  c.UserID,
-				PostID:  c.PostID,
-				Content: c.Content,
-			}
-		}
+	notifications, err := s.notificationsByIDs(ctx, collectNotificationIDs(createdList))
+	if err != nil {
+		_ = s.Logger.Log("error", fmt.Errorf("could not get notifications by IDs: %w", err))
+		return
+	}
 
+	for _, n := range notifications {
 		go s.broadcastNotification(n)
 	}
+}
+
+func (s *Service) notification(ctx context.Context, notificationID string) (types.Notification, error) {
+	n, err := s.Cockroach.Notification(ctx, notificationID)
+	if err != nil {
+		return n, err
+	}
+
+	for i, actor := range n.Actors {
+		actor.SetAvatarURL(s.AvatarURLPrefix)
+		n.Actors[i] = actor
+	}
+	if n.Post != nil {
+		n.Post.SetMediaURLs(s.MediaURLPrefix)
+	}
+
+	return n, nil
+}
+
+func (s *Service) notificationsByIDs(ctx context.Context, ids []string) ([]types.Notification, error) {
+	nn, err := s.Cockroach.NotificationsByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, n := range nn {
+		for j, actor := range n.Actors {
+			actor.SetAvatarURL(s.AvatarURLPrefix)
+			n.Actors[j] = actor
+		}
+		if n.Post != nil {
+			n.Post.SetMediaURLs(s.MediaURLPrefix)
+		}
+		nn[i] = n
+	}
+
+	return nn, nil
 }
 
 func (s *Service) broadcastNotification(n types.Notification) {
@@ -232,6 +262,14 @@ func (s *Service) broadcastNotification(n types.Notification) {
 	}
 
 	go s.sendWebPushNotifications(n)
+}
+
+func collectNotificationIDs(notifications []types.CreatedNotification) []string {
+	ids := make([]string, len(notifications))
+	for i, n := range notifications {
+		ids[i] = n.ID
+	}
+	return ids
 }
 
 func notificationTopic(userID string) string { return "notification_" + userID }

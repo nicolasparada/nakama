@@ -43,6 +43,12 @@ self.addEventListener("push", ev => {
         return
     }
 
+    n.issuedAt = n.issuedAt instanceof Date
+        ? n.issuedAt
+        : typeof n.issuedAt === "string"
+            ? new Date(n.issuedAt)
+            : new Date()
+
     ev.waitUntil(showNotification(n))
 })
 
@@ -57,12 +63,13 @@ self.addEventListener("notificationclick", ev => {
 async function showNotification(n) {
     const title = notificationTitle(n)
     const body = notificationBody(n)
+    const icon = n.actors?.[0]?.avatarURL ?? location.origin + "/icons/logo-circle-512.png"
     return self.registration.showNotification(title, {
         body,
         tag: n.id,
-        timestamp: n.issuedAt,
+        timestamp: (/** @type {Date} */(n.issuedAt)).getTime(),
         data: n,
-        icon: location.origin + "/icons/logo-circle-512.png",
+        icon,
     }).then(() => {
         if ("setAppBadge" in navigator) {
             return navigator.setAppBadge()
@@ -114,12 +121,16 @@ async function openNotificationsPage(n) {
  * @returns {string}
  */
 function notificationPathname(n) {
-    if (typeof n.postID === "string" && n.postID !== "") {
+    if (n.postID != null) {
+        if (n.commentID != null) {
+            return "/posts/" + encodeURIComponent(n.postID) + "#c-" + encodeURIComponent(n.commentID)
+        }
+        
         return "/posts/" + encodeURIComponent(n.postID)
     }
 
     if (n.kind === "follow") {
-        return "/@" + encodeURIComponent(n.actorUsernames[0])
+        return "/@" + encodeURIComponent(n.actors[0].username)
     }
 
     return "/notifications"
@@ -166,17 +177,16 @@ function notificationTitle(n) {
  */
 function notificationBody(n) {
     const getActors = () => {
-        const aa = n.actorUsernames
-        switch (aa.length) {
+        switch (n.actorsCount) {
             case 0:
                 return "Someone"
             case 1:
-                return aa[0]
+                return n.actors[0].username
             case 2:
-                return `${aa[0]} and ${aa[1]}`
+                return `${n.actors[0].username} and ${n.actors[1].username}`
+            default:
+                return `${n.actors[0].username} and ${n.actorsCount - 1} others`
         }
-
-        return `${aa[0]} and ${aa.length - 1} others`
     }
 
     const getAction = () => {
@@ -184,11 +194,11 @@ function notificationBody(n) {
             case "follow":
                 return "followed you"
             case "comment":
-                return "commented in a post"
+                return n.post?.mine ? "commented on your post" : "commented on a post you commented"
             case "post_mention":
-                return "mentioned you in a post"
+                return n.post?.mine ? "mentioned you in your post" : "mentioned you in a post you commented"
             case "comment_mention":
-                return "mentioned you in a comment"
+                return n.post?.mine ? "mentioned you in a comment on your post" : "mentioned you in a comment"
             default:
                 return "did something"
         }

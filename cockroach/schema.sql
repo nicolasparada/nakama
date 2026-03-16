@@ -128,8 +128,93 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX sorted_notifications (issued_at DESC, id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS unique_notifications
-ON notifications (user_id, kind, post_id, comment_id, read_at);
+DROP INDEX IF EXISTS unique_notifications;
+
+-- Cleanup older duplicate unread comment notifications to allow the index to be created
+DELETE FROM notifications
+WHERE id IN (
+    SELECT id
+    FROM (
+        SELECT id, row_number() OVER (PARTITION BY user_id, post_id ORDER BY issued_at DESC) as rn
+        FROM notifications
+        WHERE kind = 'comment' AND read_at IS NULL
+    ) sub
+    WHERE rn > 1
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_comment_unread_notifications
+ON notifications (user_id, kind, post_id)
+WHERE kind = 'comment' AND read_at IS NULL;
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actor_user_ids UUID[] NOT NULL DEFAULT '{}'; -- only the last 2 actors. Used for showing: user_a and user_b did something.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actors_count INT NOT NULL DEFAULT 0; -- total count used for showing: user_a and 3 others did something.
+
+CREATE TABLE IF NOT EXISTS notification_actors (
+    user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
+    notification_id UUID NOT NULL REFERENCES notifications ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, notification_id)
+);
+
+DROP TRIGGER IF EXISTS notification_actors_update_trigger ON notification_actors;
+
+CREATE OR REPLACE FUNCTION update_notification_actors()
+RETURNS TRIGGER AS $$
+DECLARE
+    notification_id_to_update UUID;
+    latest_two_actor_user_ids UUID[];
+    total_count INT;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        notification_id_to_update := (NEW).notification_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        notification_id_to_update := (OLD).notification_id;
+    END IF;
+
+    SELECT COUNT(*) INTO total_count
+    FROM notification_actors 
+    WHERE notification_id = notification_id_to_update;
+
+    SELECT ARRAY(
+        SELECT user_id 
+        FROM notification_actors 
+        WHERE notification_id = notification_id_to_update
+        ORDER BY created_at DESC
+        LIMIT 2
+    ) INTO latest_two_actor_user_ids;
+
+    UPDATE notifications 
+    SET 
+        actor_user_ids = latest_two_actor_user_ids,
+        actors_count = total_count
+    WHERE id = notification_id_to_update;
+
+    IF TG_OP = 'INSERT' THEN
+        RETURN (NEW);
+    ELSE
+        RETURN (OLD);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER notification_actors_update_trigger
+    AFTER INSERT OR DELETE ON notification_actors
+    FOR EACH ROW EXECUTE FUNCTION update_notification_actors();
+
+UPDATE notifications SET read_at = NULL WHERE read_at = '0001-01-01 00:00:00';
+
+INSERT INTO notification_actors (user_id, notification_id, created_at)
+SELECT
+    users.id,
+    notifications.id,
+    notifications.issued_at - ((actors.ord - 1) * INTERVAL '1 microsecond')
+FROM notifications
+JOIN unnest(notifications.actor_usernames) WITH ORDINALITY AS actors(actor_username, ord)
+    ON TRUE
+JOIN users ON users.username = actors.actor_username
+ON CONFLICT (user_id, notification_id) DO NOTHING;
+
+ALTER TABLE notifications DROP COLUMN IF EXISTS actor_usernames;
 
 CREATE TABLE IF NOT EXISTS user_web_push_subscriptions (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),

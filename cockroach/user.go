@@ -507,21 +507,6 @@ func (c *Cockroach) UserIDFromUsername(ctx context.Context, username string) (st
 	return userID, nil
 }
 
-func (c *Cockroach) usernameFromUserID(ctx context.Context, userID string) (string, error) {
-	const query = "SELECT username FROM users WHERE id = @user_id"
-	args := pgx.StrictNamedArgs{"user_id": userID}
-	username, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", errs.NotFoundError("user not found")
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("sql select username from user ID: %w", err)
-	}
-
-	return username, nil
-}
-
 func (c *Cockroach) userExistsWithEmail(ctx context.Context, email string) (bool, error) {
 	const query = "SELECT EXISTS (SELECT 1 FROM users WHERE email = @email)"
 	args := pgx.StrictNamedArgs{"email": email}
