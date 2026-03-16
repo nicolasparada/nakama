@@ -130,18 +130,6 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 DROP INDEX IF EXISTS unique_notifications;
 
--- Cleanup older duplicate unread comment notifications to allow the index to be created
-DELETE FROM notifications
-WHERE id IN (
-    SELECT id
-    FROM (
-        SELECT id, row_number() OVER (PARTITION BY user_id, post_id ORDER BY issued_at DESC) as rn
-        FROM notifications
-        WHERE kind = 'comment' AND read_at IS NULL
-    ) sub
-    WHERE rn > 1
-);
-
 CREATE UNIQUE INDEX IF NOT EXISTS unique_comment_unread_notifications
 ON notifications (user_id, kind, post_id)
 WHERE kind = 'comment' AND read_at IS NULL;
@@ -200,19 +188,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER notification_actors_update_trigger
     AFTER INSERT OR DELETE ON notification_actors
     FOR EACH ROW EXECUTE FUNCTION update_notification_actors();
-
-UPDATE notifications SET read_at = NULL WHERE read_at = '0001-01-01 00:00:00';
-
-INSERT INTO notification_actors (user_id, notification_id, created_at)
-SELECT
-    users.id,
-    notifications.id,
-    notifications.issued_at - ((actors.ord - 1) * INTERVAL '1 microsecond')
-FROM notifications
-JOIN unnest(notifications.actor_usernames) WITH ORDINALITY AS actors(actor_username, ord)
-    ON TRUE
-JOIN users ON users.username = actors.actor_username
-ON CONFLICT (user_id, notification_id) DO NOTHING;
 
 ALTER TABLE notifications DROP COLUMN IF EXISTS actor_usernames;
 
