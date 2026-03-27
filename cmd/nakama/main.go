@@ -66,6 +66,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		s3AccessKey         = env("S3_ACCESS_KEY", "minioadmin")
 		s3SecretKey         = env("S3_SECRET_KEY", "minioadmin")
 		s3Secure, _         = strconv.ParseBool(env("S3_SECURE", "false"))
+		objectsBaseURL      = os.Getenv("OBJECTS_BASE_URL")
 		cookieHashKey       = env("COOKIE_HASH_KEY", "supersecretkeyyoushouldnotcommit")
 		cookieBlockKey      = env("COOKIE_BLOCK_KEY", "supersecretkeyyoushouldnotcommit")
 		githubClientID      = os.Getenv("GITHUB_CLIENT_ID")
@@ -90,6 +91,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 	fs.StringVar(&natsURL, "nats", natsURL, "NATS URL")
 	fs.StringVar(&smtpHost, "smtp-host", smtpHost, "SMTP server host")
 	fs.IntVar(&smtpPort, "smtp-port", smtpPort, "SMTP server port")
+	fs.StringVar(&objectsBaseURL, "objects-base-url", objectsBaseURL, "Base URL for objects stored in Minio")
 	fs.BoolVar(&embedStaticFiles, "embed-static", embedStaticFiles, "Embed static files")
 	fs.StringVar(&cookieHashKey, "cookie-hash-key", cookieHashKey, "Cookie hash key. 32 or 64 bytes")
 	fs.StringVar(&cookieBlockKey, "cookie-block-key", cookieBlockKey, "Cookie block key. 16, 24, or 32 bytes")
@@ -114,6 +116,12 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 
 	if i, err := strconv.Atoi(origin.Port()); err == nil {
 		port = i
+	}
+
+	if u, err := url.Parse(objectsBaseURL); err != nil {
+		return fmt.Errorf("invalid objects base url: %w", err)
+	} else if !u.IsAbs() {
+		return errors.New("objects base url must be an absolute url")
 	}
 
 	db, err := pgxpool.New(ctx, dbURL)
@@ -180,7 +188,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		TokenKey:         tokenKey,
 		PubSub:           pubsub,
 		MinioStore:       store,
-		MinioBaseURL:     buildMinioURL(s3Endpoint, s3Secure),
+		ObjectsBaseURL:   objectsBaseURL,
 		DisabledDevLogin: disabledDevLogin,
 		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		VAPIDPrivateKey:  vapidPrivateKey,
@@ -273,17 +281,4 @@ func env(key, fallbackValue string) string {
 		return fallbackValue
 	}
 	return s
-}
-
-func buildMinioURL(endpoint string, secure bool) string {
-	if endpoint == "" {
-		return ""
-	}
-
-	minioURL := "http"
-	if secure {
-		minioURL += "s"
-	}
-	minioURL += "://" + endpoint
-	return minioURL
 }

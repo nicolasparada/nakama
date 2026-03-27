@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
     readonly VITE_VAPID_PUBLIC_KEY: string
-    readonly VITE_MINIO_BASE_URL: string
+    readonly VITE_OBJECTS_BASE_URL: string
 }
 
 interface ImportMeta {

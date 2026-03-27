@@ -43,8 +43,8 @@ func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (
 	}
 
 	for i, u := range users.Items {
-		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
-		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
+		u.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.ObjectsBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""
@@ -78,7 +78,7 @@ func (s *Service) userByID(ctx context.Context, id string) (types.User, error) {
 		return user, err
 	}
 
-	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+	user.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 	return user, nil
 }
 
@@ -88,7 +88,7 @@ func (s *Service) userByEmail(ctx context.Context, email string) (types.User, er
 		return user, err
 	}
 
-	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+	user.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 	return user, nil
 }
 
@@ -109,8 +109,8 @@ func (s *Service) UserProfileByUsername(ctx context.Context, in types.RetrieveUs
 		return user, err
 	}
 
-	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
-	user.SetCoverURL(s.MinioBaseURL, CoversBucket)
+	user.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
+	user.SetCoverURL(s.ObjectsBaseURL, CoversBucket)
 	if !user.IsMe {
 		user.Email = ""
 	}
@@ -350,8 +350,8 @@ func (s *Service) Followers(ctx context.Context, in types.ListFollowers) (types.
 	}
 
 	for i, u := range out.Items {
-		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
-		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
+		u.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.ObjectsBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""
@@ -380,8 +380,8 @@ func (s *Service) Followees(ctx context.Context, in types.ListFollowees) (types.
 	}
 
 	for i, u := range out.Items {
-		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
-		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
+		u.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.ObjectsBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""

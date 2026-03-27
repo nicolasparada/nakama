@@ -712,7 +712,7 @@ customElements.define("add-reaction-btn", component(AddReactionBtn, { useShadowD
 
 const trustedOrigins = [
     location.origin,
-    import.meta.env.VITE_MINIO_BASE_URL,
+    import.meta.env.VITE_OBJECTS_BASE_URL,
     "https://i.imgur.com",
     "https://puu.sh",
     "https://cdn.discordapp.com",

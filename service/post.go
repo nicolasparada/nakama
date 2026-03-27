@@ -74,7 +74,7 @@ func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.Ti
 		CreatedAt:  createdTimelineItem.CreatedAt,
 		UpdatedAt:  createdTimelineItem.CreatedAt,
 	}
-	post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
+	post.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
 
 	go s.postCreated(post)
 
@@ -105,9 +105,9 @@ func (s *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[typ
 
 	for i, p := range out.Items {
 		if p.User != nil {
-			p.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+			p.User.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 		}
-		p.SetMediaURLs(s.MinioBaseURL, MediaBucket)
+		p.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
 		out.Items[i] = p
 	}
 
@@ -165,9 +165,9 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 	}
 
 	if post.User != nil {
-		post.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+		post.User.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 	}
-	post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
+	post.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
 
 	return post, nil
 }

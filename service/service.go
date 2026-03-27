@@ -25,7 +25,7 @@ type Service struct {
 	TokenKey         string
 	PubSub           pubsub.PubSub
 	MinioStore       *minio.Store
-	MinioBaseURL     string
+	ObjectsBaseURL   string
 	DisabledDevLogin bool
 	AllowedOrigins   []string
 	VAPIDPrivateKey  string

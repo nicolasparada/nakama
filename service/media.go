@@ -203,7 +203,7 @@ func detectContentType(r io.ReadSeeker) (string, error) {
 }
 
 func (svc *Service) objectStoreURL(bucket, key string) string {
-	base := strings.TrimRight(svc.MinioBaseURL, "/")
+	base := strings.TrimRight(svc.ObjectsBaseURL, "/")
 	bucket = strings.Trim(bucket, "/")
 	key = strings.TrimLeft(key, "/")
 

@@ -235,7 +235,7 @@ func (s *Service) VerifyMagicLink(ctx context.Context, in types.UseEmailVerifica
 		return out, err
 	}
 
-	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+	user.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 	out.User = user
 
 	return out, nil
