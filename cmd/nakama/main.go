@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,11 +27,9 @@ import (
 
 	cockroachpkg "github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
+	"github.com/nakamauwu/nakama/minio"
 	natspubsub "github.com/nakamauwu/nakama/pubsub/nats"
 	"github.com/nakamauwu/nakama/service"
-	"github.com/nakamauwu/nakama/storage"
-	fsstorage "github.com/nakamauwu/nakama/storage/fs"
-	s3storage "github.com/nakamauwu/nakama/storage/s3"
 	httptransport "github.com/nakamauwu/nakama/transport/http"
 )
 
@@ -65,14 +62,10 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		smtpUsername        = os.Getenv("SMTP_USERNAME")
 		smtpPassword        = os.Getenv("SMTP_PASSWORD")
 		embedStaticFiles, _ = strconv.ParseBool(env("EMBED_STATIC", "false"))
-		s3Secure, _         = strconv.ParseBool(env("S3_SECURE", "true"))
-		s3Endpoint          = os.Getenv("S3_ENDPOINT")
-		s3Region            = os.Getenv("S3_REGION")
-		s3AccessKey         = os.Getenv("S3_ACCESS_KEY")
-		s3SecretKey         = os.Getenv("S3_SECRET_KEY")
-		avatarURLPrefix     = env("AVATAR_URL_PREFIX", originStr+"/img/avatars/")
-		coverURLPrefix      = env("COVER_URL_PREFIX", originStr+"/img/covers/")
-		mediaURLPrefix      = env("MEDIA_URL_PREFIX", originStr+"/img/media/")
+		s3Endpoint          = env("S3_ENDPOINT", "localhost:9000")
+		s3AccessKey         = env("S3_ACCESS_KEY", "minioadmin")
+		s3SecretKey         = env("S3_SECRET_KEY", "minioadmin")
+		s3Secure, _         = strconv.ParseBool(env("S3_SECURE", "false"))
 		cookieHashKey       = env("COOKIE_HASH_KEY", "supersecretkeyyoushouldnotcommit")
 		cookieBlockKey      = env("COOKIE_BLOCK_KEY", "supersecretkeyyoushouldnotcommit")
 		githubClientID      = os.Getenv("GITHUB_CLIENT_ID")
@@ -98,9 +91,6 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 	fs.StringVar(&smtpHost, "smtp-host", smtpHost, "SMTP server host")
 	fs.IntVar(&smtpPort, "smtp-port", smtpPort, "SMTP server port")
 	fs.BoolVar(&embedStaticFiles, "embed-static", embedStaticFiles, "Embed static files")
-	fs.StringVar(&avatarURLPrefix, "avatar-url-prefix", avatarURLPrefix, "Avatar URL prefix")
-	fs.StringVar(&coverURLPrefix, "cover-url-prefix", coverURLPrefix, "Cover URL prefix")
-	fs.StringVar(&mediaURLPrefix, "media-url-prefix", mediaURLPrefix, "Media URL prefix")
 	fs.StringVar(&cookieHashKey, "cookie-hash-key", cookieHashKey, "Cookie hash key. 32 or 64 bytes")
 	fs.StringVar(&cookieBlockKey, "cookie-block-key", cookieBlockKey, "Cookie block key. 16, 24, or 32 bytes")
 	fs.StringVar(&githubClientID, "github-client-id", githubClientID, "GitHub client ID")
@@ -171,31 +161,15 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		sender = mailing.NewLogSender(sendFrom)
 	}
 
-	var store storage.Store
-	s3Enabled := s3Endpoint != "" && s3AccessKey != "" && s3SecretKey != ""
-	if s3Enabled {
-		_ = logger.Log("storage_implementation", "s3")
-		s3 := &s3storage.Store{
-			Secure:     s3Secure,
-			Endpoint:   s3Endpoint,
-			Region:     s3Region,
-			AccessKey:  s3AccessKey,
-			SecretKey:  s3SecretKey,
-			BucketList: []string{service.AvatarsBucket, service.CoversBucket, service.MediaBucket},
-		}
-		if err := s3.Setup(ctx); err != nil {
-			return fmt.Errorf("could not setup S3 storage: %w", err)
-		}
+	store := minio.NewStore(minio.StoreOptions{
+		Endpoint:  s3Endpoint,
+		AccessKey: s3AccessKey,
+		SecretKey: s3SecretKey,
+		Secure:    s3Secure,
+	})
 
-		store = s3
-	} else {
-		_ = logger.Log("storage_implementation", "os file system")
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("could not get current working directory: %w", err)
-		}
-
-		store = &fsstorage.Store{Root: filepath.Join(wd, "web", "static", "img")}
+	if err := store.CreateReadOnlyBuckets(ctx, service.AvatarsBucket, service.CoversBucket, service.MediaBucket); err != nil {
+		return err
 	}
 
 	svc := &service.Service{
@@ -205,10 +179,8 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		Origin:           origin,
 		TokenKey:         tokenKey,
 		PubSub:           pubsub,
-		Store:            store,
-		AvatarURLPrefix:  avatarURLPrefix,
-		CoverURLPrefix:   coverURLPrefix,
-		MediaURLPrefix:   mediaURLPrefix,
+		MinioStore:       store,
+		MinioBaseURL:     buildMinioURL(s3Endpoint, s3Secure),
 		DisabledDevLogin: disabledDevLogin,
 		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		VAPIDPrivateKey:  vapidPrivateKey,
@@ -259,7 +231,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		[]byte(cookieHashKey),
 		[]byte(cookieBlockKey),
 	)
-	h := httptransport.New(svc, oauthProviders, origin, log.With(logger, "component", "http"), store, cookieCodec, promHandler, embedStaticFiles)
+	h := httptransport.New(svc, oauthProviders, origin, log.With(logger, "component", "http"), cookieCodec, promHandler, embedStaticFiles)
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           h,
@@ -301,4 +273,17 @@ func env(key, fallbackValue string) string {
 		return fallbackValue
 	}
 	return s
+}
+
+func buildMinioURL(endpoint string, secure bool) string {
+	if endpoint == "" {
+		return ""
+	}
+
+	minioURL := "http"
+	if secure {
+		minioURL += "s"
+	}
+	minioURL += "://" + endpoint
+	return minioURL
 }

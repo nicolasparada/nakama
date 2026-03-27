@@ -30,9 +30,9 @@ type Post struct {
 	Subscribed    bool       `json:"subscribed" db:"subscribed,omitempty"`
 }
 
-func (p *Post) SetMediaURLs(prefix string) {
+func (p *Post) SetMediaURLs(base, bucket string) {
 	for i, media := range p.MediaURLs {
-		p.MediaURLs[i] = joinPrefix(prefix, media)
+		p.MediaURLs[i] = makeURL(base, bucket, media)
 	}
 }
 
@@ -47,9 +47,9 @@ type PostPreview struct {
 	Mine bool `json:"mine"`
 }
 
-func (p *PostPreview) SetMediaURLs(prefix string) {
+func (p *PostPreview) SetMediaURLs(base, bucket string) {
 	for i, media := range p.MediaURLs {
-		p.MediaURLs[i] = joinPrefix(prefix, media)
+		p.MediaURLs[i] = makeURL(base, bucket, media)
 	}
 }
 

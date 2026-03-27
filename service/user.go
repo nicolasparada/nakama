@@ -13,7 +13,7 @@ import (
 	"github.com/disintegration/imaging"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
-	"github.com/nakamauwu/nakama/storage"
+	"github.com/nakamauwu/nakama/minio"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
 )
@@ -43,8 +43,8 @@ func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (
 	}
 
 	for i, u := range users.Items {
-		u.SetAvatarURL(s.AvatarURLPrefix)
-		u.SetCoverURL(s.CoverURLPrefix)
+		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""
@@ -78,7 +78,7 @@ func (s *Service) userByID(ctx context.Context, id string) (types.User, error) {
 		return user, err
 	}
 
-	user.SetAvatarURL(s.AvatarURLPrefix)
+	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 	return user, nil
 }
 
@@ -88,7 +88,7 @@ func (s *Service) userByEmail(ctx context.Context, email string) (types.User, er
 		return user, err
 	}
 
-	user.SetAvatarURL(s.AvatarURLPrefix)
+	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 	return user, nil
 }
 
@@ -109,8 +109,8 @@ func (s *Service) UserProfileByUsername(ctx context.Context, in types.RetrieveUs
 		return user, err
 	}
 
-	user.SetAvatarURL(s.AvatarURLPrefix)
-	user.SetCoverURL(s.CoverURLPrefix)
+	user.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+	user.SetCoverURL(s.MinioBaseURL, CoversBucket)
 	if !user.IsMe {
 		user.Email = ""
 	}
@@ -181,17 +181,23 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 		avatarFileName += ".jpg"
 	}
 
-	err = s.Store.Store(ctx, AvatarsBucket, avatarFileName, buf.Bytes(), storage.StoreWithContentType(ct))
+	avatarContents := buf.Bytes()
+
+	cleanupAvatar, err := s.MinioStore.Upload(ctx, AvatarsBucket, minio.Upload{
+		Key:         avatarFileName,
+		Reader:      bytes.NewReader(avatarContents),
+		FileSize:    int64(len(avatarContents)),
+		ContentType: ct,
+	})
 	if err != nil {
-		return "", fmt.Errorf("could not store avatar file: %w", err)
+		return "", fmt.Errorf("could not upload avatar file: %w", err)
 	}
 
 	oldAvatar, err := s.Cockroach.UpdateAvatar(ctx, uid, avatarFileName)
 	if err != nil {
-		defer func() {
-			err := s.Store.Delete(context.Background(), AvatarsBucket, avatarFileName)
-			if err != nil {
-				_ = s.Logger.Log("error", fmt.Errorf("could not delete avatar file after user update fail: %w", err))
+		go func() {
+			if errCleanup := cleanupAvatar(context.Background()); errCleanup != nil {
+				_ = s.Logger.Log("error", fmt.Errorf("could not cleanup avatar file after user update fail: %w", errCleanup))
 			}
 		}()
 
@@ -200,14 +206,14 @@ func (s *Service) UpdateAvatar(ctx context.Context, r io.ReadSeeker) (string, er
 
 	if oldAvatar != nil {
 		defer func() {
-			err := s.Store.Delete(context.Background(), AvatarsBucket, *oldAvatar)
+			err := s.MinioStore.Delete(context.Background(), AvatarsBucket, *oldAvatar)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not delete old avatar: %w", err))
 			}
 		}()
 	}
 
-	return s.AvatarURLPrefix + avatarFileName, nil
+	return s.objectStoreURL(AvatarsBucket, avatarFileName), nil
 }
 
 // UpdateCover of the authenticated user returning the new cover URL.
@@ -258,17 +264,23 @@ func (s *Service) UpdateCover(ctx context.Context, r io.ReadSeeker) (string, err
 		coverFileName += ".jpg"
 	}
 
-	err = s.Store.Store(ctx, CoversBucket, coverFileName, buf.Bytes(), storage.StoreWithContentType(ct))
+	coverContents := buf.Bytes()
+
+	cleanupCover, err := s.MinioStore.Upload(ctx, CoversBucket, minio.Upload{
+		Key:         coverFileName,
+		Reader:      bytes.NewReader(coverContents),
+		FileSize:    int64(len(coverContents)),
+		ContentType: ct,
+	})
 	if err != nil {
-		return "", fmt.Errorf("could not store cover file: %w", err)
+		return "", fmt.Errorf("could not upload cover file: %w", err)
 	}
 
 	oldCover, err := s.Cockroach.UpdateCover(ctx, uid, coverFileName)
 	if err != nil {
-		defer func() {
-			err := s.Store.Delete(context.Background(), CoversBucket, coverFileName)
-			if err != nil {
-				_ = s.Logger.Log("error", fmt.Errorf("could not delete cover file after user update fail: %w", err))
+		go func() {
+			if errCleanup := cleanupCover(context.Background()); errCleanup != nil {
+				_ = s.Logger.Log("error", fmt.Errorf("could not cleanup cover file after user update fail: %w", errCleanup))
 			}
 		}()
 
@@ -276,15 +288,15 @@ func (s *Service) UpdateCover(ctx context.Context, r io.ReadSeeker) (string, err
 	}
 
 	if oldCover != nil {
-		defer func() {
-			err := s.Store.Delete(context.Background(), CoversBucket, *oldCover)
+		go func() {
+			err := s.MinioStore.Delete(context.Background(), CoversBucket, *oldCover)
 			if err != nil {
 				_ = s.Logger.Log("error", fmt.Errorf("could not delete old cover: %w", err))
 			}
 		}()
 	}
 
-	return s.CoverURLPrefix + coverFileName, nil
+	return s.objectStoreURL(CoversBucket, coverFileName), nil
 }
 
 func (s *Service) ToggleFollow(ctx context.Context, username string) (types.ToggledFollow, error) {
@@ -338,8 +350,8 @@ func (s *Service) Followers(ctx context.Context, in types.ListFollowers) (types.
 	}
 
 	for i, u := range out.Items {
-		u.SetAvatarURL(s.AvatarURLPrefix)
-		u.SetCoverURL(s.CoverURLPrefix)
+		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""
@@ -368,8 +380,8 @@ func (s *Service) Followees(ctx context.Context, in types.ListFollowees) (types.
 	}
 
 	for i, u := range out.Items {
-		u.SetAvatarURL(s.AvatarURLPrefix)
-		u.SetCoverURL(s.CoverURLPrefix)
+		u.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
+		u.SetCoverURL(s.MinioBaseURL, CoversBucket)
 
 		if !u.IsMe {
 			u.Email = ""

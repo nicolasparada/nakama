@@ -11,11 +11,11 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 	"sync"
 
-	"github.com/go-kit/log/level"
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"github.com/nakamauwu/nakama/storage"
+	"github.com/nakamauwu/nakama/minio"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nicolasparada/go-errs"
 	"golang.org/x/image/webp"
@@ -38,22 +38,22 @@ var imageContentTypeToExtension = map[string]string{
 	"image/webp": ".webp",
 }
 
-func (svc *Service) storeMedia(ctx context.Context, media []types.Media) error {
+func (svc *Service) storeMedia(ctx context.Context, media []types.Media) (func(ctx context.Context) error, error) {
 	if len(media) == 0 {
-		return nil
+		return func(context.Context) error { return nil }, nil
 	}
-	g, gctx := errgroup.WithContext(ctx)
-	for _, mediaItem := range media {
-		g.Go(func() error {
-			err := svc.Store.Store(gctx, MediaBucket, mediaItem.Name, mediaItem.Contents, storage.StoreWithContentType(mediaItem.ContentType))
-			if err != nil {
-				return fmt.Errorf("store media item: %w", err)
-			}
-			return nil
+
+	var uploadItems []minio.Upload
+	for _, m := range media {
+		uploadItems = append(uploadItems, minio.Upload{
+			Key:         m.Name,
+			Reader:      bytes.NewReader(m.Contents),
+			FileSize:    int64(len(m.Contents)),
+			ContentType: m.ContentType,
 		})
 	}
 
-	return g.Wait()
+	return svc.MinioStore.UploadMany(ctx, MediaBucket, uploadItems)
 }
 
 func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
@@ -114,27 +114,6 @@ func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
 	}
 
 	return out, nil
-}
-
-func (svc *Service) cleanupMedia(media []types.Media) {
-	if len(media) == 0 {
-		return
-	}
-
-	g, gctx := errgroup.WithContext(context.Background())
-	for _, mediaItem := range media {
-		g.Go(func() error {
-			err := svc.Store.Delete(gctx, MediaBucket, mediaItem.Name)
-			if err != nil {
-				return fmt.Errorf("delete media item: %w", err)
-			}
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		_ = level.Error(svc.Logger).Log("msg", "could not cleanup media", "err", err)
-	}
 }
 
 func collectMediaNames(media []types.Media) []string {
@@ -221,4 +200,12 @@ func detectContentType(r io.ReadSeeker) (string, error) {
 	}
 
 	return mt, nil
+}
+
+func (svc *Service) objectStoreURL(bucket, key string) string {
+	base := strings.TrimRight(svc.MinioBaseURL, "/")
+	bucket = strings.Trim(bucket, "/")
+	key = strings.TrimLeft(key, "/")
+
+	return fmt.Sprintf("%s/%s/%s", base, bucket, key)
 }

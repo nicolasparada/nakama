@@ -85,7 +85,7 @@ func (s *Service) Comments(ctx context.Context, in types.ListComments) (types.Pa
 			continue
 		}
 
-		c.User.SetAvatarURL(s.AvatarURLPrefix)
+		c.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 		out.Items[i] = c
 	}
 

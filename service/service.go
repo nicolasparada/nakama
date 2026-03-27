@@ -10,8 +10,8 @@ import (
 
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
+	"github.com/nakamauwu/nakama/minio"
 	"github.com/nakamauwu/nakama/pubsub"
-	"github.com/nakamauwu/nakama/storage"
 )
 
 // Service contains the core business logic separated from the transport layer.
@@ -24,10 +24,8 @@ type Service struct {
 	Origin           *url.URL
 	TokenKey         string
 	PubSub           pubsub.PubSub
-	Store            storage.Store
-	AvatarURLPrefix  string
-	CoverURLPrefix   string
-	MediaURLPrefix   string
+	MinioStore       *minio.Store
+	MinioBaseURL     string
 	DisabledDevLogin bool
 	AllowedOrigins   []string
 	VAPIDPrivateKey  string

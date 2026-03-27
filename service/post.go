@@ -47,13 +47,18 @@ func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.Ti
 	in.SetUserID(uid)
 	in.SetTags(textutil.CollectTags(in.Content))
 
-	if err := s.storeMedia(ctx, media); err != nil {
+	cleanupMedia, err := s.storeMedia(ctx, media)
+	if err != nil {
 		return out, err
 	}
 
 	createdTimelineItem, err := s.Cockroach.CreatePost(ctx, in)
 	if err != nil {
-		go s.cleanupMedia(media)
+		go func() {
+			if errCleanup := cleanupMedia(context.Background()); errCleanup != nil {
+				_ = s.Logger.Log("error", fmt.Errorf("cleanup media after failed CreatePost: %w", errCleanup))
+			}
+		}()
 		return out, err
 	}
 
@@ -69,7 +74,7 @@ func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.Ti
 		CreatedAt:  createdTimelineItem.CreatedAt,
 		UpdatedAt:  createdTimelineItem.CreatedAt,
 	}
-	post.SetMediaURLs(s.MediaURLPrefix)
+	post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 
 	go s.postCreated(post)
 
@@ -100,9 +105,9 @@ func (s *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[typ
 
 	for i, p := range out.Items {
 		if p.User != nil {
-			p.User.SetAvatarURL(s.AvatarURLPrefix)
+			p.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 		}
-		p.SetMediaURLs(s.MediaURLPrefix)
+		p.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 		out.Items[i] = p
 	}
 
@@ -160,9 +165,9 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 	}
 
 	if post.User != nil {
-		post.User.SetAvatarURL(s.AvatarURLPrefix)
+		post.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 	}
-	post.SetMediaURLs(s.MediaURLPrefix)
+	post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 
 	return post, nil
 }

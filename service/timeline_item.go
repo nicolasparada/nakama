@@ -32,9 +32,9 @@ func (s *Service) Timeline(ctx context.Context, in types.ListTimeline) (types.Pa
 
 	for i, ti := range out.Items {
 		if ti.Post.User != nil {
-			ti.Post.User.SetAvatarURL(s.AvatarURLPrefix)
+			ti.Post.User.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 		}
-		ti.Post.SetMediaURLs(s.MediaURLPrefix)
+		ti.Post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 		out.Items[i] = ti
 	}
 

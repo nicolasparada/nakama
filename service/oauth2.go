@@ -18,7 +18,7 @@ func (svc *Service) LoginFromProvider(ctx context.Context, in types.ProvidedUser
 		return user, err
 	}
 
-	user.SetAvatarURL(svc.AvatarURLPrefix)
+	user.SetAvatarURL(svc.MinioBaseURL, AvatarsBucket)
 
 	return user, nil
 }

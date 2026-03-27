@@ -34,11 +34,11 @@ func (s *Service) Notifications(ctx context.Context, in types.ListNotifications)
 
 	for i, n := range nn.Items {
 		for j, actor := range n.Actors {
-			actor.SetAvatarURL(s.AvatarURLPrefix)
+			actor.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 			n.Actors[j] = actor
 		}
 		if n.Post != nil {
-			n.Post.SetMediaURLs(s.MediaURLPrefix)
+			n.Post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 		}
 		nn.Items[i] = n
 	}
@@ -217,11 +217,11 @@ func (s *Service) notification(ctx context.Context, notificationID string) (type
 	}
 
 	for i, actor := range n.Actors {
-		actor.SetAvatarURL(s.AvatarURLPrefix)
+		actor.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 		n.Actors[i] = actor
 	}
 	if n.Post != nil {
-		n.Post.SetMediaURLs(s.MediaURLPrefix)
+		n.Post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 	}
 
 	return n, nil
@@ -235,11 +235,11 @@ func (s *Service) notificationsByIDs(ctx context.Context, ids []string) ([]types
 
 	for i, n := range nn {
 		for j, actor := range n.Actors {
-			actor.SetAvatarURL(s.AvatarURLPrefix)
+			actor.SetAvatarURL(s.MinioBaseURL, AvatarsBucket)
 			n.Actors[j] = actor
 		}
 		if n.Post != nil {
-			n.Post.SetMediaURLs(s.MediaURLPrefix)
+			n.Post.SetMediaURLs(s.MinioBaseURL, MediaBucket)
 		}
 		nn[i] = n
 	}

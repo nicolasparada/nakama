@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -14,8 +15,8 @@ type User struct {
 	AvatarURL *string `json:"avatarURL" db:"avatar"`
 }
 
-func (u *User) SetAvatarURL(prefix string) {
-	u.AvatarURL = joinOptionalPrefix(prefix, u.AvatarURL)
+func (u *User) SetAvatarURL(baseURL, bucket string) {
+	u.AvatarURL = optionalURL(baseURL, bucket, u.AvatarURL)
 }
 
 type UserProfile struct {
@@ -32,8 +33,8 @@ type UserProfile struct {
 	FollowsViewer    bool    `json:"followsViewer" db:"follows_viewer"`
 }
 
-func (u *UserProfile) SetCoverURL(prefix string) {
-	u.CoverURL = joinOptionalPrefix(prefix, u.CoverURL)
+func (u *UserProfile) SetCoverURL(base, bucket string) {
+	u.CoverURL = optionalURL(base, bucket, u.CoverURL)
 }
 
 type CreateUser struct {
@@ -210,25 +211,28 @@ func (u *UpdateUser) Validate() error {
 	return nil
 }
 
-func joinOptionalPrefix(prefix string, path *string) *string {
-	if path == nil {
+func optionalURL(base, bucket string, key *string) *string {
+	if key == nil || strings.HasPrefix(*key, base) {
 		return nil
 	}
 
-	if strings.HasPrefix(*path, prefix) {
-		return path
-	}
+	base = strings.TrimRight(base, "/")
+	bucket = strings.Trim(bucket, "/")
+	keyClean := strings.TrimLeft(*key, "/")
 
-	url := prefix + *path
-	return &url
+	return new(fmt.Sprintf("%s/%s/%s", base, bucket, keyClean))
 }
 
-func joinPrefix(prefix string, path string) string {
-	if strings.HasPrefix(path, prefix) {
-		return path
+func makeURL(base, bucket, key string) string {
+	if strings.HasPrefix(key, base) {
+		return key
 	}
 
-	return prefix + path
+	base = strings.TrimRight(base, "/")
+	bucket = strings.Trim(bucket, "/")
+	key = strings.TrimLeft(key, "/")
+
+	return fmt.Sprintf("%s/%s/%s", base, bucket, key)
 }
 
 var reEmail = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)

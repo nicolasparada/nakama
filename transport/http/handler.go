@@ -9,25 +9,22 @@ import (
 	"github.com/matryer/way"
 
 	"github.com/nakamauwu/nakama/service"
-	"github.com/nakamauwu/nakama/storage"
 )
 
 type handler struct {
 	svc              *service.Service
 	origin           *url.URL
 	logger           log.Logger
-	store            storage.Store
 	cookieCodec      *securecookie.SecureCookie
 	embedStaticFiles bool
 }
 
 // New makes use of the service to provide an http.Handler with predefined routing.
-func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, logger log.Logger, store storage.Store, cdc *securecookie.SecureCookie, promHandler http.Handler, embedStaticFiles bool) http.Handler {
+func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, logger log.Logger, cdc *securecookie.SecureCookie, promHandler http.Handler, embedStaticFiles bool) http.Handler {
 	h := &handler{
 		svc:              svc,
 		origin:           origin,
 		logger:           logger,
-		store:            store,
 		cookieCodec:      cdc,
 		embedStaticFiles: embedStaticFiles,
 	}
@@ -83,9 +80,6 @@ func New(svc *service.Service, oauthProviders []OauthProvider, origin *url.URL, 
 
 	r := way.NewRouter()
 	r.Handle("*", "/api/...", h.withAuth(api))
-	r.HandleFunc("GET", "/img/avatars/:name", h.avatar)
-	r.HandleFunc("GET", "/img/covers/:name", h.cover)
-	r.HandleFunc("GET", "/img/media/:name", h.media)
 	r.Handle("GET", "/...", h.staticHandler())
 
 	return r
