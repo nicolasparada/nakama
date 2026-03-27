@@ -4,6 +4,12 @@ ARG VAPID_PUBLIC_KEY
 ENV VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
 ENV VITE_VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
 
+ARG S3_ENDPOINT=localhost:9000
+ENV S3_ENDPOINT=${S3_ENDPOINT}
+
+ARG S3_SECURE=false
+ENV S3_SECURE=${S3_SECURE}
+
 RUN apk add --update --no-cache git nodejs npm ca-certificates
 RUN update-ca-certificates
 
@@ -13,6 +19,9 @@ COPY . .
 
 WORKDIR /go/src/github.com/nicolasparada/nakama/web/app
 RUN npm i
+RUN protocol=http \
+	&& if [ "$S3_SECURE" = "true" ]; then protocol=https; fi \
+	&& export VITE_MINIO_BASE_URL="${protocol}://${S3_ENDPOINT}" \
 RUN npm run build
 
 WORKDIR /go/src/github.com/nicolasparada/nakama
