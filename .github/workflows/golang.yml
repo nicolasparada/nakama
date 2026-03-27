@@ -52,7 +52,10 @@ jobs:
           tags: nicolasparada/nakama:latest
           cache-from: type=registry,ref=user/app:latest
           cache-to: type=inline
-          build-args: VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
+          build-args: |
+            VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
+            S3_ENDPOINT=${{ secrets.S3_ENDPOINT }}
+            S3_SECURE=true
 
       - name: Secure copy
         uses: appleboy/scp-action@v1
