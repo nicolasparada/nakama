@@ -21,8 +21,8 @@ WORKDIR /go/src/github.com/nicolasparada/nakama/web/app
 RUN npm i
 RUN protocol=http \
 	&& if [ "$S3_SECURE" = "true" ]; then protocol=https; fi \
-	&& export VITE_MINIO_BASE_URL="${protocol}://${S3_ENDPOINT}"
-RUN npm run build
+	&& export VITE_MINIO_BASE_URL="${protocol}://${S3_ENDPOINT}" \
+	&& npm run build
 
 WORKDIR /go/src/github.com/nicolasparada/nakama
 
