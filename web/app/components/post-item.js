@@ -1293,6 +1293,8 @@ const zoom = mediumZoom()
  */
 function ZoomableImg({ src, width = undefined, height = undefined }) {
     const imgRef = /** @type {import("lit/directives/ref.js").Ref<HTMLImageElement>} */ (createRef())
+    const widthAttr = width !== undefined && width > 0 ? width.toString() : undefined
+    const heightAttr = height !== undefined && height > 0 ? height.toString() : undefined
 
     useEffect(() => {
         if (imgRef.value === undefined) {
@@ -1308,8 +1310,8 @@ function ZoomableImg({ src, width = undefined, height = undefined }) {
 
     return html`<img
         src="${src}"
-        width=${ifDefined(width?.toString())}
-        height=${ifDefined(height?.toString())}
+        width=${ifDefined(widthAttr)}
+        height=${ifDefined(heightAttr)}
         alt=""
         loading="lazy"
         ${ref(imgRef)}
