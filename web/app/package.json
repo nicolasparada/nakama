@@ -5,9 +5,10 @@
         "build": "vite build",
         "preview": "vite preview"
     },
+    "type": "module",
     "module": "main.js",
     "devDependencies": {
-        "vite": "^7.3.0"
+        "vite": "^8.0.0"
     },
     "dependencies": {
         "@nicolasparada/store": "~0.4.0",

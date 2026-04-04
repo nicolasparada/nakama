@@ -40,8 +40,8 @@ func (h *handler) timeline(w http.ResponseWriter, r *http.Request) {
 		if page.Items[i].Post.Reactions == nil {
 			page.Items[i].Post.Reactions = []types.Reaction{} // non null array
 		}
-		if page.Items[i].Post.MediaURLs == nil {
-			page.Items[i].Post.MediaURLs = []string{} // non null array
+		if page.Items[i].Post.Media == nil {
+			page.Items[i].Post.Media = []types.Media{} // non null array
 		}
 	}
 
@@ -72,8 +72,8 @@ func (h *handler) timelineItemStream(w http.ResponseWriter, r *http.Request) {
 		if ti.Post.Reactions == nil {
 			ti.Post.Reactions = []types.Reaction{} // non null array
 		}
-		if ti.Post.MediaURLs == nil {
-			ti.Post.MediaURLs = []string{} // non null array
+		if ti.Post.Media == nil {
+			ti.Post.Media = []types.Media{} // non null array
 		}
 
 		h.writeSSE(w, ti)

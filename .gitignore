@@ -1,10 +1,11 @@
+/nakama
+/media-migrator
 /cockroach-data/**
 /minio-data/**
 /grafana-data/**
 /loki-data/**
 /prometheus-data/**
 /letsencrypt
-/nakama
 /web/static/img/avatars
 /web/static/img/covers
 /web/static/img/media

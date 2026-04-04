@@ -34,7 +34,7 @@ func (s *Service) Timeline(ctx context.Context, in types.ListTimeline) (types.Pa
 		if ti.Post.User != nil {
 			ti.Post.User.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 		}
-		ti.Post.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
+		ti.Post.SetMediaPaths(s.ObjectsBaseURL, MediaBucket)
 		out.Items[i] = ti
 	}
 

@@ -37,13 +37,7 @@ func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.Ti
 		return out, err
 	}
 
-	if mediaTotalBytes(media) > MaxMediaBytes {
-		return out, errs.InvalidArgumentError("media too large")
-	}
-
-	mediaNames := collectMediaNames(media)
-
-	in.SetMedia(mediaNames)
+	in.SetMedia(media)
 	in.SetUserID(uid)
 	in.SetTags(textutil.CollectTags(in.Content))
 
@@ -68,13 +62,13 @@ func (s *Service) CreatePost(ctx context.Context, in types.CreatePost) (types.Ti
 		Content:    in.Content,
 		SpoilerOf:  in.SpoilerOf,
 		NSFW:       in.NSFW,
-		MediaURLs:  mediaNames,
+		Media:      media,
 		Mine:       true,
 		Subscribed: true,
 		CreatedAt:  createdTimelineItem.CreatedAt,
 		UpdatedAt:  createdTimelineItem.CreatedAt,
 	}
-	post.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
+	post.SetMediaPaths(s.ObjectsBaseURL, MediaBucket)
 
 	go s.postCreated(post)
 
@@ -107,7 +101,7 @@ func (s *Service) Posts(ctx context.Context, in types.ListPosts) (types.Page[typ
 		if p.User != nil {
 			p.User.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 		}
-		p.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
+		p.SetMediaPaths(s.ObjectsBaseURL, MediaBucket)
 		out.Items[i] = p
 	}
 
@@ -167,7 +161,7 @@ func (s *Service) Post(ctx context.Context, postID string) (types.Post, error) {
 	if post.User != nil {
 		post.User.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
 	}
-	post.SetMediaURLs(s.ObjectsBaseURL, MediaBucket)
+	post.SetMediaPaths(s.ObjectsBaseURL, MediaBucket)
 
 	return post, nil
 }

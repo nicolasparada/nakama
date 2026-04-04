@@ -36,8 +36,8 @@ func (h *handler) notifications(w http.ResponseWriter, r *http.Request) {
 
 	for i, n := range out.Items {
 		if n.Post != nil {
-			if n.Post.MediaURLs == nil {
-				n.Post.MediaURLs = []string{} // non null array
+			if n.Post.Media == nil {
+				n.Post.Media = []types.Media{} // non null array
 			}
 		}
 		out.Items[i] = n

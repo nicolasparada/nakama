@@ -79,6 +79,14 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		vapidPublicKey      = os.Getenv("VAPID_PUBLIC_KEY")
 	)
 
+	if objectsBaseURL == "" {
+		if s3Secure {
+			objectsBaseURL = fmt.Sprintf("https://%s", s3Endpoint)
+		} else {
+			objectsBaseURL = fmt.Sprintf("http://%s", s3Endpoint)
+		}
+	}
+
 	fs := flag.NewFlagSet("nakama", flag.ExitOnError)
 	fs.Usage = func() {
 		fs.PrintDefaults()

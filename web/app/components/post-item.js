@@ -22,11 +22,22 @@ import "./toast-item.js"
  */
 
 /**
+ * @typedef {import("../types.js").Media} Media
+ */
+
+/**
  * @typedef {import("../types.js").Comment} Comment
  */
 
 /**
  * @typedef {import("./toast-item.js").Toast} Toast
+ */
+
+/**
+ * @typedef {object} MediaScrollerItem
+ * @prop {URL} url
+ * @prop {number=} width
+ * @prop {number=} height
  */
 
 /**
@@ -37,7 +48,7 @@ import "./toast-item.js"
 function PostItem({ post: initialPost, type }) {
     const [auth] = useStore(authStore)
     const [post, setPost] = useState(initialPost)
-    const [mediaURLs, setMediaURLs] = useState([])
+    const [mediaItems, setMediaItems] = useState(/** @type {MediaScrollerItem[]} */ ([]))
     const [showMenu, setShowMenu] = useState(false)
     const [togglingPostSubscription, setTogglingPostSubscription] = useState(false)
     const [updating, setUpdating] = useState(false)
@@ -54,7 +65,7 @@ function PostItem({ post: initialPost, type }) {
     }
 
     const onMenuWrapperBlur = ev => {
-        if (ev.relatedTarget === null || !ev.currentTarget.closest(".post-menu-wrapper").contains(ev.relatedTarget)) {
+        if (ev.relatedTarget === null || !ev.currentTarget?.closest(".post-menu-wrapper").contains(ev.relatedTarget)) {
             setShowMenu(false)
         }
     }
@@ -199,15 +210,23 @@ function PostItem({ post: initialPost, type }) {
     }, [post])
 
     useEffect(() => {
-        const urls = []
-        if ("mediaURLs" in post) {
-            for (const mediaURL of post.mediaURLs) {
-                urls.push(new URL(mediaURL, location.origin))
+        const items = []
+        if ("media" in post) {
+            for (const mediaItem of post.media) {
+                items.push({
+                    url: new URL(mediaItem.path, location.origin),
+                    width: mediaItem.width,
+                    height: mediaItem.height,
+                })
             }
         }
-        urls.push(...collectMediaURLs(post.content))
-        setMediaURLs(urls)
-    }, [post["mediaURLs"], post.content])
+
+        for (const url of collectMediaURLs(post.content)) {
+            items.push({ url })
+        }
+
+        setMediaItems(items)
+    }, ["media" in post ? post.media : undefined, post.content])
 
     useEffect(() => {
         setPost(initialPost)
@@ -459,7 +478,7 @@ function PostItem({ post: initialPost, type }) {
                                         </button>
                                     </div>
                                 `
-                              : html` <media-scroller .urls=${mediaURLs}></media-scroller> `}
+                              : html` <media-scroller .items=${mediaItems}></media-scroller> `}
                       `}
             </div>
             <div class="post-footer">
@@ -712,7 +731,8 @@ customElements.define("add-reaction-btn", component(AddReactionBtn, { useShadowD
 
 const trustedOrigins = [
     location.origin,
-    import.meta.env.VITE_OBJECTS_BASE_URL,
+    import.meta.env.VITE_OBJECTS_BASE_URL ??
+        (location.hostname === "localhost" ? "http://localhost:9000" : "https://objects.nakama.social"),
     "https://i.imgur.com",
     "https://puu.sh",
     "https://cdn.discordapp.com",
@@ -729,16 +749,17 @@ const videoExts = ["mp4", "webm", "mov", "3gp", "ogg"].map(ext => "." + ext)
 
 /**
  *
- * @param {{urls:URL[]}} props
+ * @param {{items:MediaScrollerItem[]}} props
  * @returns
  */
-function MediaScroller({ urls }) {
-    const [items, setItems] = useState([])
+function MediaScroller({ items: mediaItems }) {
+    const [renderedItems, setRenderedItems] = useState(/** @type {import("lit").TemplateResult[]} */ ([]))
 
     useEffect(() => {
         void (async function collectItems() {
             const items = []
-            for (const url of urls) {
+            for (const mediaItem of mediaItems) {
+                const url = mediaItem.url
                 {
                     const result = findYouTubeID(url)
                     if (result.id !== null) {
@@ -875,7 +896,13 @@ function MediaScroller({ urls }) {
                         trustedOrigins.some(o => o.includes("localhost") && url.hostname === "localhost")
                     ) {
                         if (imageExts.some(ext => url.pathname.endsWith(ext))) {
-                            items.push(html`<zoomable-img .src=${url.toString()}></zoomable-img>`)
+                            items.push(
+                                html`<zoomable-img
+                                    .src=${url.toString()}
+                                    .width=${mediaItem.width}
+                                    .height=${mediaItem.height}
+                                ></zoomable-img>`,
+                            )
                             continue
                         }
 
@@ -937,7 +964,13 @@ function MediaScroller({ urls }) {
 
                     switch (parts[0]) {
                         case "image":
-                            items.push(html`<zoomable-img .src=${endpoint}></zoomable-img>`)
+                            items.push(
+                                html`<zoomable-img
+                                    .src=${endpoint}
+                                    .width=${mediaItem.width}
+                                    .height=${mediaItem.height}
+                                ></zoomable-img>`,
+                            )
                             break
                         case "audio":
                             items.push(html`<audio src="${endpoint}" preload="metadata" controls loop></audio>`)
@@ -948,17 +981,17 @@ function MediaScroller({ urls }) {
                     }
                 } catch (_) {}
             }
-            setItems(items)
+            setRenderedItems(items)
         })()
-    }, [urls])
+    }, [mediaItems])
 
-    if (items.length === 0) {
+    if (renderedItems.length === 0) {
         return null
     }
 
     return html`
-        <ul class="media-scroller" data-length="${items.length}">
-            ${items.map(item => html` <li>${item}</li> `)}
+        <ul class="media-scroller" data-length="${renderedItems.length}">
+            ${renderedItems.map(item => html` <li>${item}</li> `)}
         </ul>
     `
 }
@@ -1255,6 +1288,9 @@ function findTikTokVideoID(url) {
 
 const zoom = mediumZoom()
 
+/**
+ * @param {{src: string, width?: number, height?: number}} props
+ */
 function ZoomableImg({ src, width = undefined, height = undefined }) {
     const imgRef = /** @type {import("lit/directives/ref.js").Ref<HTMLImageElement>} */ (createRef())
 
@@ -1270,7 +1306,14 @@ function ZoomableImg({ src, width = undefined, height = undefined }) {
         }
     }, [imgRef.value])
 
-    return html`<img src="${src}" width="${width}" height="${height}" alt="" loading="lazy" ${ref(imgRef)} />`
+    return html`<img
+        src="${src}"
+        width=${ifDefined(width?.toString())}
+        height=${ifDefined(height?.toString())}
+        alt=""
+        loading="lazy"
+        ${ref(imgRef)}
+    />`
 }
 
 // @ts-ignore

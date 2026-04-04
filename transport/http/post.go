@@ -77,8 +77,8 @@ func (h *handler) createPost(w http.ResponseWriter, r *http.Request) {
 		ti.Post.Reactions = []types.Reaction{} // non null array
 	}
 
-	if ti.Post.MediaURLs == nil {
-		ti.Post.MediaURLs = []string{} // non null array
+	if ti.Post.Media == nil {
+		ti.Post.Media = []types.Media{} // non null array
 	}
 
 	h.respond(w, ti, http.StatusCreated)
@@ -130,8 +130,8 @@ func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
 		if page.Items[i].Reactions == nil {
 			page.Items[i].Reactions = []types.Reaction{} // non null array
 		}
-		if page.Items[i].MediaURLs == nil {
-			page.Items[i].MediaURLs = []string{} // non null array
+		if page.Items[i].Media == nil {
+			page.Items[i].Media = []types.Media{} // non null array
 		}
 	}
 
@@ -162,8 +162,8 @@ func (h *handler) postStream(w http.ResponseWriter, r *http.Request) {
 		if p.Reactions == nil {
 			p.Reactions = []types.Reaction{} // non null array
 		}
-		if p.MediaURLs == nil {
-			p.MediaURLs = []string{} // non null array
+		if p.Media == nil {
+			p.Media = []types.Media{} // non null array
 		}
 
 		h.writeSSE(w, p)
@@ -185,8 +185,8 @@ func (h *handler) post(w http.ResponseWriter, r *http.Request) {
 	if p.Reactions == nil {
 		p.Reactions = []types.Reaction{} // non null array
 	}
-	if p.MediaURLs == nil {
-		p.MediaURLs = []string{} // non null array
+	if p.Media == nil {
+		p.Media = []types.Media{} // non null array
 	}
 
 	h.respond(w, p, http.StatusOK)

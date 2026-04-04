@@ -12,6 +12,7 @@ import (
 const (
 	PostContentMaxLength = 2048
 	PostSpoilerMaxLength = 64
+	PostMaxMediaItems    = 15
 )
 
 type Post struct {
@@ -20,7 +21,7 @@ type Post struct {
 	Content       string     `json:"content"`
 	SpoilerOf     *string    `json:"spoilerOf" db:"spoiler_of"`
 	NSFW          bool       `json:"nsfw"`
-	MediaURLs     []string   `json:"mediaURLs" db:"media"`
+	Media         []Media    `json:"media" db:"media"`
 	Reactions     []Reaction `json:"reactions"`
 	CommentsCount int        `json:"commentsCount" db:"comments_count"`
 	CreatedAt     time.Time  `json:"createdAt" db:"created_at"`
@@ -30,26 +31,26 @@ type Post struct {
 	Subscribed    bool       `json:"subscribed" db:"subscribed,omitempty"`
 }
 
-func (p *Post) SetMediaURLs(base, bucket string) {
-	for i, media := range p.MediaURLs {
-		p.MediaURLs[i] = makeURL(base, bucket, media)
+func (p *Post) SetMediaPaths(base, bucket string) {
+	for i, media := range p.Media {
+		p.Media[i].Path = makeURL(base, bucket, media.Path)
 	}
 }
 
 type PostPreview struct {
-	ID        string   `json:"id"`
-	UserID    string   `json:"userID"`
-	Content   string   `json:"content"`
-	SpoilerOf *string  `json:"spoilerOf"`
-	NSFW      bool     `json:"nsfw"`
-	MediaURLs []string `json:"mediaURLs"`
+	ID        string  `json:"id"`
+	UserID    string  `json:"userID"`
+	Content   string  `json:"content"`
+	SpoilerOf *string `json:"spoilerOf"`
+	NSFW      bool    `json:"nsfw"`
+	Media     []Media `json:"media"`
 
 	Mine bool `json:"mine"`
 }
 
-func (p *PostPreview) SetMediaURLs(base, bucket string) {
-	for i, media := range p.MediaURLs {
-		p.MediaURLs[i] = makeURL(base, bucket, media)
+func (p *PostPreview) SetMediaPaths(base, bucket string) {
+	for i, media := range p.Media {
+		p.Media[i].Path = makeURL(base, bucket, media.Path)
 	}
 }
 
@@ -60,7 +61,7 @@ type CreatePost struct {
 	MediaReaders []io.ReadSeeker `json:"-"`
 	userID       string
 	tags         []string
-	media        []string
+	media        []Media
 }
 
 func (in *CreatePost) SetUserID(userID string) {
@@ -79,11 +80,11 @@ func (in CreatePost) Tags() []string {
 	return in.tags
 }
 
-func (in *CreatePost) SetMedia(media []string) {
+func (in *CreatePost) SetMedia(media []Media) {
 	in.media = media
 }
 
-func (in CreatePost) Media() []string {
+func (in CreatePost) Media() []Media {
 	return in.media
 }
 
@@ -100,6 +101,10 @@ func (in *CreatePost) Validate() error {
 		if *in.SpoilerOf == "" || utf8.RuneCountInString(*in.SpoilerOf) > PostSpoilerMaxLength {
 			return errs.InvalidArgumentError("invalid spoiler")
 		}
+	}
+
+	if len(in.MediaReaders) > PostMaxMediaItems {
+		return errs.InvalidArgumentError("too many media items")
 	}
 
 	return nil

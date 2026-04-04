@@ -52,6 +52,23 @@ CREATE TABLE IF NOT EXISTS posts (
     INDEX sorted_posts (created_at DESC, id)
 );
 
+ALTER TABLE posts ADD COLUMN media_jsonb JSONB;
+
+UPDATE posts
+SET media_jsonb = CASE
+    WHEN media IS NULL THEN NULL
+    ELSE COALESCE(
+        (
+            SELECT jsonb_agg(jsonb_build_object('path', path))
+            FROM unnest(media) AS t(path)
+        ),
+        '[]'::JSONB
+    )
+END;
+
+ALTER TABLE posts DROP COLUMN media;
+ALTER TABLE posts RENAME COLUMN media_jsonb TO media;
+
 CREATE TABLE IF NOT EXISTS post_reactions (
     user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
     post_id UUID NOT NULL REFERENCES posts ON DELETE CASCADE,

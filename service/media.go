@@ -1,9 +1,7 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"image/gif"
 	"image/jpeg"
@@ -24,10 +22,7 @@ import (
 
 const MediaBucket = "media"
 
-const (
-	MaxMediaItemBytes = 5 << 20  // 5MB
-	MaxMediaBytes     = 15 << 20 // 15MB
-)
+const MaxMediaItemBytes = 5 << 20 // 5MB
 
 const ErrMediaItemTooLarge = errs.InvalidArgumentError("media item too large")
 
@@ -46,10 +41,10 @@ func (svc *Service) storeMedia(ctx context.Context, media []types.Media) (func(c
 	var uploadItems []minio.Upload
 	for _, m := range media {
 		uploadItems = append(uploadItems, minio.Upload{
-			Key:         m.Name,
-			Reader:      bytes.NewReader(m.Contents),
-			FileSize:    int64(len(m.Contents)),
+			Key:         m.Path,
+			Reader:      m.Reader(),
 			ContentType: m.ContentType,
+			FileSize:    -1,
 		})
 	}
 
@@ -77,17 +72,14 @@ func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
 				return errs.InvalidArgumentError("unsupported media item format")
 			}
 
-			contents, err := io.ReadAll(io.LimitReader(r, MaxMediaItemBytes+1))
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				return ErrMediaItemTooLarge
-			}
-
+			width, height, err := decodeMedia(r, ct)
 			if err != nil {
-				return fmt.Errorf("read media item contents: %w", err)
+				return err
 			}
 
-			if err := validateImage(bytes.NewReader(contents), ct); err != nil {
-				return err
+			_, err = r.Seek(0, io.SeekStart)
+			if err != nil {
+				return fmt.Errorf("seek media item to start: %w", err)
 			}
 
 			name, err := gonanoid.New()
@@ -98,11 +90,14 @@ func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
 			name += contentTypeExtension(ct)
 
 			mu.Lock()
-			out[i] = types.Media{
-				Name:        name,
+			media := types.Media{
+				Path:        name,
+				Width:       width,
+				Height:      height,
 				ContentType: ct,
-				Contents:    contents,
 			}
+			media.SetReader(r)
+			out[i] = media
 			mu.Unlock()
 
 			return nil
@@ -116,59 +111,41 @@ func processMedia(readers []io.ReadSeeker) ([]types.Media, error) {
 	return out, nil
 }
 
-func collectMediaNames(media []types.Media) []string {
-	if len(media) == 0 {
-		return nil
-	}
-
-	names := make([]string, len(media))
-	for i, m := range media {
-		names[i] = m.Name
-	}
-	return names
-}
-
-func mediaTotalBytes(media []types.Media) int64 {
-	var total int64
-	for _, m := range media {
-		total += int64(len(m.Contents))
-	}
-	return total
-}
-
 func isMediaContentTypeSupported(ct string) bool {
 	_, ok := imageContentTypeToExtension[ct]
 	return ok
 }
 
-func validateImage(r io.Reader, ct string) error {
+func decodeMedia(r io.Reader, ct string) (uint, uint, error) {
+	r = io.LimitReader(r, MaxMediaItemBytes+1)
+
 	switch ct {
 	case "image/jpeg":
-		_, err := jpeg.Decode(r)
+		img, err := jpeg.Decode(r)
 		if err != nil {
-			return errs.InvalidArgumentError("invalid media item format")
+			return 0, 0, errs.InvalidArgumentError("invalid media item format")
 		}
-		return nil
+		return uint(img.Bounds().Dx()), uint(img.Bounds().Dy()), nil
 	case "image/png":
-		_, err := png.Decode(r)
+		img, err := png.Decode(r)
 		if err != nil {
-			return errs.InvalidArgumentError("invalid media item format")
+			return 0, 0, errs.InvalidArgumentError("invalid media item format")
 		}
-		return nil
+		return uint(img.Bounds().Dx()), uint(img.Bounds().Dy()), nil
 	case "image/gif":
-		_, err := gif.DecodeAll(r)
+		img, err := gif.DecodeAll(r)
 		if err != nil {
-			return errs.InvalidArgumentError("invalid media item format")
+			return 0, 0, errs.InvalidArgumentError("invalid media item format")
 		}
-		return nil
+		return uint(img.Config.Width), uint(img.Config.Height), nil
 	case "image/webp":
-		_, err := webp.Decode(r)
+		img, err := webp.Decode(r)
 		if err != nil {
-			return errs.InvalidArgumentError("invalid media item format")
+			return 0, 0, errs.InvalidArgumentError("invalid media item format")
 		}
-		return nil
+		return uint(img.Bounds().Dx()), uint(img.Bounds().Dy()), nil
 	default:
-		return errs.InvalidArgumentError("unsupported media item format")
+		return 0, 0, errs.InvalidArgumentError("unsupported media item format")
 	}
 }
 

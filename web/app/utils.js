@@ -23,9 +23,9 @@ export function linkify(s) {
             return "noopener noreferrer"
         },
         formatHref: {
-            mention: (href) => "/@" + href.substr(1),
-            hashtag: (href) => "/tagged-posts/" + href.substr(1),
-        }
+            mention: href => "/@" + href.substr(1),
+            hashtag: href => "/tagged-posts/" + href.substr(1),
+        },
     })
 }
 
@@ -38,7 +38,7 @@ export function collectMediaURLs(s) {
         if (item.type === "url") {
             try {
                 out.push(new URL(item.href, location.origin))
-            } catch (_) { }
+            } catch (_) {}
         }
     }
     return out

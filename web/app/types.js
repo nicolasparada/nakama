@@ -66,12 +66,20 @@
  * @prop {string=} spoilerOf
  * @prop {ReactionCount[]} reactions
  * @prop {number} commentsCount
- * @prop {string[]} mediaURLs
+ * @prop {Media[]} media
  * @prop {string|Date} createdAt
  * @prop {string|Date} updatedAt
  * @prop {User=} user
  * @prop {boolean} mine
  * @prop {boolean} subscribed
+ */
+
+/**
+ * @typedef {object} Media
+ * @prop {string} path
+ * @prop {number} width
+ * @prop {number} height
+ * @prop {string} contentType
  */
 
 /**
@@ -81,7 +89,7 @@
  * @prop {string} content
  * @prop {string=} spoilerOf
  * @prop {boolean} nsfw
- * @prop {string[]} mediaURLs
+ * @prop {Media[]} media
  * @prop {boolean} mine
  */
 
