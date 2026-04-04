@@ -50,33 +50,33 @@ function HomePage() {
     const [mode, setMode] = useState(() => {
         return localStorage.getItem("home-page-mode") === "timeline" ? "timeline" : "posts"
     })
-    const [posts, setPosts] = useState(/** @type {Post[]|TimelineItem[]} */([]))
-    const [endCursor, setEndCursor] = useState(/** @type {string|null} */(null))
+    const [posts, setPosts] = useState(/** @type {Post[]|TimelineItem[]} */ ([]))
+    const [endCursor, setEndCursor] = useState(/** @type {string|null} */ (null))
     const [fetching, setFetching] = useState(posts.length === 0)
-    const [err, setErr] = useState(/** @type {Error|null} */(null))
+    const [err, setErr] = useState(/** @type {Error|null} */ (null))
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMore, setNoMore] = useState(false)
     const [endReached, setEndReached] = useState(false)
-    const [queue, setQueue] = useState(/** @type {Post[]|TimelineItem[]} */([]))
-    const [toast, setToast] = useState(/** @type {Toast|null} */(null))
+    const [queue, setQueue] = useState(/** @type {Post[]|TimelineItem[]} */ ([]))
+    const [toast, setToast] = useState(/** @type {Toast|null} */ (null))
     const postsRef = useRef(posts)
     const queueRef = useRef(queue)
 
     /**
-     * @param {Post[]|TimelineItem[]} items 
-     * @param {TimelineItem} timelineItem 
+     * @param {Post[]|TimelineItem[]} items
+     * @param {TimelineItem} timelineItem
      * @returns {boolean}
      */
     const hasTimelineItem = (items, timelineItem) => {
-        return items.some(i =>
-            i.id === timelineItem.id
-            || (("timelineItemID" in i) && i.timelineItemID === timelineItem.timelineItemID)
+        return items.some(
+            i =>
+                i.id === timelineItem.id || ("timelineItemID" in i && i.timelineItemID === timelineItem.timelineItemID),
         )
     }
 
     /**
-     * @param {Post[]} items 
-     * @param {Post} post 
+     * @param {Post[]} items
+     * @param {Post} post
      * @returns {boolean}
      */
     const hasPost = (items, post) => {
@@ -101,7 +101,7 @@ function HomePage() {
         if (hasPost(postsRef.current, post) || hasPost(queueRef.current, post)) {
             return
         }
-        
+
         setQueue(pp => [post, ...pp])
     }
 
@@ -126,22 +126,33 @@ function HomePage() {
         }
 
         setLoadingMore(true)
-        const promise = mode === "timeline" ? fetchTimeline({pageArgs: {after:endCursor}}) : fetchPosts({pageArgs:{after:endCursor}})
-        promise.then(page => {
-            setPosts(tt => [...tt, ...page.items])
-            setEndCursor(page.pageInfo.endCursor)
+        const promise =
+            mode === "timeline"
+                ? fetchTimeline({ pageArgs: { after: endCursor } })
+                : fetchPosts({ pageArgs: { after: endCursor } })
+        promise
+            .then(
+                page => {
+                    setPosts(tt => [...tt, ...page.items])
+                    setEndCursor(page.pageInfo.endCursor)
 
-            if (!page.pageInfo.hasNextPage) {
-                setNoMore(true)
-                setEndReached(true)
-            }
-        }, err => {
-            const msg = (mode === "timeline" ? "could not fetch more timeline items: " : "could not fetch more posts: ") + err.message
-            console.error(msg)
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setLoadingMore(false)
-        })
+                    if (!page.pageInfo.hasNextPage) {
+                        setNoMore(true)
+                        setEndReached(true)
+                    }
+                },
+                err => {
+                    const msg =
+                        (mode === "timeline"
+                            ? "could not fetch more timeline items: "
+                            : "could not fetch more posts: ") + err.message
+                    console.error(msg)
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setLoadingMore(false)
+            })
     }
 
     const onTimelineModeClick = () => {
@@ -172,91 +183,127 @@ function HomePage() {
         setEndReached(false)
 
         setFetching(true)
-        const promise = mode === "timeline" ? fetchTimeline({pageArgs: {}}) : fetchPosts({pageArgs:{}})
-        promise.then(page => {
-            setPosts(page.items)
-            setEndCursor(page.pageInfo.endCursor)
+        const promise = mode === "timeline" ? fetchTimeline({ pageArgs: {} }) : fetchPosts({ pageArgs: {} })
+        promise
+            .then(
+                page => {
+                    setPosts(page.items)
+                    setEndCursor(page.pageInfo.endCursor)
 
-            if (!page.pageInfo.hasNextPage) {
-                setNoMore(true)
-            }
-        }, err => {
-            console.error(mode === "timeline" ? "could not fetch timeline:" : "could not fetch posts:", err)
-            if (err.name === "UnauthenticatedError") {
-                setAuth(null)
-                setLocalAuth(null)
-            }
+                    if (!page.pageInfo.hasNextPage) {
+                        setNoMore(true)
+                    }
+                },
+                err => {
+                    console.error(mode === "timeline" ? "could not fetch timeline:" : "could not fetch posts:", err)
+                    if (err.name === "UnauthenticatedError") {
+                        setAuth(null)
+                        setLocalAuth(null)
+                    }
 
-            setErr(err)
-        }).finally(() => {
-            setFetching(false)
-        })
+                    setErr(err)
+                },
+            )
+            .finally(() => {
+                setFetching(false)
+            })
     }, [mode])
 
     useEffect(() => {
-        return mode === "timeline" ?
-            subscribeToTimeline(onNewTimelineItemArrive) :
-            subscribeToPosts(onNewPostArrive)
+        return mode === "timeline" ? subscribeToTimeline(onNewTimelineItemArrive) : subscribeToPosts(onNewPostArrive)
     }, [mode])
 
     return html`
         <main class="container home-page">
             <h1>${mode === "timeline" ? translate("homePage.title.timeline") : translate("homePage.title.posts")}</h1>
             <post-form @timeline-item-created=${onTimelineItemCreated}></post-form>
-            ${queue.length !== 0 ? html`
-                <button class="queue-btn" @click=${onQueueBtnClick}>${mode === "timeline"
-                ? (queue.length === 1
-                    ? translate("homePage.queueBtn.newTimelineItem")
-                    : translate("homePage.queueBtn.newTimelineItems", { length: queue.length }))
-                : (queue.length === 1
-                    ? translate("homePage.queueBtn.newPost")
-                    : translate("homePage.queueBtn.newPosts", { length: queue.length }))}
-                </button>
-            ` : null}
+            ${queue.length !== 0
+                ? html`
+                      <button class="queue-btn" @click=${onQueueBtnClick}>
+                          ${mode === "timeline"
+                              ? queue.length === 1
+                                  ? translate("homePage.queueBtn.newTimelineItem")
+                                  : translate("homePage.queueBtn.newTimelineItems", { length: queue.length })
+                              : queue.length === 1
+                                ? translate("homePage.queueBtn.newPost")
+                                : translate("homePage.queueBtn.newPosts", { length: queue.length })}
+                      </button>
+                  `
+                : null}
             <div role="tablist">
-                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${mode === "posts" ? "true" : "false"} @click=${onPostsModeClick}>
+                <button
+                    role="tab"
+                    id="${mode}-tab"
+                    aria-controls="${mode}-tabpanel"
+                    aria-selected=${mode === "posts" ? "true" : "false"}
+                    @click=${onPostsModeClick}
+                >
                     ${translate("homePage.tabs.posts")}
                 </button>
-                <button role="tab" id="${mode}-tab" aria-controls="${mode}-tabpanel" aria-selected=${mode === "timeline" ? "true" : "false"} @click=${onTimelineModeClick}>
+                <button
+                    role="tab"
+                    id="${mode}-tab"
+                    aria-controls="${mode}-tabpanel"
+                    aria-selected=${mode === "timeline" ? "true" : "false"}
+                    @click=${onTimelineModeClick}
+                >
                     ${translate("homePage.tabs.timeline")}
                 </button>
             </div>
-            ${err !== null ? html`
-                <p class="error" role="alert">${mode === "timeline"
-                ? translate("homePage.err.timeline")
-                : translate("homePage.err.posts")}
-                    ${translate(err.name)}
-                </p>
-            ` : fetching ? html`
-                <p class="loader" aria-busy="true" aria-live="polite">${mode === "timeline"
-                ? translate("homePage.loading.timeline")
-                : translate("homePage.loading.posts")}
-                </p>
-            ` : html`
-                <div role="tabpanel" id="${mode}-tabpanel" aria-labelledby="${mode}-tab">
-                ${posts.length === 0 ? html`
-                    <p>${mode === "timeline"
-                    ? translate("homePage.empty.timeline")
-                    : translate("homePage.empty.posts")}
-                    </p>
-                ` : html`
-                    <div class="posts" role="feed">
-                        ${repeat(posts, p => p.id, p => html`<post-item .post=${p} .type=${mode === "timeline" ? "timeline_item" : "post"}
-                            @removed-from-timeline=${onRemovedFromTimeline}
-                            @resource-deleted=${onPostDeleted}></post-item>`)}
-                    </div>
-                    ${!noMore ? html`
-                        <intersectable-comp @is-intersecting=${loadMore}></intersectable-comp>
-                        <p class="loader" aria-busy="true" aria-live="polite">${mode === "timeline"
-                        ? translate("homePage.loading.timeline")
-                        : translate("homePage.loading.posts")}
+            ${err !== null
+                ? html`
+                      <p class="error" role="alert">
+                          ${mode === "timeline" ? translate("homePage.err.timeline") : translate("homePage.err.posts")}
+                          ${translate(err.name)}
+                      </p>
+                  `
+                : fetching
+                  ? html`
+                        <p class="loader" aria-busy="true" aria-live="polite">
+                            ${mode === "timeline"
+                                ? translate("homePage.loading.timeline")
+                                : translate("homePage.loading.posts")}
                         </p>
-                    ` : endReached ? html`
-                        <p>${translate("homePage.end")}</p>
-                    ` : null}
-                `}
-                </div>
-            `}
+                    `
+                  : html`
+                        <div role="tabpanel" id="${mode}-tabpanel" aria-labelledby="${mode}-tab">
+                            ${posts.length === 0
+                                ? html`
+                                      <p>
+                                          ${mode === "timeline"
+                                              ? translate("homePage.empty.timeline")
+                                              : translate("homePage.empty.posts")}
+                                      </p>
+                                  `
+                                : html`
+                                      <div class="posts" role="feed">
+                                          ${repeat(
+                                              posts,
+                                              p => p.id,
+                                              p =>
+                                                  html`<post-item
+                                                      .post=${p}
+                                                      .type=${mode === "timeline" ? "timeline_item" : "post"}
+                                                      @removed-from-timeline=${onRemovedFromTimeline}
+                                                      @resource-deleted=${onPostDeleted}
+                                                  ></post-item>`,
+                                          )}
+                                      </div>
+                                      ${!noMore
+                                          ? html`
+                                                <intersectable-comp @is-intersecting=${loadMore}></intersectable-comp>
+                                                <p class="loader" aria-busy="true" aria-live="polite">
+                                                    ${mode === "timeline"
+                                                        ? translate("homePage.loading.timeline")
+                                                        : translate("homePage.loading.posts")}
+                                                </p>
+                                            `
+                                          : endReached
+                                            ? html` <p>${translate("homePage.end")}</p> `
+                                            : null}
+                                  `}
+                        </div>
+                    `}
         </main>
         ${toast !== null ? html`<toast-item .toast=${toast}></toast-item>` : null}
     `
@@ -277,9 +324,9 @@ function PostForm() {
     const [initialTextAreaHeight, setInitialTextAreaHeight] = useState(0)
     const mediaInputRef = /** @type {import("lit/directives/ref.js").Ref<HTMLInputElement>} */ (createRef())
     const textAreaRef = /** @type {import("lit/directives/ref.js").Ref<HTMLTextAreaElement>} */ (createRef())
-    const textcompleteRef = useRef(/** @type {Textcomplete} */(null))
+    const textcompleteRef = useRef(/** @type {Textcomplete} */ (null))
     const [toast, setToast] = useState(null)
-    const [previews, setPreviews] = useState(/** @type {HTMLImageElement[]} */[])
+    const [previews, setPreviews] = useState(/** @type {HTMLImageElement[]} */ [])
 
     /**
      * @param {import("./../types.js").TimelineItem} timelineItem
@@ -318,24 +365,29 @@ function PostForm() {
         }
 
         setFetching(true)
-        createTimelineItem(body).then(ti => {
-            ti.user = auth.user
-            setContent("")
-            setNSFW(false)
-            setIsSpoiler(false)
-            setSpoilerOf("")
-            setPreviews([])
-            textcompleteRef.current.hide()
-            mediaInput.value = ""
+        createTimelineItem(body)
+            .then(
+                ti => {
+                    ti.user = auth.user
+                    setContent("")
+                    setNSFW(false)
+                    setIsSpoiler(false)
+                    setSpoilerOf("")
+                    setPreviews([])
+                    textcompleteRef.current.hide()
+                    mediaInput.value = ""
 
-            dispatchTimelineItemCreated(ti)
-        }, err => {
-            const msg = getTranslation("postForm.err") + " " + getTranslation(err.name)
-            console.error(msg)
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setFetching(false)
-        })
+                    dispatchTimelineItemCreated(ti)
+                },
+                err => {
+                    const msg = getTranslation("postForm.err") + " " + getTranslation(err.name)
+                    console.error(msg)
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setFetching(false)
+            })
     }
 
     const onTextAreaInput = ev => {
@@ -388,7 +440,11 @@ function PostForm() {
     }
 
     const onMediaChange = ev => {
-        if (mediaInputRef.value === null || mediaInputRef.value.files === null || mediaInputRef.value.files.length === 0) {
+        if (
+            mediaInputRef.value === null ||
+            mediaInputRef.value.files === null ||
+            mediaInputRef.value.files.length === 0
+        ) {
             return
         }
 
@@ -400,9 +456,13 @@ function PostForm() {
             const src = URL.createObjectURL(file)
 
             const img = document.createElement("img")
-            img.addEventListener("load", () => {
-                URL.revokeObjectURL(src)
-            }, { once: true })
+            img.addEventListener(
+                "load",
+                () => {
+                    URL.revokeObjectURL(src)
+                },
+                { once: true },
+            )
             img.src = src
 
             images.push(img)
@@ -421,11 +481,14 @@ function PostForm() {
             return
         }
 
-        import("dialog-polyfill").then(m => m.default).then(dialogPolyfill => {
-            dialogPolyfill.registerDialog(el)
-        }).catch(err => {
-            console.error("could not import dialog polyfill:", err)
-        })
+        import("dialog-polyfill")
+            .then(m => m.default)
+            .then(dialogPolyfill => {
+                dialogPolyfill.registerDialog(el)
+            })
+            .catch(err => {
+                console.error("could not import dialog polyfill:", err)
+            })
     }, [spoilerOfDialogRef.value])
 
     useEffect(() => {
@@ -436,16 +499,23 @@ function PostForm() {
         const el = /** @type {HTMLTextAreaElement} */ (textAreaRef.value)
 
         const editor = new TextareaEditor(el)
-        textcompleteRef.current = new Textcomplete(editor, [{
-            match: reMention,
-            search: async (term, cb) => {
-                cb(await fetchUsernames({ startingWith: term }).then(page => page.items, err => {
-                    console.error("could not fetch mentions usernames:", err)
-                    return []
-                }))
+        textcompleteRef.current = new Textcomplete(editor, [
+            {
+                match: reMention,
+                search: async (term, cb) => {
+                    cb(
+                        await fetchUsernames({ startingWith: term }).then(
+                            page => page.items,
+                            err => {
+                                console.error("could not fetch mentions usernames:", err)
+                                return []
+                            },
+                        ),
+                    )
+                },
+                replace: username => `@${username} `,
             },
-            replace: username => `@${username} `,
-        }])
+        ])
 
         setInitialTextAreaHeight(textAreaRef.value.scrollHeight)
 
@@ -499,7 +569,8 @@ function PostForm() {
 
     return html`
         <form class="post-form${content !== "" ? " has-content" : ""}" name="post-form" @submit=${onSubmit}>
-            <textarea name="content"
+            <textarea
+                name="content"
                 placeholder="${translate("postForm.placeholder")}"
                 maxlenght="2048"
                 aria-label="${translate("postForm.textAreaLabel")}"
@@ -507,52 +578,93 @@ function PostForm() {
                 .value=${content}
                 .disabled=${fetching}
                 ${ref(textAreaRef)}
-                @input=${onTextAreaInput}></textarea>
-            ${content !== "" ? html`
-            <div class="post-form-controls">
-                <div class="post-form-media">
-                    <input type="file" name="media" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden @change=${onMediaChange} .disabled=${fetching} .ref=${ref(mediaInputRef)}>
-                    <button type="button" .disabled=${fetching} @click=${onMediaBtnClick} title="Add media">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g data-name="Layer 2"><g data-name="image"><rect width="24" height="24" opacity="0"/><path d="M18 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3zM6 5h12a1 1 0 0 1 1 1v8.36l-3.2-2.73a2.77 2.77 0 0 0-3.52 0L5 17.7V6a1 1 0 0 1 1-1zm12 14H6.56l7-5.84a.78.78 0 0 1 .93 0L19 17v1a1 1 0 0 1-1 1z"/><circle cx="8" cy="8.5" r="1.5"/></g></g></svg>
-                    </button>
-                </div>
-                <div class="post-form-options">
-                    <label class="switch-wrapper">
-                        <input type="checkbox" role="switch" name="nsfw" .disabled=${fetching} .checked=${nsfw} @change=${onNSFWInputChange}>
-                        <span>${translate("postForm.nsfwLabel")}</span>
-                    </label>
-                    <label class="switch-wrapper">
-                        <input type="checkbox" role="switch" name="is_spoiler" .disabled=${fetching} .checked=${isSpoiler} @change=${onIsSpoilerInputChange}>
-                        <span>${spoilerOf.trim() === ""
-                ? translate("postForm.spoilerLabel")
-                : translate("postForm.spoilerOfLabel", { value: spoilerOf.trim() })}
-                        </span>
-                    </label>
-                </div>
-                <button class="submit-btn" .disabled=${fetching}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                        <g data-name="Layer 2">
-                            <g data-name="paper-plane">
-                                <rect width="24" height="24" opacity="0" />
-                                <path
-                                    d="M21 4a1.31 1.31 0 0 0-.06-.27v-.09a1 1 0 0 0-.2-.3 1 1 0 0 0-.29-.19h-.09a.86.86 0 0 0-.31-.15H20a1 1 0 0 0-.3 0l-18 6a1 1 0 0 0 0 1.9l8.53 2.84 2.84 8.53a1 1 0 0 0 1.9 0l6-18A1 1 0 0 0 21 4zm-4.7 2.29l-5.57 5.57L5.16 10zM14 18.84l-1.86-5.57 5.57-5.57z" />
-                            </g>
-                        </g>
-                    </svg>
-                    <span>${translate("postForm.submit")}</span>
-                </button>
-                </div>
-            ` : null}
-            ${previews.length !== 0 ? html`
-                <ul class="media-scroller small" data-length="${previews.length}">
-                ${previews.map(img => html`<li>${img}</li>`)}
-                </ul>
-            ` : null}
+                @input=${onTextAreaInput}
+            ></textarea>
+            ${content !== ""
+                ? html`
+                      <div class="post-form-controls">
+                          <div class="post-form-media">
+                              <input
+                                  type="file"
+                                  name="media"
+                                  accept="image/png,image/jpeg,image/gif,image/webp"
+                                  multiple
+                                  hidden
+                                  @change=${onMediaChange}
+                                  .disabled=${fetching}
+                                  .ref=${ref(mediaInputRef)}
+                              />
+                              <button type="button" .disabled=${fetching} @click=${onMediaBtnClick} title="Add media">
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                      <g data-name="Layer 2">
+                                          <g data-name="image">
+                                              <rect width="24" height="24" opacity="0" />
+                                              <path
+                                                  d="M18 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3zM6 5h12a1 1 0 0 1 1 1v8.36l-3.2-2.73a2.77 2.77 0 0 0-3.52 0L5 17.7V6a1 1 0 0 1 1-1zm12 14H6.56l7-5.84a.78.78 0 0 1 .93 0L19 17v1a1 1 0 0 1-1 1z"
+                                              />
+                                              <circle cx="8" cy="8.5" r="1.5" />
+                                          </g>
+                                      </g>
+                                  </svg>
+                              </button>
+                          </div>
+                          <div class="post-form-options">
+                              <label class="switch-wrapper">
+                                  <input
+                                      type="checkbox"
+                                      role="switch"
+                                      name="nsfw"
+                                      .disabled=${fetching}
+                                      .checked=${nsfw}
+                                      @change=${onNSFWInputChange}
+                                  />
+                                  <span>${translate("postForm.nsfwLabel")}</span>
+                              </label>
+                              <label class="switch-wrapper">
+                                  <input
+                                      type="checkbox"
+                                      role="switch"
+                                      name="is_spoiler"
+                                      .disabled=${fetching}
+                                      .checked=${isSpoiler}
+                                      @change=${onIsSpoilerInputChange}
+                                  />
+                                  <span
+                                      >${spoilerOf.trim() === ""
+                                          ? translate("postForm.spoilerLabel")
+                                          : translate("postForm.spoilerOfLabel", { value: spoilerOf.trim() })}
+                                  </span>
+                              </label>
+                          </div>
+                          <button class="submit-btn" .disabled=${fetching}>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                  <g data-name="Layer 2">
+                                      <g data-name="paper-plane">
+                                          <rect width="24" height="24" opacity="0" />
+                                          <path
+                                              d="M21 4a1.31 1.31 0 0 0-.06-.27v-.09a1 1 0 0 0-.2-.3 1 1 0 0 0-.29-.19h-.09a.86.86 0 0 0-.31-.15H20a1 1 0 0 0-.3 0l-18 6a1 1 0 0 0 0 1.9l8.53 2.84 2.84 8.53a1 1 0 0 0 1.9 0l6-18A1 1 0 0 0 21 4zm-4.7 2.29l-5.57 5.57L5.16 10zM14 18.84l-1.86-5.57 5.57-5.57z"
+                                          />
+                                      </g>
+                                  </g>
+                              </svg>
+                              <span>${translate("postForm.submit")}</span>
+                          </button>
+                      </div>
+                  `
+                : null}
+            ${previews.length !== 0
+                ? html`
+                      <ul class="media-scroller small" data-length="${previews.length}">
+                          ${previews.map(img => html`<li>${img}</li>`)}
+                      </ul>
+                  `
+                : null}
         </form>
         <dialog .ref=${ref(spoilerOfDialogRef)} @close=${onSpoilerOfDialogClose}>
             <form method="dialog" class="spoiler-of-form" @submit=${onSpoilerOfFormSubmit}>
                 <label for="spoiler-of-input">${translate("postForm.dialog.spoilerOfLabel")}</label>
-                <input type="text"
+                <input
+                    type="text"
                     id="spoiler-of-input"
                     name="spoiler_of"
                     placeholder="${translate("postForm.dialog.spoilerOfPlaceholder")}"
@@ -560,10 +672,13 @@ function PostForm() {
                     autocomplete="off"
                     .value=${spoilerOf}
                     ?required=${isSpoiler}
-                    @input=${onSpoilerOfInput}>
+                    @input=${onSpoilerOfInput}
+                />
                 <div class="spoiler-of-controls">
                     <button>${translate("postForm.dialog.ok")}</button>
-                    <button type="reset" @click=${onSpoilerOfCancelBtnClick}>${translate("postForm.dialog.cancel")}</button>
+                    <button type="reset" @click=${onSpoilerOfCancelBtnClick}>
+                        ${translate("postForm.dialog.cancel")}
+                    </button>
                 </div>
             </form>
         </dialog>
@@ -593,8 +708,8 @@ function subscribeToTimeline(cb) {
 }
 
 /**
- * 
- * @param {ListTimeline} input 
+ *
+ * @param {ListTimeline} input
  * @returns {Promise<Page<TimelineItem>>}
  */
 function fetchTimeline(input) {
@@ -662,7 +777,7 @@ function fetchPosts(input) {
 }
 
 /**
- * @param {ListUsernames} input 
+ * @param {ListUsernames} input
  * @returns {Promise<Page<string>>}
  */
 function fetchUsernames(input) {
@@ -680,6 +795,5 @@ function fetchUsernames(input) {
     if (input.pageArgs?.before != null) {
         u.searchParams.set("before", input.pageArgs.before)
     }
-    return request("GET", u.toString())
-        .then(resp => resp.body)
+    return request("GET", u.toString()).then(resp => resp.body)
 }

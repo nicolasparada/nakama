@@ -41,6 +41,12 @@ import "./toast-item.js"
  */
 
 /**
+ * @typedef {object} RenderedMediaScrollerItem
+ * @prop {import("lit").TemplateResult} content
+ * @prop {boolean=} fullWidth
+ */
+
+/**
  * @param {object} props
  * @param {Post|Comment|TimelineItem} props.post
  * @param {"timeline_item"|"post"|"comment"} props.type
@@ -753,17 +759,26 @@ const videoExts = ["mp4", "webm", "mov", "3gp", "ogg"].map(ext => "." + ext)
  * @returns
  */
 function MediaScroller({ items: mediaItems }) {
-    const [renderedItems, setRenderedItems] = useState(/** @type {import("lit").TemplateResult[]} */ ([]))
+    const [renderedItems, setRenderedItems] = useState(/** @type {RenderedMediaScrollerItem[]} */ ([]))
 
     useEffect(() => {
         void (async function collectItems() {
-            const items = []
+            const items = /** @type {RenderedMediaScrollerItem[]} */ ([])
+            /**
+             * @param {import("lit").TemplateResult} content
+             * @param {{fullWidth?: boolean}=} options
+             */
+            const pushItem = (content, options = {}) => {
+                const { fullWidth = false } = options
+                items.push({ content, fullWidth })
+            }
+
             for (const mediaItem of mediaItems) {
                 const url = mediaItem.url
                 {
                     const result = findYouTubeID(url)
                     if (result.id !== null) {
-                        items.push(
+                        pushItem(
                             html`<iframe
                                 src="https://www.youtube-nocookie.com/embed/${result.id}${result.seconds !== null
                                     ? "?start=" + result.seconds
@@ -773,6 +788,7 @@ function MediaScroller({ items: mediaItems }) {
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowfullscreen
                             ></iframe>`,
+                            { fullWidth: true },
                         )
                         continue
                     }
@@ -781,7 +797,7 @@ function MediaScroller({ items: mediaItems }) {
                 {
                     const vimeoID = findVimeoID(url)
                     if (vimeoID !== null) {
-                        items.push(
+                        pushItem(
                             html`<iframe
                                 src="https://player.vimeo.com/video/${vimeoID}?byline=0&portrait=0"
                                 title="Vimeo video player"
@@ -789,6 +805,7 @@ function MediaScroller({ items: mediaItems }) {
                                 allow="autoplay; fullscreen; picture-in-picture"
                                 allowfullscreen
                             ></iframe>`,
+                            { fullWidth: true },
                         )
                         continue
                     }
@@ -808,7 +825,7 @@ function MediaScroller({ items: mediaItems }) {
                             if (typeof json === "object" && json !== null && typeof json.html === "string") {
                                 const div = document.createElement("div")
                                 div.innerHTML = json.html
-                                items.push(html`${div}`)
+                                pushItem(html`${div}`, { fullWidth: true })
                                 setTimeout(() => {
                                     addTwitterWidget().then(() => {
                                         if ("twttr" in window) {
@@ -841,7 +858,7 @@ function MediaScroller({ items: mediaItems }) {
                             if (script !== null) {
                                 script.remove()
                             }
-                            items.push(html`${div}`)
+                            pushItem(html`${div}`, { fullWidth: true })
                             setTimeout(() => {
                                 addBskyWidget().then(() => {
                                     if ("bluesky" in window) {
@@ -860,7 +877,7 @@ function MediaScroller({ items: mediaItems }) {
                 {
                     const id = findCoubVideoID(url)
                     if (id !== null) {
-                        items.push(
+                        pushItem(
                             html`<iframe
                                 src="https://coub.com/embed/${id}?muted=false&autostart=false&originalSize=true&startWithHD=true"
                                 title="Coub video player"
@@ -868,6 +885,7 @@ function MediaScroller({ items: mediaItems }) {
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowfullscreen
                             ></iframe>`,
+                            { fullWidth: true },
                         )
                         continue
                     }
@@ -878,12 +896,10 @@ function MediaScroller({ items: mediaItems }) {
                     if (tenorMedia !== null) {
                         switch (tenorMedia.kind) {
                             case "image":
-                                items.push(html`<zoomable-img .src=${tenorMedia.src}></zoomable-img>`)
+                                pushItem(html`<zoomable-img .src=${tenorMedia.src}></zoomable-img>`)
                                 break
                             case "video":
-                                items.push(
-                                    html`<video src="${tenorMedia.src}" preload="metadata" controls loop></video>`,
-                                )
+                                pushItem(html`<video src="${tenorMedia.src}" preload="metadata" controls loop></video>`)
                                 break
                         }
                         continue
@@ -896,7 +912,7 @@ function MediaScroller({ items: mediaItems }) {
                         trustedOrigins.some(o => o.includes("localhost") && url.hostname === "localhost")
                     ) {
                         if (imageExts.some(ext => url.pathname.endsWith(ext))) {
-                            items.push(
+                            pushItem(
                                 html`<zoomable-img
                                     .src=${url.toString()}
                                     .width=${mediaItem.width}
@@ -907,12 +923,12 @@ function MediaScroller({ items: mediaItems }) {
                         }
 
                         if (audioExts.some(ext => url.pathname.endsWith(ext))) {
-                            items.push(html`<audio src="${url.toString()}" preload="metadata" controls loop></audio>`)
+                            pushItem(html`<audio src="${url.toString()}" preload="metadata" controls loop></audio>`)
                             continue
                         }
 
                         if (videoExts.some(ext => url.pathname.endsWith(ext))) {
-                            items.push(html`<video src="${url.toString()}" preload="metadata" controls loop></video>`)
+                            pushItem(html`<video src="${url.toString()}" preload="metadata" controls loop></video>`)
                             continue
                         }
                     }
@@ -930,7 +946,7 @@ function MediaScroller({ items: mediaItems }) {
                             }
 
                             const json = await resp.json()
-                            items.push(html`
+                            pushItem(html`
                                 <a href=${url.toString()} target="_blank" rel="noopener noreferrer">
                                     <img src=${json.thumbnail_url} width=${json.thumbnail_width} height=${json.thumbnail_height} loading="lazy"></img>
                                 </a>
@@ -964,7 +980,7 @@ function MediaScroller({ items: mediaItems }) {
 
                     switch (parts[0]) {
                         case "image":
-                            items.push(
+                            pushItem(
                                 html`<zoomable-img
                                     .src=${endpoint}
                                     .width=${mediaItem.width}
@@ -973,10 +989,10 @@ function MediaScroller({ items: mediaItems }) {
                             )
                             break
                         case "audio":
-                            items.push(html`<audio src="${endpoint}" preload="metadata" controls loop></audio>`)
+                            pushItem(html`<audio src="${endpoint}" preload="metadata" controls loop></audio>`)
                             break
                         case "video":
-                            items.push(html`<video src="${endpoint}" preload="metadata" controls loop></video>`)
+                            pushItem(html`<video src="${endpoint}" preload="metadata" controls loop></video>`)
                             break
                     }
                 } catch (_) {}
@@ -991,7 +1007,7 @@ function MediaScroller({ items: mediaItems }) {
 
     return html`
         <ul class="media-scroller" data-length="${renderedItems.length}">
-            ${renderedItems.map(item => html` <li>${item}</li> `)}
+            ${renderedItems.map(item => html` <li class="${item.fullWidth ? "full-width" : ""}">${item.content}</li> `)}
         </ul>
     `
 }

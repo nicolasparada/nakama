@@ -913,6 +913,7 @@ header .profile-link {
   display: grid;
   grid-auto-flow: row;
   gap: 1rem;
+  min-width: 0;
 }
 
 .post-content p {
@@ -937,25 +938,49 @@ media-scroller zoomable-img {
 }
 
 .media-scroller {
+  --media-scroller-item-width: calc((100% / 2.1) - 0.5rem);
+
   list-style: none;
   margin: 0;
   padding: 0;
-  width: auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 
   display: flex;
   flex-wrap: nowrap;
   gap: 0.5rem;
 
   overflow-x: auto;
+  overflow-y: hidden;
 
   scroll-snap-type: inline mandatory;
+  overscroll-behavior-x: contain;
 }
 
 .media-scroller {
   scrollbar-width: none;
 }
 
+.media-scroller.small {
+  --media-scroller-item-width: auto;
+}
+
+.media-scroller.small li {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 .media-scroller.small>li>* {
+  width: auto;
+  max-width: none;
+  max-height: 7rem;
+}
+
+.media-scroller.small li img {
+  width: auto;
+  height: auto;
+  max-width: none;
   max-height: 7rem;
 }
 
@@ -964,65 +989,72 @@ media-scroller zoomable-img {
 }
 
 .media-scroller li {
-  display: contents;
+  display: block;
+  flex: 0 0 var(--media-scroller-item-width);
+  width: var(--media-scroller-item-width);
+  min-width: 0;
+  max-width: 100%;
+  scroll-snap-align: start;
 }
 
-.media-scroller img,
-.media-scroller audio,
-.media-scroller video,
-.media-scroller iframe {
+.media-scroller li.full-width {
+  flex-basis: 100%;
+  width: 100%;
+}
+
+.media-scroller li > *,
+.media-scroller li img,
+.media-scroller li audio,
+.media-scroller li video,
+.media-scroller li iframe {
   display: block;
-  flex: 0 0 auto;
-  height: min-content;
-  max-height: calc(100vh - 8rem);
+  width: 100%;
+  max-width: 100%;
   background-color: var(--background);
   border-radius: 1rem;
   overflow: hidden;
 }
 
+.media-scroller li img,
+.media-scroller li video {
+  height: auto;
+  max-height: calc(100vh - 8rem);
+}
+
+.media-scroller li audio,
+.media-scroller li iframe {
+  min-width: 0;
+}
+
 /* Safari issue */
 @supports (height: intrinsic) {
 
-  .media-scroller img,
-  .media-scroller audio,
-  .media-scroller video,
-  .media-scroller iframe {
+  .media-scroller li img,
+  .media-scroller li audio,
+  .media-scroller li video,
+  .media-scroller li iframe {
     height: intrinsic
   }
 }
 
-.media-scroller[data-length="1"] img,
-.media-scroller[data-length="1"] audio,
-.media-scroller[data-length="1"] video,
-.media-scroller[data-length="1"] iframe {
-  max-width: 100%;
+.media-scroller[data-length="1"] {
+  --media-scroller-item-width: 100%;
 }
 
-.media-scroller[data-length="2"] img,
-.media-scroller[data-length="2"] audio,
-.media-scroller[data-length="2"] video,
-.media-scroller[data-length="2"] iframe {
-  max-width: calc(50% - 0.25rem);
+.media-scroller[data-length="2"] {
+  --media-scroller-item-width: calc(50% - 0.25rem);
 }
 
-.media-scroller:not([data-length="1"]):not([data-length="2"]) img,
-.media-scroller:not([data-length="1"]):not([data-length="2"]) audio,
-.media-scroller:not([data-length="1"]):not([data-length="2"]) video,
-.media-scroller:not([data-length="1"]):not([data-length="2"]) iframe {
-  max-width: calc(calc(100% / 2.1) - 0.5rem);
-}
-
-.media-scroller[data-length="1"] iframe,
-.media-scroller[data-length="1"] audio {
-  width: 100%;
-}
-
-.media-scroller audio {
+.media-scroller li audio {
   min-width: calc(100% / 1.1);
 }
 
-.media-scroller video,
-.media-scroller iframe {
+.media-scroller li iframe {
+  width: 100%;
+}
+
+.media-scroller li video,
+.media-scroller li iframe {
   aspect-ratio: 16/9;
 }
 
