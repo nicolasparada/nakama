@@ -183,7 +183,7 @@ func (s *Service) ParseRedirectURI(rawurl string) (*url.URL, error) {
 	}
 
 	for _, origin := range s.AllowedOrigins {
-		if strings.Contains(origin, uri.Host) {
+		if uri.Host == origin || strings.HasSuffix(uri.Host, "."+origin) {
 			return uri, nil
 		}
 	}
