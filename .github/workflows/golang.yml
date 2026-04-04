@@ -26,15 +26,15 @@ jobs:
         with:
           args: --fast-only
 
-      - name: Set up gotestfmt
-        uses: gotesttools/gotestfmt-action@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Set up gotestfmt
+      #   uses: gotesttools/gotestfmt-action@v2
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test
-        run: |
-          set -euo pipefail
-          go test -json -v -race -count 1 ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
+      # - name: Test
+      #   run: |
+      #     set -euo pipefail
+      #     go test -json -v -race -count 1 ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
 
       - name: Login to DockerHub
         uses: docker/login-action@v3

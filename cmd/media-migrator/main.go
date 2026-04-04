@@ -70,10 +70,10 @@ func run() error {
 	_ = godotenv.Load()
 
 	databaseURL := cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://root@127.0.0.1:26257/nakama?sslmode=disable")
-	minioEndpoint := cmp.Or(os.Getenv("MINIO_ENDPOINT"), "localhost:9000")
-	minioAccessKey := cmp.Or(os.Getenv("MINIO_ACCESS_KEY"), "minioadmin")
-	minioSecretKey := cmp.Or(os.Getenv("MINIO_SECRET_KEY"), "minioadmin")
-	minioSecure := cmp.Or(os.Getenv("MINIO_SECURE"), "false") == "true"
+	minioEndpoint := cmp.Or(os.Getenv("S3_ENDPOINT"), "localhost:9000")
+	minioAccessKey := cmp.Or(os.Getenv("S3_ACCESS_KEY"), "minioadmin")
+	minioSecretKey := cmp.Or(os.Getenv("S3_SECRET_KEY"), "minioadmin")
+	minioSecure := cmp.Or(os.Getenv("S3_SECURE"), "false") == "true"
 
 	ctx := context.Background()
 	dbPool, err := pgxpool.New(ctx, databaseURL)
