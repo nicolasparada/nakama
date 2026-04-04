@@ -24,7 +24,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kyokomi/emoji/v2 v2.2.13
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/matryer/way v0.0.0-20180416093233-9632d0c407b0
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nats-io/nats.go v1.50.0
 	github.com/nicolasparada/go-db v0.3.3

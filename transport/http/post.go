@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/matryer/way"
-
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
 )
@@ -108,7 +106,7 @@ func (h *handler) posts(w http.ResponseWriter, r *http.Request) {
 	// Username is an optional path parameter since this handler is used for both:
 	// - /api/posts
 	// - /api/users/:username/posts
-	if username := way.Param(ctx, "username"); username != "" {
+	if username := r.PathValue("username"); username != "" {
 		in.Username = &username
 	}
 
@@ -175,7 +173,7 @@ func (h *handler) postStream(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) post(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
+	postID := r.PathValue("postID")
 	p, err := h.svc.Post(ctx, postID)
 	if err != nil {
 		h.respondErr(w, err)
@@ -203,7 +201,7 @@ func (h *handler) updatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	in.ID = way.Param(ctx, "post_id")
+	in.ID = r.PathValue("postID")
 	out, err := h.svc.UpdatePost(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
@@ -215,7 +213,7 @@ func (h *handler) updatePost(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) deletePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
+	postID := r.PathValue("postID")
 	err := h.svc.DeletePost(ctx, postID)
 	if err != nil {
 		h.respondErr(w, err)
@@ -235,7 +233,7 @@ func (h *handler) togglePostReaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	in.PostID = way.Param(ctx, "post_id")
+	in.PostID = r.PathValue("postID")
 	out, err := h.svc.TogglePostReaction(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
@@ -247,7 +245,7 @@ func (h *handler) togglePostReaction(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) togglePostSubscription(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
+	postID := r.PathValue("postID")
 	out, err := h.svc.TogglePostSubscription(ctx, postID)
 	if err != nil {
 		h.respondErr(w, err)

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"syscall"
 
-	"github.com/matryer/way"
 	"github.com/nicolasparada/go-errs"
 
 	"github.com/nakamauwu/nakama/service"
@@ -73,7 +72,7 @@ func (h *handler) usernames(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) userProfileByUsername(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := way.Param(ctx, "username")
+	username := r.PathValue("username")
 	user, err := h.svc.UserProfileByUsername(ctx, types.RetrieveUserProfile{Username: username})
 	if err != nil {
 		h.respondErr(w, err)
@@ -149,7 +148,7 @@ func (h *handler) updateCover(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) toggleFollow(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := way.Param(ctx, "username")
+	username := r.PathValue("username")
 
 	out, err := h.svc.ToggleFollow(ctx, username)
 	if err != nil {
@@ -170,7 +169,7 @@ func (h *handler) followers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := types.ListFollowers{
-		Username: way.Param(ctx, "username"),
+		Username: r.PathValue("username"),
 		PageArgs: pageArgs,
 	}
 	out, err := h.svc.Followers(ctx, in)
@@ -196,7 +195,7 @@ func (h *handler) followees(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := types.ListFollowees{
-		Username: way.Param(ctx, "username"),
+		Username: r.PathValue("username"),
 		PageArgs: pageArgs,
 	}
 	out, err := h.svc.Followees(ctx, in)

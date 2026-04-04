@@ -4,8 +4,6 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/matryer/way"
-
 	"github.com/nakamauwu/nakama/types"
 )
 
@@ -85,7 +83,7 @@ func (h *handler) timelineItemStream(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) deleteTimelineItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	timelineItemID := way.Param(ctx, "timeline_item_id")
+	timelineItemID := r.PathValue("timelineItemID")
 	err := h.svc.DeleteTimelineItem(ctx, timelineItemID)
 	if err != nil {
 		h.respondErr(w, err)

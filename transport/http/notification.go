@@ -4,7 +4,6 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/matryer/way"
 	"github.com/nakamauwu/nakama/types"
 )
 
@@ -86,7 +85,7 @@ func (h *handler) hasUnreadNotifications(w http.ResponseWriter, r *http.Request)
 
 func (h *handler) markNotificationAsRead(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	notificationID := way.Param(ctx, "notification_id")
+	notificationID := r.PathValue("notificationID")
 	err := h.svc.MarkNotificationAsRead(ctx, notificationID)
 	if err != nil {
 		h.respondErr(w, err)

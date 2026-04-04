@@ -5,8 +5,6 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/matryer/way"
-
 	"github.com/nakamauwu/nakama/types"
 )
 
@@ -20,7 +18,7 @@ func (h *handler) createComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	in.PostID = way.Param(ctx, "post_id")
+	in.PostID = r.PathValue("postID")
 	c, err := h.svc.CreateComment(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
@@ -49,7 +47,7 @@ func (h *handler) comments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in := types.ListComments{
-		PostID:   way.Param(ctx, "post_id"),
+		PostID:   r.PathValue("postID"),
 		PageArgs: pageArgs,
 	}
 	page, err := h.svc.Comments(ctx, in)
@@ -79,7 +77,7 @@ func (h *handler) commentStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	postID := way.Param(ctx, "post_id")
+	postID := r.PathValue("postID")
 	cc, err := h.svc.CommentStream(ctx, postID)
 	if err != nil {
 		h.respondErr(w, err)
@@ -114,7 +112,7 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	in.ID = way.Param(ctx, "comment_id")
+	in.ID = r.PathValue("commentID")
 	out, err := h.svc.UpdateComment(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
@@ -126,7 +124,7 @@ func (h *handler) updateComment(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) deleteComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	commentID := way.Param(ctx, "comment_id")
+	commentID := r.PathValue("commentID")
 	err := h.svc.DeleteComment(ctx, commentID)
 	if err != nil {
 		h.respondErr(w, err)
@@ -146,7 +144,7 @@ func (h *handler) toggleCommentReaction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	in.CommentID = way.Param(ctx, "comment_id")
+	in.CommentID = r.PathValue("commentID")
 	out, err := h.svc.ToggleCommentReaction(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
