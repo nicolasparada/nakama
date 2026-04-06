@@ -43,10 +43,24 @@
  */
 
 /**
- * @typedef DevLoginOutput
- * @prop {string} token
- * @prop {string|Date} expiresAt
- * @prop {User} user
+ * @typedef AuthUser
+ * @prop {string} id
+ * @prop {string} username
+ * @prop {string|null} avatarURL
+ */
+
+/**
+ * @typedef AuthState
+ * @prop {AuthUser} user
+ */
+
+/**
+ * @typedef {"success"|"pending_signup"} LoginStatus
+ */
+
+/**
+ * @typedef LoginResult
+ * @prop {LoginStatus} status
  */
 
 /**

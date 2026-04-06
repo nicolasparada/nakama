@@ -41,6 +41,7 @@
         "errSendMagicLink": "could not send magic link: ",
         "placeholder": "Email",
         "btn": "Access",
+        "devBtn": "dev login",
         "subheading": "Or access with:",
         "signupHelp": {
             "heading": "First time here?",

@@ -9,16 +9,15 @@ tool (
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
+	github.com/alexedwards/scs/pgxstore v0.0.0-20251002162104-209de6e426de
+	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/cockroachdb/cockroach-go/v2 v2.4.3
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/disintegration/imaging v1.6.2
+	github.com/earthboundkid/crockford/v2 v2.25.3
 	github.com/go-kit/log v0.2.1
 	github.com/go-mail/mail v2.3.1+incompatible
-	github.com/gorilla/securecookie v1.1.2
-	github.com/hako/branca v0.0.0-20200807062402-6052ac720505
-	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/hybridtheory/samesite-cookie-support v0.4.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/jackc/pgxutil v0.0.0-20231015020832-ec5434149869
 	github.com/joho/godotenv v1.5.1
@@ -37,14 +36,13 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/air-verse/air v1.64.5 // indirect
+	github.com/air-verse/air v1.65.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/eknkc/basex v1.0.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -66,7 +64,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/montanaflynn/stats v0.9.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect

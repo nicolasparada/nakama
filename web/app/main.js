@@ -2,7 +2,7 @@ import { component, render, useEffect, useState } from "haunted"
 import { html } from "lit"
 import { registerTranslateConfig, translate, use as useLang } from "lit-translate"
 import { until } from "lit/directives/until.js"
-import { setLocalAuth } from "./auth.js"
+import { authFromUser, setLocalAuth } from "./auth.js"
 import "./components/app-header.js"
 import { authStore, useStore } from "./ctx.js"
 import { request } from "./http.js"
@@ -11,9 +11,12 @@ import { createRouter, hijackClicks } from "./router.js"
 const router = createRouter()
 router.route("/", guardView(view("home")))
 router.route("/access-callback", view("access-callback"))
+router.route("/access-login", view("access-login"))
+router.route("/email-update", view("email-update"))
 router.route("/search", view("search"))
 router.route("/notifications", guardView(view("notifications")))
 router.route("/privacy-policy", view("privacy-policy"))
+router.route("/terms-of-service", view("terms-of-service"))
 router.route(/^\/posts\/(?<postID>[^\/]+)$/, view("post"))
 router.route(/^\/tagged-posts\/(?<tag>[^\/]+)$/, view("tagged-posts"))
 router.route(/^\/@(?<username>[^\/]+)$/, view("user"))
@@ -23,17 +26,27 @@ router.route(/.*/, view("not-found"))
 
 addEventListener("click", hijackClicks)
 
+/** @param {string} name */
 function view(name) {
-    return params => html`${until(import(`./components/${name}-page.js`).then(m => m.default({ params }), err => {
-        console.error("could not import page:", err)
-        return html`
-            <div class="container">
-                <p class="error">${translate("errView")}</p>
-            </div>
-        `
-    }), PageLoader())}`
+    /** @param {unknown} params */
+    return params =>
+        html`${until(
+            import(`./components/${name}-page.js`).then(
+                m => m.default({ params }),
+                err => {
+                    console.error("could not import page:", err)
+                    return html`
+                        <div class="container">
+                            <p class="error">${translate("errView")}</p>
+                        </div>
+                    `
+                },
+            ),
+            PageLoader(),
+        )}`
 }
 
+/** @param {{ args: unknown[], component: (...args: unknown[]) => unknown, fallback: (...args: unknown[]) => unknown }} props */
 function GuardedView({ args, component, fallback }) {
     const [auth] = useStore(authStore)
 
@@ -44,11 +57,13 @@ function GuardedView({ args, component, fallback }) {
 customElements.define("guarded-view", component(GuardedView, { useShadowDOM: false }))
 
 /**
- * @param {function} component
+ * @param {(...args: unknown[]) => unknown} component
+ * @param {(...args: unknown[]) => unknown} [fallback]
  */
 function guardView(component, fallback = view("access")) {
+    /** @param {unknown[]} args */
     return (...args) => {
-        return html`<guarded-view .args=${args} .component=${component} .fallback=${fallback}>`
+        return html`<guarded-view .args=${args} .component=${component} .fallback=${fallback}></guarded-view>`
     }
 }
 
@@ -60,6 +75,7 @@ function PageLoader() {
     `
 }
 
+/** @param {{ router: ReturnType<typeof createRouter> }} props */
 function RouterView({ router }) {
     const [view, setView] = useState(router.exec())
 
@@ -86,53 +102,26 @@ function RouterView({ router }) {
 // @ts-ignore
 customElements.define("router-view", component(RouterView, { useShadowDOM: false }))
 
-const oneDayInMs = 1000 * 60 * 60 * 24
-const sevenDaysInMs = 1000 * 60 * 60 * 24
-
 function NakamaApp() {
-    const [auth, setAuth] = useStore(authStore)
-
-    const tryRefreshAuth = () => {
-        if (auth === null) {
-            return
-        }
-
-        const inSevenDays = new Date()
-        inSevenDays.setTime(inSevenDays.getTime() + sevenDaysInMs)
-
-        if (auth.expiresAt >= inSevenDays) {
-            return
-        }
-
-        fetchToken().then(payload => {
-            setAuth(auth => {
-                const newAuth = {
-                    ...auth,
-                    ...payload,
-                }
-                setLocalAuth(newAuth)
-                return newAuth
-            })
-        }, err => {
-            console.error("could not refresh auth:", err)
-        })
-    }
+    const [, setAuth] = useStore(authStore)
 
     useEffect(() => {
-        if (auth === null) {
-            return
-        }
+        fetchAuthUser().then(
+            auth => {
+                setAuth(auth)
+                setLocalAuth(auth)
+            },
+            err => {
+                if (err.name === "UnauthenticatedError") {
+                    setAuth(null)
+                    setLocalAuth(null)
+                    return
+                }
 
-        tryRefreshAuth()
-
-        const id = setInterval(() => {
-            tryRefreshAuth()
-        }, oneDayInMs)
-
-        return () => {
-            clearInterval(id)
-        }
-    }, [auth])
+                console.error("could not sync auth:", err)
+            },
+        )
+    }, [])
 
     return html`
         <app-header></app-header>
@@ -152,13 +141,8 @@ useLang(lang).then(() => {
     render(html`<nakama-app></nakama-app>`, document.body)
 })
 
-function fetchToken() {
-    return request("GET", "/api/token")
-        .then(resp => resp.body)
-        .then(auth => {
-            auth.expiresAt = new Date(auth.expiresAt)
-            return auth
-        })
+function fetchAuthUser() {
+    return request("GET", "/api/user").then(resp => authFromUser(resp.body))
 }
 
 function detectLang() {
@@ -175,11 +159,10 @@ function detectLang() {
         }
     }
 
-    lang = window.navigator["userLanguage"]
+    lang = /** @type {Navigator & { userLanguage?: string }} */ (window.navigator).userLanguage ?? null
     if (lang === "es" || (typeof lang === "string" && lang.startsWith("es-"))) {
         return "es"
     }
-
 
     lang = window.navigator.language
     if (lang === "es" || (typeof lang === "string" && lang.startsWith("es-"))) {
@@ -192,12 +175,14 @@ function detectLang() {
 if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js")
     navigator.serviceWorker.addEventListener("message", ev => {
-        if (typeof ev.data !== "object"
-            || ev.data === null
-            || ev.data.type !== "notificationclick"
-            || typeof ev.data.detail !== "object"
-            || ev.data.detail === null
-            || typeof ev.data.detail.id !== "string") {
+        if (
+            typeof ev.data !== "object" ||
+            ev.data === null ||
+            ev.data.type !== "notificationclick" ||
+            typeof ev.data.detail !== "object" ||
+            ev.data.detail === null ||
+            typeof ev.data.detail.id !== "string"
+        ) {
             return
         }
 
@@ -251,13 +236,14 @@ function onUnHandledRejection(ev) {
     })
 }
 
+/** @param {string} err */
 function pushLog(err) {
     return request("POST", "/api/logs", { body: { error: err } })
 }
 
+/** @param {string} notificationID */
 function markNotificationAsRead(notificationID) {
-    return request("POST", `/api/notifications/${encodeURIComponent(notificationID)}/mark_as_read`)
-        .then(() => void 0)
+    return request("POST", `/api/notifications/${encodeURIComponent(notificationID)}/mark_as_read`).then(() => void 0)
 }
 
 const now = new Date()
@@ -308,21 +294,29 @@ function animateImage(src) {
 
         animation: animateimage linear 5s;
     `
-    img.addEventListener("load", () => {
-        document.head.appendChild(animation)
-        document.body.appendChild(img)
+    img.addEventListener(
+        "load",
+        () => {
+            document.head.appendChild(animation)
+            document.body.appendChild(img)
 
-        img.addEventListener("animationend", () => {
-            img.style.animationName = "none"
-            img.style.setProperty("--y", randNumberBetween(5, 95) + "%")
-            requestAnimationFrame(() => {
-                img.offsetHeight
-                img.style.animationName = "animateimage"
+            img.addEventListener("animationend", () => {
+                img.style.animationName = "none"
+                img.style.setProperty("--y", randNumberBetween(5, 95) + "%")
+                requestAnimationFrame(() => {
+                    img.offsetHeight
+                    img.style.animationName = "animateimage"
+                })
             })
-        })
-    }, { once: true })
+        },
+        { once: true },
+    )
 }
 
+/**
+ * @param {number} min
+ * @param {number} max
+ */
 function randNumberBetween(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min)
 }

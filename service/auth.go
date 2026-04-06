@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"html/template"
@@ -10,30 +12,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hako/branca"
-	"github.com/hako/durafmt"
-
+	"github.com/earthboundkid/crockford/v2"
 	"github.com/nakamauwu/nakama/types"
 	"github.com/nakamauwu/nakama/web"
 	"github.com/nicolasparada/go-errs"
 )
+
+var tmplLoginEmail = template.Must(template.New("login-email.tmpl").Funcs(emailTemplateFuncs).ParseFS(web.TemplateFiles, "template/login-email.tmpl"))
+
+type TemplDataLoginEmail struct {
+	MagicLink *url.URL
+	Code      string
+	TTL       time.Duration
+}
 
 var ErrUnimplemented = errors.New("unimplemented")
 
 // KeyAuthUserID to use in context.
 const KeyAuthUserID = ctxkey("auth_user_id")
 
-const (
-	emailVerificationCodeTTL = time.Hour * 2
-	authTokenTTL             = time.Hour * 24 * 14
-)
+const verifyEmailTTL = time.Minute * 15
 
 const (
-	// ErrInvalidRedirectURI denotes an invalid redirect URI.
-	ErrInvalidRedirectURI = errs.InvalidArgumentError("invalid redirect URI")
-	// ErrUntrustedRedirectURI denotes an untrusted redirect URI.
-	// That is an URI that is not in the same host as the service.
-	ErrUntrustedRedirectURI = errs.PermissionDeniedError("untrusted redirect URI")
 	// ErrInvalidToken denotes an invalid token.
 	ErrInvalidToken = errs.InvalidArgumentError("invalid token")
 	// ErrExpiredToken denotes that the token already expired.
@@ -46,55 +46,82 @@ const (
 
 type ctxkey string
 
-// SendMagicLink to login without passwords.
-// Or to update and verify a new email address.
-// A second endpoint GET /api/verify_magic_link?email&code&redirect_uri must exist.
-func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) error {
-	in.Email = strings.TrimSpace(in.Email)
-	in.Email = strings.ToLower(in.Email)
-	if !types.ValidEmail(in.Email) {
-		return errs.InvalidArgumentError("invalid email")
+func (svc *Service) OAuthURL(ctx context.Context, providerName string, state string) (string, error) {
+	provider, ok := svc.AuthProviders.Get(providerName)
+	if !ok {
+		return "", errs.InvalidArgumentError("unknown provider")
 	}
 
-	_, err := s.ParseRedirectURI(in.RedirectURI)
+	return provider.AuthCodeURL(state), nil
+}
+
+func (svc *Service) OAuthLogin(ctx context.Context, providerName string, code string) (types.LoginResult, error) {
+	var resp types.LoginResult
+
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return resp, errs.InvalidArgumentError("code is required")
+	}
+
+	provider, ok := svc.AuthProviders.Get(providerName)
+	if !ok {
+		return resp, errs.InvalidArgumentError("unknown provider")
+	}
+
+	providedUser, err := provider.User(ctx, code)
 	if err != nil {
+		return resp, fmt.Errorf("get user from provider: %w", err)
+	}
+
+	user, err := svc.Cockroach.UserByProviderOrEmail(ctx, types.Provider{
+		Name: providerName,
+		ID:   providedUser.ID,
+	}, providedUser.Email)
+	if errors.Is(err, errs.NotFound) {
+		return types.LoginResult{
+			Status: types.LoginResultPendingSignup,
+			PendingSignup: &types.PendingSignup{
+				Provider: &types.Provider{
+					Name: providerName,
+					ID:   providedUser.ID,
+				},
+				Email:     providedUser.Email,
+				ExpiresAt: time.Now().Add(verifyEmailTTL),
+			},
+		}, nil
+	}
+
+	if err != nil {
+		return resp, err
+	}
+
+	return types.LoginResult{
+		Status: types.LoginResultSuccess,
+		User:   &user,
+	}, nil
+}
+
+// TODO: Apply rate-limit per email or even IP to prevent abuse of the login endpoint.
+func (s *Service) RequestLogin(ctx context.Context, in types.RequestLogin) error {
+	if err := in.Validate(); err != nil {
 		return err
 	}
 
-	if in.UpdateEmail {
-		uid, ok := ctx.Value(KeyAuthUserID).(string)
-		if !ok {
-			return errs.Unauthenticated
-		}
-
-		exists, err := s.Cockroach.EmailTaken(ctx, in.Email, uid)
-		if err != nil {
-			return err
-		}
-
-		if exists {
-			return errs.ConflictError("email taken")
-		}
+	magicLink, err := url.Parse(in.RedirectURI)
+	// it should be already validated, but just to keep code style consistent.
+	if err != nil || !magicLink.IsAbs() {
+		return errs.InvalidArgumentError("invalid redirect URI")
 	}
 
-	var code string
-	if in.UpdateEmail {
-		uid, ok := ctx.Value(KeyAuthUserID).(string)
-		if !ok {
-			return errs.Unauthenticated
-		}
-
-		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
-			UserID:      &uid,
-			Email:       in.Email,
-			RedirectURI: in.RedirectURI,
-		})
-	} else {
-		code, err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
-			Email:       in.Email,
-			RedirectURI: in.RedirectURI,
-		})
+	plainText, hash, err := generateVerificationCode()
+	if err != nil {
+		return fmt.Errorf("generate verification code: %w", err)
 	}
+
+	err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
+		Email: in.Email,
+		Hash:  hash,
+	})
 	if err != nil {
 		return err
 	}
@@ -102,149 +129,104 @@ func (s *Service) SendMagicLink(ctx context.Context, in types.SendMagicLink) err
 	defer func() {
 		if err != nil {
 			go func() {
-				err := s.Cockroach.DeleteEmailVerificationCode(context.Background(), code)
+				err := s.Cockroach.DeleteEmailVerificationCode(context.Background(), hash)
 				if err != nil {
-					_ = s.Logger.Log("error", fmt.Errorf("could not delete verification code: %w", err))
+					_ = s.Logger.Log("error", fmt.Errorf("delete verification code: %w", err))
 				}
 			}()
 		}
 	}()
 
-	// See transport/http/handler.go
-	// GET /api/verify_magic_link must exist.
-	magicLink := cloneURL(s.Origin)
-	magicLink.Path = "/api/verify_magic_link"
 	q := magicLink.Query()
-	q.Set("code", code)
+	q.Set("code", plainText)
 	magicLink.RawQuery = q.Encode()
 
-	s.magicLinkTmplOncer.Do(func() {
-		var text []byte
-		text, err = web.TemplateFiles.ReadFile("template/mail/magic-link.html.tmpl")
-		if err != nil {
-			err = fmt.Errorf("could not read magic link template file: %w", err)
-			return
+	data := TemplDataLoginEmail{
+		MagicLink: magicLink,
+		Code:      plainText,
+		TTL:       verifyEmailTTL,
+	}
+
+	var buf bytes.Buffer
+	if err := tmplLoginEmail.Execute(&buf, data); err != nil {
+		return fmt.Errorf("render login email template: %w", err)
+	}
+
+	// TODO: use outbox pattern to send email asynchronously and retry on failure.
+	return s.Sender.Send(ctx, in.Email, "Login to Nakama", buf.String(), fmt.Sprintf(
+		`Use this link to login to Nakama. The link is valid for %s.\n\n`+
+			`%s\n\n`+
+			`Or copy and paste this code in the app: %s`,
+		verifyEmailTTL,
+		magicLink,
+		plainText,
+	))
+}
+
+func (s *Service) VerifyLogin(ctx context.Context, code string) (types.LoginResult, error) {
+	var resp types.LoginResult
+
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return resp, errs.InvalidArgumentError("verification code is required")
+	}
+
+	hash := verificationCodeHash(code)
+
+	return resp, s.Cockroach.UseEmailVerificationCode(ctx, hash, func(ctx context.Context, verificationCode types.EmailVerificationCode) (bool, error) {
+		if verificationCode.IsExpired(verifyEmailTTL) {
+			return true, errs.UnauthenticatedError("expired verification code")
 		}
 
-		s.magicLinkTmpl, err = template.
-			New("mail/magic-link.html").
-			Funcs(template.FuncMap{
-				"human_duration": func(d time.Duration) string {
-					return durafmt.Parse(d).LimitFirstN(1).String()
+		user, err := s.userByEmail(ctx, verificationCode.Email)
+		if errors.Is(err, errs.NotFound) {
+			resp = types.LoginResult{
+				Status: types.LoginResultPendingSignup,
+				PendingSignup: &types.PendingSignup{
+					Email:     verificationCode.Email,
+					ExpiresAt: time.Now().Add(verifyEmailTTL),
 				},
-				"html": func(s string) template.HTML {
-					return template.HTML(s)
-				},
-			}).
-			Parse(string(text))
+			}
+			return true, nil
+		}
+
 		if err != nil {
-			err = fmt.Errorf("could not parse magic link mail template: %w", err)
-			return
+			return false, err
 		}
-	})
-	if err != nil {
-		return err
-	}
 
-	var b bytes.Buffer
-	err = s.magicLinkTmpl.Execute(&b, map[string]any{
-		"UpdateEmail": in.UpdateEmail,
-		"Origin":      s.Origin,
-		"MagicLink":   magicLink,
-		"TTL":         emailVerificationCodeTTL,
-	})
-	if err != nil {
-		return fmt.Errorf("could not execute magic link mail template: %w", err)
-	}
-
-	var subject string
-	if in.UpdateEmail {
-		subject = "Update email at Nakama"
-	} else {
-		subject = "Login to Nakama"
-	}
-	err = s.Sender.Send(ctx, in.Email, subject, b.String(), magicLink.String())
-	if err != nil {
-		return fmt.Errorf("could not send magic link: %w", err)
-	}
-
-	return nil
-}
-
-// ParseRedirectURI the given redirect URI and validates it.
-func (s *Service) ParseRedirectURI(rawurl string) (*url.URL, error) {
-	uri, err := url.Parse(rawurl)
-	if err != nil || !uri.IsAbs() {
-		return nil, ErrInvalidRedirectURI
-	}
-
-	if uri.Host == s.Origin.Host || strings.HasSuffix(uri.Host, "."+s.Origin.Host) {
-		return uri, nil
-	}
-
-	for _, origin := range s.AllowedOrigins {
-		if uri.Host == origin || strings.HasSuffix(uri.Host, "."+origin) {
-			return uri, nil
+		resp = types.LoginResult{
+			Status: types.LoginResultSuccess,
+			User:   &user,
 		}
-	}
-
-	return nil, ErrUntrustedRedirectURI
+		return true, nil
+	})
 }
 
-func (s *Service) EmailVerificationCodeRedirectURI(ctx context.Context, code string) (*url.URL, error) {
-	if !types.ValidUUIDv4(code) {
-		return nil, errs.InvalidArgumentError("invalid verification code")
-	}
-
-	str, err := s.Cockroach.EmailVerificationCodeRedirectURI(ctx, code)
-	if err != nil {
-		return nil, err
-	}
-
-	u, err := url.Parse(str)
-	if err != nil || !u.IsAbs() {
-		return nil, errs.InvalidArgumentError("invalid redirect URI")
-	}
-
-	return u, nil
-}
-
-// VerifyMagicLink checks whether the given email and verification code exists and issues a new auth token.
-// If the user does not exists, it can create a new one with the given username.
-func (s *Service) VerifyMagicLink(ctx context.Context, in types.UseEmailVerificationCode) (types.AuthOutput, error) {
-	var out types.AuthOutput
+func (svc *Service) CompleteSignup(ctx context.Context, in types.PendingSignup) (types.User, error) {
+	var user types.User
 
 	if err := in.Validate(); err != nil {
-		return out, err
+		return user, err
 	}
 
-	in.SetTTL(emailVerificationCodeTTL)
+	if in.Username() == nil {
+		return user, errs.InvalidArgumentError("username is required")
+	}
 
-	user, err := s.Cockroach.UseEmailVerificationCode(ctx, in, func(user types.User) error {
-		out.ExpiresAt = time.Now().Add(authTokenTTL)
-
-		var err error
-		out.Token, err = s.codec().EncodeToString(user.ID)
-		if err != nil {
-			return fmt.Errorf("create auth token: %w", err)
-		}
-
-		return nil
+	created, err := svc.Cockroach.CreateUser(ctx, types.CreateUser{
+		Email:    in.Email,
+		Username: *in.Username(),
+		Provider: in.Provider,
 	})
 	if err != nil {
-		return out, err
+		return user, err
 	}
 
-	user.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
-	out.User = user
-
-	return out, nil
+	return svc.userByID(ctx, created.ID)
 }
 
-// DevLogin is a login for development purposes only.
-// TODO: disable dev login on production.
-func (s *Service) DevLogin(ctx context.Context, email string) (types.AuthOutput, error) {
-	var out types.AuthOutput
+func (s *Service) DevLogin(ctx context.Context, email string) (types.User, error) {
+	var out types.User
 
 	if s.DisabledDevLogin {
 		return out, ErrUnimplemented
@@ -256,51 +238,9 @@ func (s *Service) DevLogin(ctx context.Context, email string) (types.AuthOutput,
 		return out, errs.InvalidArgumentError("invalid email")
 	}
 
-	user, err := s.userByEmail(ctx, email)
-	if err != nil {
-		return out, err
-	}
-
-	out.User = user
-
-	out.Token, err = s.codec().EncodeToString(out.User.ID)
-	if err != nil {
-		return out, fmt.Errorf("could not create token: %w", err)
-	}
-
-	out.ExpiresAt = time.Now().Add(authTokenTTL)
-
-	return out, nil
+	return s.userByEmail(ctx, email)
 }
 
-// AuthUserIDFromToken decodes the token into a user ID.
-func (s *Service) AuthUserIDFromToken(token string) (string, error) {
-	uid, err := s.codec().DecodeToString(token)
-	if err != nil {
-		if errors.Is(err, branca.ErrInvalidToken) || errors.Is(err, branca.ErrInvalidTokenVersion) {
-			return "", ErrInvalidToken
-		}
-
-		if _, ok := err.(*branca.ErrExpiredToken); ok {
-			return "", ErrExpiredToken
-		}
-
-		// check branca unexported/internal chacha20poly1305 error for invalid key.
-		if strings.HasSuffix(err.Error(), "authentication failed") {
-			return "", errs.Unauthenticated
-		}
-
-		return "", fmt.Errorf("could not decode token: %w", err)
-	}
-
-	if !types.ValidUUIDv4(uid) {
-		return "", errs.InvalidArgumentError("invalid user ID")
-	}
-
-	return uid, nil
-}
-
-// AuthUser is the current authenticated user.
 func (s *Service) AuthUser(ctx context.Context) (types.User, error) {
 	var u types.User
 	uid, ok := ctx.Value(KeyAuthUserID).(string)
@@ -311,40 +251,19 @@ func (s *Service) AuthUser(ctx context.Context) (types.User, error) {
 	return s.userByID(ctx, uid)
 }
 
-// Token to authenticate requests.
-func (s *Service) Token(ctx context.Context) (types.TokenOutput, error) {
-	var out types.TokenOutput
-	uid, ok := ctx.Value(KeyAuthUserID).(string)
-	if !ok {
-		return out, errs.Unauthenticated
+func generateVerificationCode() (string, []byte, error) {
+	b := make([]byte, 10)
+	if _, err := rand.Read(b); err != nil {
+		return "", nil, fmt.Errorf("generate random bytes: %w", err)
 	}
 
-	var err error
-	out.Token, err = s.codec().EncodeToString(uid)
-	if err != nil {
-		return out, fmt.Errorf("could not create token: %w", err)
-	}
+	plainText := crockford.Upper.EncodeToString(b)
 
-	out.ExpiresAt = time.Now().Add(authTokenTTL)
-
-	return out, nil
+	hash := sha256.Sum256([]byte(plainText))
+	return plainText, hash[:], nil
 }
 
-func (s *Service) codec() *branca.Branca {
-	cdc := branca.NewBranca(s.TokenKey)
-	cdc.SetTTL(uint32(authTokenTTL.Seconds()))
-	return cdc
-}
-
-func cloneURL(u *url.URL) *url.URL {
-	if u == nil {
-		return nil
-	}
-	u2 := new(url.URL)
-	*u2 = *u
-	if u.User != nil {
-		u2.User = new(url.Userinfo)
-		*u2.User = *u.User
-	}
-	return u2
+func verificationCodeHash(plainText string) []byte {
+	hash := sha256.Sum256([]byte(plainText))
+	return hash[:]
 }

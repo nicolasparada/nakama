@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"syscall"
 
-	"github.com/nicolasparada/go-errs"
-
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
 )
@@ -211,10 +209,39 @@ func (h *handler) followees(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, out, http.StatusOK)
 }
 
-func shouldAskUsername(err error) bool {
-	if err == nil {
-		return false
+func (h *handler) requestEmailUpdate(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var in types.RequestEmailUpdate
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		h.respondErr(w, errBadRequest)
+		return
 	}
 
-	return errors.Is(err, errs.NotFoundError("user not found")) || errors.Is(err, errs.InvalidArgumentError("invalid username")) || errors.Is(err, errs.InvalidArgumentError("username taken"))
+	if err := h.svc.RequestEmailUpdate(r.Context(), in); err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handler) verifyEmailUpdate(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var in struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		h.respondErr(w, errBadRequest)
+		return
+	}
+
+	user, err := h.svc.VerifyEmailUpdate(r.Context(), in.Code)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.respond(w, user, http.StatusOK)
 }

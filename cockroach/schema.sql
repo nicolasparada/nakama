@@ -4,6 +4,14 @@
 CREATE DATABASE IF NOT EXISTS nakama;
 SET DATABASE = nakama;
 
+CREATE TABLE IF NOT EXISTS sessions (
+	token TEXT PRIMARY KEY,
+	data BYTEA NOT NULL,
+	expiry TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions (expiry);
+
 CREATE TABLE IF NOT EXISTS users (
     id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR NOT NULL UNIQUE,
@@ -20,6 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_provider_id VARCHAR UNIQUE;
+
 CREATE TABLE IF NOT EXISTS email_verification_codes (
     user_id UUID REFERENCES users ON DELETE CASCADE,
     email VARCHAR NOT NULL,
@@ -29,8 +39,11 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
     PRIMARY KEY (email, code)
 );
 
-ALTER TABLE IF EXISTS email_verification_codes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users ON DELETE CASCADE;
-ALTER TABLE IF EXISTS email_verification_codes ADD COLUMN IF NOT EXISTS redirect_uri VARCHAR NOT NULL DEFAULT '';
+DELETE FROM email_verification_codes;
+TRUNCATE email_verification_codes;
+ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hash BYTEA NOT NULL DEFAULT ''::bytea;
+ALTER TABLE email_verification_codes DROP CONSTRAINT IF EXISTS email_verification_codes_pkey, ADD CONSTRAINT email_verification_codes_pkey PRIMARY KEY (hash);
+ALTER TABLE email_verification_codes DROP COLUMN IF EXISTS code, DROP COLUMN IF EXISTS redirect_uri;
 
 CREATE TABLE IF NOT EXISTS follows (
     follower_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,

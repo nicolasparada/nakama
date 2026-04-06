@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"image"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/nakamauwu/nakama/minio"
 	"github.com/nakamauwu/nakama/types"
+	"github.com/nakamauwu/nakama/web"
 	"github.com/nicolasparada/go-errs"
 )
 
@@ -25,6 +28,126 @@ const (
 	AvatarsBucket = "avatars"
 	CoversBucket  = "covers"
 )
+
+var tmplUpdateEmail = template.Must(template.New("update-email.tmpl").Funcs(emailTemplateFuncs).ParseFS(web.TemplateFiles, "template/update-email.tmpl"))
+
+func (s *Service) RequestEmailUpdate(ctx context.Context, in types.RequestEmailUpdate) error {
+	if err := in.Validate(); err != nil {
+		return err
+	}
+
+	uid, ok := ctx.Value(KeyAuthUserID).(string)
+	if !ok {
+		return errs.Unauthenticated
+	}
+
+	magicLink, err := url.Parse(in.RedirectURI)
+	if err != nil || !magicLink.IsAbs() {
+		return errs.InvalidArgumentError("invalid redirect URI")
+	}
+
+	taken, err := s.Cockroach.EmailTaken(ctx, in.Email, uid)
+	if err != nil {
+		return err
+	}
+
+	if taken {
+		return errs.ConflictError("email taken")
+	}
+
+	plainText, hash, err := generateVerificationCode()
+	if err != nil {
+		return fmt.Errorf("generate verification code: %w", err)
+	}
+
+	err = s.Cockroach.CreateEmailVerificationCode(ctx, types.CreateEmailVerificationCode{
+		UserID: &uid,
+		Email:  in.Email,
+		Hash:   hash,
+	})
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			go func() {
+				err := s.Cockroach.DeleteEmailVerificationCode(context.Background(), hash)
+				if err != nil {
+					_ = s.Logger.Log("error", fmt.Errorf("delete email update verification code: %w", err))
+				}
+			}()
+		}
+	}()
+
+	q := magicLink.Query()
+	q.Set("code", plainText)
+	magicLink.RawQuery = q.Encode()
+
+	data := TemplDataLoginEmail{
+		MagicLink: magicLink,
+		Code:      plainText,
+		TTL:       verifyEmailTTL,
+	}
+
+	var buf bytes.Buffer
+	if err := tmplUpdateEmail.Execute(&buf, data); err != nil {
+		return fmt.Errorf("render update email template: %w", err)
+	}
+
+	return s.Sender.Send(ctx, in.Email, "Update your email at Nakama", buf.String(), fmt.Sprintf(
+		`Use this link to verify your new email at Nakama. The link is valid for %s.\n\n`+
+			`%s\n\n`+
+			`Or copy and paste this code in the app: %s`,
+		verifyEmailTTL,
+		magicLink,
+		plainText,
+	))
+}
+
+func (s *Service) VerifyEmailUpdate(ctx context.Context, code string) (types.User, error) {
+	var user types.User
+
+	uid, ok := ctx.Value(KeyAuthUserID).(string)
+	if !ok {
+		return user, errs.Unauthenticated
+	}
+
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return user, errs.InvalidArgumentError("verification code is required")
+	}
+
+	hash := verificationCodeHash(code)
+
+	err := s.Cockroach.UseEmailVerificationCode(ctx, hash, func(ctx context.Context, verificationCode types.EmailVerificationCode) (bool, error) {
+		if verificationCode.IsExpired(verifyEmailTTL) {
+			return true, errs.UnauthenticatedError("expired verification code")
+		}
+
+		if verificationCode.UserID == nil {
+			return false, errs.InvalidArgumentError("invalid verification code")
+		}
+
+		if *verificationCode.UserID != uid {
+			return false, errs.PermissionDeniedError("verification code does not belong to authenticated user")
+		}
+
+		updatedUser, err := s.Cockroach.UpdateEmail(ctx, uid, verificationCode.Email)
+		if err != nil {
+			return true, err
+		}
+
+		updatedUser.SetAvatarURL(s.ObjectsBaseURL, AvatarsBucket)
+		user = updatedUser
+		return true, nil
+	})
+	if err != nil {
+		return user, err
+	}
+
+	return user, nil
+}
 
 func (s *Service) UserProfiles(ctx context.Context, in types.ListUserProfiles) (types.Page[types.UserProfile], error) {
 	var users types.Page[types.UserProfile]

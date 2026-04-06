@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexedwards/scs/pgxstore"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-kit/log"
-	"github.com/gorilla/securecookie"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
@@ -25,6 +25,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/endpoints"
 
+	"github.com/nakamauwu/nakama/auth"
 	cockroachpkg "github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
 	"github.com/nakamauwu/nakama/minio"
@@ -54,7 +55,6 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		originStr           = env("ORIGIN", fmt.Sprintf("http://localhost:%d", port))
 		dbURL               = env("DATABASE_URL", "postgresql://root@127.0.0.1:26257/nakama?sslmode=disable")
 		execSchema, _       = strconv.ParseBool(env("EXEC_SCHEMA", "false"))
-		tokenKey            = env("TOKEN_KEY", "supersecretkeyyoushouldnotcommit")
 		natsURL             = env("NATS_URL", nats.DefaultURL)
 		resendAPIKey        = os.Getenv("RESEND_API_KEY")
 		smtpHost            = env("SMTP_HOST", "smtp.mailtrap.io")
@@ -67,12 +67,12 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		s3SecretKey         = env("S3_SECRET_KEY", "minioadmin")
 		s3Secure, _         = strconv.ParseBool(env("S3_SECURE", "false"))
 		objectsBaseURL      = os.Getenv("OBJECTS_BASE_URL")
-		cookieHashKey       = env("COOKIE_HASH_KEY", "supersecretkeyyoushouldnotcommit")
-		cookieBlockKey      = env("COOKIE_BLOCK_KEY", "supersecretkeyyoushouldnotcommit")
 		githubClientID      = os.Getenv("GITHUB_CLIENT_ID")
 		githubClientSecret  = os.Getenv("GITHUB_CLIENT_SECRET")
 		googleClientID      = os.Getenv("GOOGLE_CLIENT_ID")
 		googleClientSecret  = os.Getenv("GOOGLE_CLIENT_SECRET")
+		discordClientID     = os.Getenv("DISCORD_CLIENT_ID")
+		discordClientSecret = os.Getenv("DISCORD_CLIENT_SECRET")
 		disabledDevLogin, _ = strconv.ParseBool(os.Getenv("DISABLE_DEV_LOGIN"))
 		allowedOrigins      = env("ALLOWED_ORIGINS", originStr)
 		vapidPrivateKey     = os.Getenv("VAPID_PRIVATE_KEY")
@@ -101,8 +101,6 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 	fs.IntVar(&smtpPort, "smtp-port", smtpPort, "SMTP server port")
 	fs.StringVar(&objectsBaseURL, "objects-base-url", objectsBaseURL, "Base URL for objects stored in Minio")
 	fs.BoolVar(&embedStaticFiles, "embed-static", embedStaticFiles, "Embed static files")
-	fs.StringVar(&cookieHashKey, "cookie-hash-key", cookieHashKey, "Cookie hash key. 32 or 64 bytes")
-	fs.StringVar(&cookieBlockKey, "cookie-block-key", cookieBlockKey, "Cookie block key. 16, 24, or 32 bytes")
 	fs.StringVar(&githubClientID, "github-client-id", githubClientID, "GitHub client ID")
 	fs.StringVar(&googleClientID, "google-client-id", googleClientID, "Google client ID")
 	fs.BoolVar(&disabledDevLogin, "disable-dev-login", disabledDevLogin, "Disable development login endpoint")
@@ -159,7 +157,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 	pubsub := &natspubsub.PubSub{Conn: natsConn}
 
 	var sender mailing.Sender
-	sendFrom := "no-reply@" + origin.Hostname()
+	sendFrom := "no-reply@nakama.social"
 	if resendAPIKey != "" {
 		_ = logger.Log("mailing_implementation", "resend")
 		sender = mailing.NewResend(sendFrom, resendAPIKey)
@@ -188,12 +186,54 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		return err
 	}
 
+	promHandler := promhttp.Handler()
+
+	authProviders := auth.MakeProviders()
+
+	if githubClientID != "" && githubClientSecret != "" {
+		provider := auth.NewGithubProvider(&oauth2.Config{
+			ClientID:     githubClientID,
+			ClientSecret: githubClientSecret,
+			RedirectURL:  origin.String() + "/api/auth/github/callback",
+			Endpoint:     endpoints.GitHub,
+			Scopes:       []string{"read:user", "user:email"},
+		})
+		authProviders.Register("github", provider)
+	}
+
+	if googleClientID != "" && googleClientSecret != "" {
+		provider, err := auth.NewOIDCProvider(ctx, "https://accounts.google.com", &oauth2.Config{
+			ClientID:     googleClientID,
+			ClientSecret: googleClientSecret,
+			RedirectURL:  origin.String() + "/api/auth/google/callback",
+		})
+		if err != nil {
+			return fmt.Errorf("setup google oidc: %w", err)
+		}
+
+		authProviders.Register("google", provider)
+	}
+
+	if discordClientID != "" && discordClientSecret != "" {
+		provider, err := auth.NewOIDCProvider(ctx, "https://discord.com", &oauth2.Config{
+			ClientID:     discordClientID,
+			ClientSecret: discordClientSecret,
+			RedirectURL:  origin.String() + "/api/auth/discord/callback",
+			Scopes:       []string{oidc.ScopeOpenID, "identify", "email"},
+		})
+		if err != nil {
+			return fmt.Errorf("setup discord oidc: %w", err)
+		}
+
+		authProviders.Register("discord", provider)
+	}
+
 	svc := &service.Service{
 		Logger:           logger,
 		Cockroach:        cockroach,
+		AuthProviders:    authProviders,
 		Sender:           sender,
 		Origin:           origin,
-		TokenKey:         tokenKey,
 		PubSub:           pubsub,
 		MinioStore:       store,
 		ObjectsBaseURL:   objectsBaseURL,
@@ -203,51 +243,8 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		VAPIDPublicKey:   vapidPublicKey,
 	}
 
-	promHandler := promhttp.Handler()
-
-	var oauthProviders []httptransport.OauthProvider
-	if githubClientID != "" && githubClientSecret != "" {
-		oauthProviders = append(oauthProviders, httptransport.OauthProvider{
-			Name: "github",
-			Config: &oauth2.Config{
-				ClientID:     githubClientID,
-				ClientSecret: githubClientSecret,
-				RedirectURL:  origin.String() + "/api/github_auth/callback",
-				Endpoint:     endpoints.GitHub,
-				Scopes:       []string{"read:user", "user:email"},
-			},
-			FetchUser: httptransport.GithubUserFetcher,
-		})
-	}
-	if googleClientID != "" && googleClientSecret != "" {
-		provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
-		if err != nil {
-			return fmt.Errorf("setup google oidc: %w", err)
-		}
-
-		oauthProviders = append(oauthProviders, httptransport.OauthProvider{
-			Name: "google",
-			Config: &oauth2.Config{
-				ClientID:     googleClientID,
-				ClientSecret: googleClientSecret,
-				RedirectURL:  origin.String() + "/api/google_auth/callback",
-				Endpoint:     provider.Endpoint(),
-				Scopes: []string{
-					oidc.ScopeOpenID,
-					"profile",
-					"email",
-				},
-			},
-			IDTokenVerifier: provider.Verifier(&oidc.Config{
-				ClientID: googleClientID,
-			}),
-		})
-	}
-	cookieCodec := securecookie.New(
-		[]byte(cookieHashKey),
-		[]byte(cookieBlockKey),
-	)
-	h := httptransport.New(svc, oauthProviders, origin, log.With(logger, "component", "http"), cookieCodec, promHandler, embedStaticFiles)
+	sessStore := pgxstore.New(db)
+	h := httptransport.New(svc, sessStore, origin, log.With(logger, "component", "http"), promHandler, embedStaticFiles)
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           h,

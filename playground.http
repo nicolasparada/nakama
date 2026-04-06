@@ -13,7 +13,7 @@ Content-Type: application/json
 }
 
 ###
-POST {{host}}/api/send_magic_link
+POST {{host}}/api/auth/login/request
 Content-Type: application/json
 
 {
@@ -22,11 +22,7 @@ Content-Type: application/json
 }
 
 ###
-GET {{host}}/api/auth_user
-Authorization: Bearer {{login.response.body.token}}
-
-###
-GET {{host}}/api/token
+GET {{host}}/api/user
 Authorization: Bearer {{login.response.body.token}}
 
 ###
@@ -42,7 +38,7 @@ GET {{host}}/api/users/shinji
 Authorization: Bearer {{login.response.body.token}}
 
 ###
-PUT {{host}}/api/auth_user/avatar
+PUT {{host}}/api/user/avatar
 Authorization: Bearer {{login.response.body.token}}
 Content-Type: image/png
 

@@ -1,3 +1,6 @@
+/** @typedef {import("./types.js").AuthState} AuthState */
+/** @typedef {import("./types.js").AuthUser} AuthUser */
+
 export function getLocalAuth() {
     const authItem = localStorage.getItem("auth")
     if (authItem === null) {
@@ -11,48 +14,76 @@ export function getLocalAuth() {
         return null
     }
 
-    if (typeof auth !== "object"
-        || auth === null
-        || typeof auth.token !== "string"
-        || typeof auth.expiresAt !== "string"
-        || typeof auth.user !== "object"
-        || typeof auth.user === null
-        || typeof auth.user.id !== "string"
-        || typeof auth.user.username !== "string"
-        || !(typeof auth.user.avatarURL === "string" || auth.user.avatarURL === null)) {
-        return null
-    }
-
-    let expiresAt
-    try {
-        expiresAt = new Date(auth.expiresAt)
-    } catch (_) {
-        return null
-    }
-
-    if (isNaN(expiresAt.valueOf()) || expiresAt < new Date()) {
-        return null
-    }
-
-    return {
-        token: auth.token,
-        expiresAt,
-        user: {
-            id: auth.user.id,
-            username: auth.user.username,
-            avatarURL: auth.user.avatarURL,
-        }
-    }
+    return normalizeAuth(auth)
 }
 
+/** @param {AuthState|((auth: AuthState|null) => AuthState|null)|null} auth */
 export function setLocalAuth(auth) {
     const newAuth = typeof auth === "function" ? auth(getLocalAuth()) : auth
-    if (newAuth === null) {
+    const normalizedAuth = newAuth === null ? null : normalizeAuth(newAuth)
+    if (normalizedAuth === null) {
         localStorage.removeItem("auth")
         return
     }
 
     try {
-        localStorage.setItem("auth", JSON.stringify(auth))
-    } catch (_) { }
+        localStorage.setItem("auth", JSON.stringify(normalizedAuth))
+    } catch (_) {}
+}
+
+/** @param {unknown} user */
+export function authFromUser(user) {
+    const normalizedUser = normalizeUser(user)
+    if (normalizedUser === null) {
+        throw new TypeError("invalid auth user")
+    }
+
+    return {
+        user: normalizedUser,
+    }
+}
+
+/** @param {unknown} auth */
+function normalizeAuth(auth) {
+    const record = /** @type {{ user?: unknown }|null} */ (auth)
+    if (typeof record !== "object" || record === null || typeof record.user !== "object" || record.user === null) {
+        return null
+    }
+
+    const user = normalizeUser(record.user)
+    if (user === null) {
+        return null
+    }
+
+    return {
+        user,
+    }
+}
+
+/** @param {unknown} user */
+function normalizeUser(user) {
+    const record = /** @type {{ id?: unknown, username?: unknown, avatarURL?: unknown, avatar_url?: unknown }|null} */ (
+        user
+    )
+    if (
+        typeof record !== "object" ||
+        record === null ||
+        typeof record.id !== "string" ||
+        typeof record.username !== "string" ||
+        !(typeof record.avatarURL === "string" || record.avatarURL === null || typeof record.avatar_url === "string")
+    ) {
+        return null
+    }
+
+    /** @type {AuthUser} */
+    return {
+        id: record.id,
+        username: record.username,
+        avatarURL:
+            typeof record.avatarURL === "string"
+                ? record.avatarURL
+                : typeof record.avatar_url === "string"
+                  ? record.avatar_url
+                  : null,
+    }
 }

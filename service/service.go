@@ -2,12 +2,11 @@ package service
 
 import (
 	_ "embed"
-	"html/template"
 	"net/url"
-	"sync"
 
 	"github.com/go-kit/log"
 
+	"github.com/nakamauwu/nakama/auth"
 	"github.com/nakamauwu/nakama/cockroach"
 	"github.com/nakamauwu/nakama/mailing"
 	"github.com/nakamauwu/nakama/minio"
@@ -20,9 +19,9 @@ import (
 type Service struct {
 	Logger           log.Logger
 	Cockroach        *cockroach.Cockroach
+	AuthProviders    *auth.Providers
 	Sender           mailing.Sender
 	Origin           *url.URL
-	TokenKey         string
 	PubSub           pubsub.PubSub
 	MinioStore       *minio.Store
 	ObjectsBaseURL   string
@@ -30,7 +29,4 @@ type Service struct {
 	AllowedOrigins   []string
 	VAPIDPrivateKey  string
 	VAPIDPublicKey   string
-
-	magicLinkTmplOncer sync.Once
-	magicLinkTmpl      *template.Template
 }

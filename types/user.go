@@ -40,6 +40,7 @@ func (u *UserProfile) SetCoverURL(base, bucket string) {
 type CreateUser struct {
 	Email    string
 	Username string
+	Provider *Provider
 }
 
 type ToggledFollow struct {

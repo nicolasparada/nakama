@@ -686,6 +686,146 @@ header .profile-link {
   margin-bottom: 0.5rem;
 }
 
+.access-callback-page {
+  margin-top: 3rem;
+}
+
+.access-callback-panel {
+  display: grid;
+  grid-auto-flow: row;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1.5rem;
+  background-color: var(--surface-0);
+  box-shadow: var(--box-shadow);
+}
+
+.access-callback-kicker {
+  margin: 0;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.access-callback-panel h1 {
+  margin: 0;
+}
+
+.access-callback-summary {
+  margin: 0;
+  color: var(--hint);
+}
+
+.access-callback-hints {
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+  background-color: var(--surface-1);
+}
+
+.access-callback-hints-title {
+  margin: 0 0 0.5rem;
+  font-weight: bold;
+}
+
+.access-callback-hints ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--hint);
+}
+
+.access-callback-hints li + li {
+  margin-top: 0.375rem;
+}
+
+.access-callback-form {
+  width: 100%;
+}
+
+.access-callback-form input {
+  width: 100%;
+  background-color: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.access-login-code-input {
+  margin: 0.75rem 0;
+}
+
+.access-login-code-input[disabled] {
+  background-color: var(--surface-0);
+  color: var(--hint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.access-callback-form input:hover,
+.access-callback-form input:active {
+  background-color: var(--surface-2);
+}
+
+.access-callback-form input:focus {
+  background-color: var(--surface-2);
+  color: inherit;
+  box-shadow: inset 0 0 0 2px var(--surface-primary);
+}
+
+.access-callback-label {
+  font-weight: bold;
+}
+
+.access-callback-help {
+  margin: 0;
+  color: var(--hint);
+}
+
+.access-callback-actions {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  justify-content: right;
+  align-items: center;
+  width: 100%;
+}
+
+.access-callback-actions button {
+  background-color: var(--primary);
+  color: var(--on-primary);
+
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.access-callback-actions button:hover {
+  background-color: color-mix(in srgb, var(--primary) 88%, var(--surface-1));
+}
+
+.access-callback-actions button:active {
+  background-color: color-mix(in srgb, var(--primary) 78%, var(--surface-2));
+}
+
+.access-callback-actions .loader,
+.access-callback-panel > .loader,
+.access-callback-panel > .error {
+  margin: 0;
+}
+
+.access-callback-panel > .error {
+  padding: 0.875rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--on-surface-error) 25%, transparent);
+  border-radius: 1rem;
+  background-color: color-mix(in srgb, var(--on-surface-error) 8%, transparent);
+}
+
+.access-callback-home {
+  justify-self: left;
+}
+
 .home-page {
   margin: 1rem auto;
   padding-bottom: 3rem;
@@ -1684,6 +1824,7 @@ legend {
 }
 
 .update-email-form,
+.update-email-verification-form,
 .update-user-form {
   display: grid;
   grid-auto-flow: row;
@@ -1788,7 +1929,23 @@ legend {
   gap: 0.5rem;
 }
 
-.privacy-policy-page {
+@media screen and (max-width: 568px) {
+  .access-callback-page {
+    margin-top: 2rem;
+  }
+
+  .access-callback-panel {
+    padding: 1.25rem;
+  }
+
+  .access-callback-actions {
+    grid-auto-flow: row;
+    justify-items: end;
+  }
+}
+
+.privacy-policy-page,
+.terms-of-service-page {
   font-family: serif;
 }
 

@@ -7,6 +7,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js"
 import { setLocalAuth } from "../auth.js"
 import { authStore, useStore } from "../ctx.js"
 import { request } from "../http.js"
+import { verifyEmailUpdate } from "../lib/access-auth.js"
 import { navigate } from "../router.js"
 import { linkify } from "../utils.js"
 import { Avatar } from "./avatar.js"
@@ -41,7 +42,6 @@ import "./user-follow-counts.js"
  * @typedef {import("./toast-item.js").Toast} Toast
  */
 
-
 export default function ({ params }) {
     return html`<user-page .username=${params.username}></user-page>`
 }
@@ -56,7 +56,7 @@ function UserPage({ username }) {
     const [loadingMore, setLoadingMore] = useState(false)
     const [noMorePosts, setNoMorePosts] = useState(false)
     const [endReached, setEndReached] = useState(false)
-    const [toast, setToast] = useState(null)
+    const [toast, setToast] = useState(/** @type {Toast|null} */ (null))
 
     const onPostDeleted = ev => {
         const payload = ev.detail
@@ -80,20 +80,22 @@ function UserPage({ username }) {
             ...u,
             ...payload,
         }))
-        setPosts(pp => pp.map(p => ({
-            ...p,
-            user: {
-                ...p.user,
-                ...payload,
-            }
-        })))
+        setPosts(pp =>
+            pp.map(p => ({
+                ...p,
+                user: {
+                    ...p.user,
+                    ...payload,
+                },
+            })),
+        )
         setAuth(auth => {
             const newAuth = {
                 ...auth,
                 user: {
                     ...auth.user,
                     ...payload,
-                }
+                },
             }
             setLocalAuth(newAuth)
             return newAuth
@@ -106,85 +108,118 @@ function UserPage({ username }) {
         }
 
         setLoadingMore(true)
-        fetchUserPosts({ username, pageArgs: { after: postsEndCursor } }).then(page => {
-            setPosts(pp => [...pp, ...page.items])
-            setPostsEndCursor(page.pageInfo.endCursor)
+        fetchUserPosts({ username, pageArgs: { after: postsEndCursor } })
+            .then(
+                page => {
+                    setPosts(pp => [...pp, ...page.items])
+                    setPostsEndCursor(page.pageInfo.endCursor)
 
-            if (!page.pageInfo.hasNextPage) {
-                setNoMorePosts(true)
-                setEndReached(true)
-            }
-        }, err => {
-            const msg = "could not fetch more posts: " + err.message
-            console.error(msg)
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setLoadingMore(false)
-        })
+                    if (!page.pageInfo.hasNextPage) {
+                        setNoMorePosts(true)
+                        setEndReached(true)
+                    }
+                },
+                err => {
+                    const msg = "could not fetch more posts: " + err.message
+                    console.error(msg)
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setLoadingMore(false)
+            })
     }
 
     useEffect(() => {
         setFetching(true)
-        Promise.all([
-            fetchUser(username),
-            fetchUserPosts({ username, pageArgs: {} }),
-        ]).then(([user, postsPage]) => {
-            setUser(user)
-            setPosts(postsPage.items)
-            setPostsEndCursor(postsPage.pageInfo.endCursor)
+        Promise.all([fetchUser(username), fetchUserPosts({ username, pageArgs: {} })])
+            .then(
+                ([user, postsPage]) => {
+                    setUser(user)
+                    setPosts(postsPage.items)
+                    setPostsEndCursor(postsPage.pageInfo.endCursor)
 
-            if (!postsPage.pageInfo.hasNextPage) {
-                setNoMorePosts(true)
-            }
-        }, err => {
-            console.error("could not fetch user and posts:", err)
-            if (err.name === "UnauthenticatedError") {
-                setAuth(null)
-                setLocalAuth(null)
-                navigate("/")
-            }
+                    if (!postsPage.pageInfo.hasNextPage) {
+                        setNoMorePosts(true)
+                    }
+                },
+                err => {
+                    console.error("could not fetch user and posts:", err)
+                    if (err.name === "UnauthenticatedError") {
+                        setAuth(null)
+                        setLocalAuth(null)
+                        navigate("/")
+                    }
 
-            setErr(err)
-        }).finally(() => {
-            setFetching(false)
-        })
+                    setErr(err)
+                },
+            )
+            .finally(() => {
+                setFetching(false)
+            })
     }, [username])
 
     return html`
         <main class="user-page">
-            <div class="user-profile-wrapper" style="${ifDefined(err === null && !fetching && user.coverURL !== null ? `--cover-url: url('${user.coverURL}');` : undefined)}">
+            <div
+                class="user-profile-wrapper"
+                style="${ifDefined(
+                    err === null && !fetching && user.coverURL !== null
+                        ? `--cover-url: url('${user.coverURL}');`
+                        : undefined,
+                )}"
+            >
                 <div class="container">
-                    ${err !== null ? html`
-                    <p class="error" role="alert">Could not fetch user: ${err.message}</p>
-                    ` : fetching ? html`
-                    <p class="loader" aria-busy="true" aria-live="polite">Loading user... please wait.</p>
-                    ` : html`
-                    <user-profile .user=${user} @user-updated=${onUserUpdated} @avatar-updated=${onAvatarUpdated} @cover-updated=${onCoverUpdated}></user-profile>
-                    `}
+                    ${err !== null
+                        ? html` <p class="error" role="alert">Could not fetch user: ${err.message}</p> `
+                        : fetching
+                          ? html`
+                                <p class="loader" aria-busy="true" aria-live="polite">Loading user... please wait.</p>
+                            `
+                          : html`
+                                <user-profile
+                                    .user=${user}
+                                    @user-updated=${onUserUpdated}
+                                    @avatar-updated=${onAvatarUpdated}
+                                    @cover-updated=${onCoverUpdated}
+                                ></user-profile>
+                            `}
                 </div>
             </div>
             <div class="container posts-wrapper">
                 <h2>Posts</h2>
-                ${err !== null ? html`
-                <p class="error" role="alert">Could not fetch posts: ${err.message}</p>
-                ` : fetching ? html`
-                <p class="loader" aria-busy="true" aria-live="polite">Loading posts... please wait.</p>
-                ` : html`
-                ${posts.length === 0 ? html`
-                <p>0 posts</p>
-                ` : html`
-                <div class="posts" role="feed">
-                    ${repeat(posts, p => p.id, p => html`<post-item .post=${p} .type=${"post"}
-                        @resource-deleted=${onPostDeleted}></post-item>`)}
-                </div>
-                ${!noMorePosts ? html`
-                <intersectable-comp @is-intersecting=${loadMore}></intersectable-comp>
-                <p class="loader" aria-busy="true" aria-live="polite">Loading posts... please wait.</p>
-                ` : endReached ? html`
-                <p>End reached.</p>
-                ` : null}
-                `}
-                `}
+                ${err !== null
+                    ? html` <p class="error" role="alert">Could not fetch posts: ${err.message}</p> `
+                    : fetching
+                      ? html` <p class="loader" aria-busy="true" aria-live="polite">Loading posts... please wait.</p> `
+                      : html`
+                            ${posts.length === 0
+                                ? html` <p>0 posts</p> `
+                                : html`
+                                      <div class="posts" role="feed">
+                                          ${repeat(
+                                              posts,
+                                              p => p.id,
+                                              p =>
+                                                  html`<post-item
+                                                      .post=${p}
+                                                      .type=${"post"}
+                                                      @resource-deleted=${onPostDeleted}
+                                                  ></post-item>`,
+                                          )}
+                                      </div>
+                                      ${!noMorePosts
+                                          ? html`
+                                                <intersectable-comp @is-intersecting=${loadMore}></intersectable-comp>
+                                                <p class="loader" aria-busy="true" aria-live="polite">
+                                                    Loading posts... please wait.
+                                                </p>
+                                            `
+                                          : endReached
+                                            ? html` <p>End reached.</p> `
+                                            : null}
+                                  `}
+                        `}
             </div>
         </main>
         ${toast !== null ? html`<toast-item .toast=${toast}></toast-item>` : null}
@@ -202,10 +237,13 @@ function UserProfile({ user: initialUser }) {
     const [bio, setBio] = useState(user.bio ?? "")
     const [waifu, setWaifu] = useState(user.waifu ?? "")
     const [husbando, setHusbando] = useState(user.husbando ?? "")
-    const settingsDialogRef = /** @type {import("lit/directives/ref.js").Ref<HTMLDialogElement>} */(createRef())
-    const avatarInputRef = /** @type {import("lit/directives/ref.js").Ref<HTMLInputElement>} */(createRef())
-    const coverInputRef = /** @type {import("lit/directives/ref.js").Ref<HTMLInputElement>} */(createRef())
+    const settingsDialogRef = /** @type {import("lit/directives/ref.js").Ref<HTMLDialogElement>} */ (createRef())
+    const avatarInputRef = /** @type {import("lit/directives/ref.js").Ref<HTMLInputElement>} */ (createRef())
+    const coverInputRef = /** @type {import("lit/directives/ref.js").Ref<HTMLInputElement>} */ (createRef())
     const [sendingMagicLink, setSendingMagicLink] = useState(false)
+    const [verifyingEmail, setVerifyingEmail] = useState(false)
+    const [requestedEmail, setRequestedEmail] = useState(/** @type {string|null} */ (null))
+    const [emailVerificationCode, setEmailVerificationCode] = useState("")
     const [updatingUser, setUpdatingUser] = useState(false)
     const [updatingAvatar, setUpdatingAvatar] = useState(false)
     const [updatingCover, setUpdatingCover] = useState(false)
@@ -213,7 +251,7 @@ function UserProfile({ user: initialUser }) {
         const value = localStorage.getItem("color-scheme")
         return value !== null ? value : "default"
     })
-    const [toast, setToast] = useState(null)
+    const [toast, setToast] = useState(/** @type {Toast|null} */ (null))
 
     const dispatchUserUpdated = payload => {
         this.dispatchEvent(new CustomEvent("user-updated", { bubbles: true, detail: payload }))
@@ -241,8 +279,15 @@ function UserProfile({ user: initialUser }) {
         }
     }
 
+    /** @param {InputEvent & { currentTarget: HTMLInputElement }} ev */
     const onEmailInput = ev => {
-        setEmail(ev.currentTarget.value)
+        const nextEmail = ev.currentTarget.value
+        setEmail(nextEmail)
+
+        if (requestedEmail !== null && nextEmail !== requestedEmail) {
+            setRequestedEmail(null)
+            setEmailVerificationCode("")
+        }
     }
 
     const onUsernameInput = ev => {
@@ -261,27 +306,77 @@ function UserProfile({ user: initialUser }) {
         setHusbando(ev.currentTarget.value)
     }
 
+    /** @param {SubmitEvent} ev */
     const onEmailFormSubmit = ev => {
         ev.preventDefault()
-        if (email === user.email) {
+        const nextEmail = email.trim()
+
+        if (nextEmail === user.email) {
             setToast({ type: "error", content: "same email" })
             return
         }
 
+        /** @type {{ email: string, redirectURI: string }} */
         const payload = {
-            email,
-            updateEmail: true,
-            redirectURI: location.origin + "/access-callback",
+            email: nextEmail,
+            redirectURI: location.origin + "/email-update",
         }
         setSendingMagicLink(true)
-        request("POST", "/api/send_magic_link", { body: payload }).then(() => {
-            setToast({ type: "success", content: "email verification sended" })
-        }, err => {
-            const msg = "could not send email verification: " + err.message
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setSendingMagicLink(false)
-        })
+        requestEmailUpdate(payload)
+            .then(
+                () => {
+                    setEmail(nextEmail)
+                    setRequestedEmail(nextEmail)
+                    setEmailVerificationCode("")
+                    setToast({ type: "success", content: "email verification sent" })
+                },
+                err => {
+                    const msg = "could not send email verification: " + err.message
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setSendingMagicLink(false)
+            })
+    }
+
+    /** @param {InputEvent & { currentTarget: HTMLInputElement }} ev */
+    const onEmailVerificationCodeInput = ev => {
+        setEmailVerificationCode(ev.currentTarget.value)
+    }
+
+    /** @param {SubmitEvent} ev */
+    const onEmailVerificationFormSubmit = ev => {
+        ev.preventDefault()
+
+        if (requestedEmail === null) {
+            setToast({ type: "error", content: "request an email update first" })
+            return
+        }
+
+        const nextEmail = requestedEmail
+        setVerifyingEmail(true)
+        verifyEmailUpdate(emailVerificationCode)
+            .then(updatedUser => {
+                setUser(
+                    /** @param {Record<string, unknown> & { email?: string }} currentUser */ currentUser => ({
+                        ...currentUser,
+                        ...updatedUser,
+                        email: nextEmail,
+                    }),
+                )
+                setEmail(nextEmail)
+                setRequestedEmail(null)
+                setEmailVerificationCode("")
+                setToast({ type: "success", content: "email updated" })
+            })
+            .catch(err => {
+                const msg = "could not verify email: " + err.message
+                setToast({ type: "error", content: msg })
+            })
+            .finally(() => {
+                setVerifyingEmail(false)
+            })
     }
 
     const onUserFormSubmit = ev => {
@@ -295,27 +390,32 @@ function UserProfile({ user: initialUser }) {
         }
 
         setUpdatingUser(true)
-        updateUser(payload).then(() => {
-            setAuth(auth => ({
-                ...auth,
-                user: {
-                    ...auth.user,
-                    ...payload,
+        updateUser(payload)
+            .then(
+                () => {
+                    setAuth(auth => ({
+                        ...auth,
+                        user: {
+                            ...auth.user,
+                            ...payload,
+                        },
+                    }))
+                    setUser(u => ({
+                        ...u,
+                        ...payload,
+                    }))
+                    setToast({ type: "success", content: "user updated" })
+                    history.replaceState(history.state, document.title, "/@" + encodeURIComponent(username))
+                    dispatchUserUpdated(payload)
                 },
-            }))
-            setUser(u => ({
-                ...u,
-                ...payload,
-            }))
-            setToast({ type: "success", content: "user updated" })
-            history.replaceState(history.state, document.title, "/@" + encodeURIComponent(username))
-            dispatchUserUpdated(payload)
-        }, err => {
-            const msg = "could not update user: " + err.message
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setUpdatingUser(false)
-        })
+                err => {
+                    const msg = "could not update user: " + err.message
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setUpdatingUser(false)
+            })
     }
 
     const onAvatarInputChange = ev => {
@@ -365,26 +465,31 @@ function UserProfile({ user: initialUser }) {
 
     const submitAvatar = avatar => {
         setUpdatingAvatar(true)
-        updateAvatar(avatar).then(payload => {
-            setAuth(auth => ({
-                ...auth,
-                user: {
-                    ...auth.user,
-                    ...payload,
+        updateAvatar(avatar)
+            .then(
+                payload => {
+                    setAuth(auth => ({
+                        ...auth,
+                        user: {
+                            ...auth.user,
+                            ...payload,
+                        },
+                    }))
+                    setUser(u => ({
+                        ...u,
+                        ...payload,
+                    }))
+                    setToast({ type: "success", content: "avatar updated" })
+                    dispatchAvatarUpdated(payload)
                 },
-            }))
-            setUser(u => ({
-                ...u,
-                ...payload,
-            }))
-            setToast({ type: "success", content: "avatar updated" })
-            dispatchAvatarUpdated(payload)
-        }, err => {
-            const msg = "could not update avatar: " + err.message
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setUpdatingAvatar(false)
-        })
+                err => {
+                    const msg = "could not update avatar: " + err.message
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setUpdatingAvatar(false)
+            })
     }
 
     const onCoverInputChange = ev => {
@@ -434,26 +539,31 @@ function UserProfile({ user: initialUser }) {
 
     const submitCover = cover => {
         setUpdatingCover(true)
-        updateCover(cover).then(payload => {
-            setAuth(auth => ({
-                ...auth,
-                user: {
-                    ...auth.user,
-                    ...payload,
+        updateCover(cover)
+            .then(
+                payload => {
+                    setAuth(auth => ({
+                        ...auth,
+                        user: {
+                            ...auth.user,
+                            ...payload,
+                        },
+                    }))
+                    setUser(u => ({
+                        ...u,
+                        ...payload,
+                    }))
+                    setToast({ type: "success", content: "cover updated" })
+                    dispatchCoverUpdated(payload)
                 },
-            }))
-            setUser(u => ({
-                ...u,
-                ...payload,
-            }))
-            setToast({ type: "success", content: "cover updated" })
-            dispatchCoverUpdated(payload)
-        }, err => {
-            const msg = "could not update cover: " + err.message
-            setToast({ type: "error", content: msg })
-        }).finally(() => {
-            setUpdatingCover(false)
-        })
+                err => {
+                    const msg = "could not update cover: " + err.message
+                    setToast({ type: "error", content: msg })
+                },
+            )
+            .finally(() => {
+                setUpdatingCover(false)
+            })
     }
 
     const onThemeChange = ev => {
@@ -475,6 +585,9 @@ function UserProfile({ user: initialUser }) {
     }
 
     const onSettingsDialogClose = () => {
+        setEmail(user.email)
+        setRequestedEmail(null)
+        setEmailVerificationCode("")
         setUsername(user.username)
     }
 
@@ -488,11 +601,13 @@ function UserProfile({ user: initialUser }) {
             return
         }
 
-        import("dialog-polyfill").then(m => m.default).then(dialogPolyfill => {
-            if (el !== undefined) {
-                dialogPolyfill.registerDialog(el)
-            }
-        })
+        import("dialog-polyfill")
+            .then(m => m.default)
+            .then(dialogPolyfill => {
+                if (el !== undefined) {
+                    dialogPolyfill.registerDialog(el)
+                }
+            })
     }, [settingsDialogRef.value])
 
     useEffect(() => {
@@ -506,50 +621,58 @@ function UserProfile({ user: initialUser }) {
                 <div>
                     <h1>
                         <span>${user.username}</span>
-                        ${user.followsViewer ? html`
-                            <span class="follows-viewer-badge">follows you</span>
-                        ` : null}
+                        ${user.followsViewer ? html` <span class="follows-viewer-badge">follows you</span> ` : null}
                     </h1>
                     <user-follow-counts .user=${user}></user-follow-counts>
                 </div>
                 <div class="user-details">
-                    ${user.bio !== null && user.bio !== "" ? html`
-                        <p>${unsafeHTML(linkify(user.bio))}</p>
-                    ` : null}
-                    ${(user.waifu !== null && user.waifu !== "") || (user.husbando !== null && user.husbando !== "") ? html`
-                        <dl>
-                            ${user.waifu !== null && user.waifu !== "" ? html`
-                                <dt>Waifu:</dt><dd>${user.waifu}</dd>
-                            ` : null}
-                            ${user.husbando !== null && user.husbando !== "" ? html`
-                                <dt>Husbando:</dt><dd>${user.husbando}</dd>
-                            ` : null}
-                        </dl>
-                    ` : null}
+                    ${user.bio !== null && user.bio !== "" ? html` <p>${unsafeHTML(linkify(user.bio))}</p> ` : null}
+                    ${(user.waifu !== null && user.waifu !== "") || (user.husbando !== null && user.husbando !== "")
+                        ? html`
+                              <dl>
+                                  ${user.waifu !== null && user.waifu !== ""
+                                      ? html`
+                                            <dt>Waifu:</dt>
+                                            <dd>${user.waifu}</dd>
+                                        `
+                                      : null}
+                                  ${user.husbando !== null && user.husbando !== ""
+                                      ? html`
+                                            <dt>Husbando:</dt>
+                                            <dd>${user.husbando}</dd>
+                                        `
+                                      : null}
+                              </dl>
+                          `
+                        : null}
                 </div>
             </div>
             ${Avatar(user)}
             <div class="user-controls">
-                ${user.isMe ? html`
-                <button @click=${onSettingsBtnClick}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                        <g data-name="Layer 2">
-                            <g data-name="settings">
-                                <rect width="24" height="24" opacity="0" />
-                                <path
-                                    d="M8.61 22a2.25 2.25 0 0 1-1.35-.46L5.19 20a2.37 2.37 0 0 1-.49-3.22 2.06 2.06 0 0 0 .23-1.86l-.06-.16a1.83 1.83 0 0 0-1.12-1.22h-.16a2.34 2.34 0 0 1-1.48-2.94L2.93 8a2.18 2.18 0 0 1 1.12-1.41 2.14 2.14 0 0 1 1.68-.12 1.93 1.93 0 0 0 1.78-.29l.13-.1a1.94 1.94 0 0 0 .73-1.51v-.24A2.32 2.32 0 0 1 10.66 2h2.55a2.26 2.26 0 0 1 1.6.67 2.37 2.37 0 0 1 .68 1.68v.28a1.76 1.76 0 0 0 .69 1.43l.11.08a1.74 1.74 0 0 0 1.59.26l.34-.11A2.26 2.26 0 0 1 21.1 7.8l.79 2.52a2.36 2.36 0 0 1-1.46 2.93l-.2.07A1.89 1.89 0 0 0 19 14.6a2 2 0 0 0 .25 1.65l.26.38a2.38 2.38 0 0 1-.5 3.23L17 21.41a2.24 2.24 0 0 1-3.22-.53l-.12-.17a1.75 1.75 0 0 0-1.5-.78 1.8 1.8 0 0 0-1.43.77l-.23.33A2.25 2.25 0 0 1 9 22a2 2 0 0 1-.39 0zM4.4 11.62a3.83 3.83 0 0 1 2.38 2.5v.12a4 4 0 0 1-.46 3.62.38.38 0 0 0 0 .51L8.47 20a.25.25 0 0 0 .37-.07l.23-.33a3.77 3.77 0 0 1 6.2 0l.12.18a.3.3 0 0 0 .18.12.25.25 0 0 0 .19-.05l2.06-1.56a.36.36 0 0 0 .07-.49l-.26-.38A4 4 0 0 1 17.1 14a3.92 3.92 0 0 1 2.49-2.61l.2-.07a.34.34 0 0 0 .19-.44l-.78-2.49a.35.35 0 0 0-.2-.19.21.21 0 0 0-.19 0l-.34.11a3.74 3.74 0 0 1-3.43-.57L15 7.65a3.76 3.76 0 0 1-1.49-3v-.31a.37.37 0 0 0-.1-.26.31.31 0 0 0-.21-.08h-2.54a.31.31 0 0 0-.29.33v.25a3.9 3.9 0 0 1-1.52 3.09l-.13.1a3.91 3.91 0 0 1-3.63.59.22.22 0 0 0-.14 0 .28.28 0 0 0-.12.15L4 11.12a.36.36 0 0 0 .22.45z"
-                                    data-name="&lt;Group&gt;" />
-                                <path
-                                    d="M12 15.5a3.5 3.5 0 1 1 3.5-3.5 3.5 3.5 0 0 1-3.5 3.5zm0-5a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5z" />
-                            </g>
-                        </g>
-                    </svg>
-                    <span>Settings</span>
-                </button>
-                <logout-btn></logout-btn>
-                ` : auth !== null ? html`
-                <user-follow-btn .user=${user} @follow-toggle=${onFollowToggle}></user-follow-btn>
-                ` : null}
+                ${user.isMe
+                    ? html`
+                          <button @click=${onSettingsBtnClick}>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                  <g data-name="Layer 2">
+                                      <g data-name="settings">
+                                          <rect width="24" height="24" opacity="0" />
+                                          <path
+                                              d="M8.61 22a2.25 2.25 0 0 1-1.35-.46L5.19 20a2.37 2.37 0 0 1-.49-3.22 2.06 2.06 0 0 0 .23-1.86l-.06-.16a1.83 1.83 0 0 0-1.12-1.22h-.16a2.34 2.34 0 0 1-1.48-2.94L2.93 8a2.18 2.18 0 0 1 1.12-1.41 2.14 2.14 0 0 1 1.68-.12 1.93 1.93 0 0 0 1.78-.29l.13-.1a1.94 1.94 0 0 0 .73-1.51v-.24A2.32 2.32 0 0 1 10.66 2h2.55a2.26 2.26 0 0 1 1.6.67 2.37 2.37 0 0 1 .68 1.68v.28a1.76 1.76 0 0 0 .69 1.43l.11.08a1.74 1.74 0 0 0 1.59.26l.34-.11A2.26 2.26 0 0 1 21.1 7.8l.79 2.52a2.36 2.36 0 0 1-1.46 2.93l-.2.07A1.89 1.89 0 0 0 19 14.6a2 2 0 0 0 .25 1.65l.26.38a2.38 2.38 0 0 1-.5 3.23L17 21.41a2.24 2.24 0 0 1-3.22-.53l-.12-.17a1.75 1.75 0 0 0-1.5-.78 1.8 1.8 0 0 0-1.43.77l-.23.33A2.25 2.25 0 0 1 9 22a2 2 0 0 1-.39 0zM4.4 11.62a3.83 3.83 0 0 1 2.38 2.5v.12a4 4 0 0 1-.46 3.62.38.38 0 0 0 0 .51L8.47 20a.25.25 0 0 0 .37-.07l.23-.33a3.77 3.77 0 0 1 6.2 0l.12.18a.3.3 0 0 0 .18.12.25.25 0 0 0 .19-.05l2.06-1.56a.36.36 0 0 0 .07-.49l-.26-.38A4 4 0 0 1 17.1 14a3.92 3.92 0 0 1 2.49-2.61l.2-.07a.34.34 0 0 0 .19-.44l-.78-2.49a.35.35 0 0 0-.2-.19.21.21 0 0 0-.19 0l-.34.11a3.74 3.74 0 0 1-3.43-.57L15 7.65a3.76 3.76 0 0 1-1.49-3v-.31a.37.37 0 0 0-.1-.26.31.31 0 0 0-.21-.08h-2.54a.31.31 0 0 0-.29.33v.25a3.9 3.9 0 0 1-1.52 3.09l-.13.1a3.91 3.91 0 0 1-3.63.59.22.22 0 0 0-.14 0 .28.28 0 0 0-.12.15L4 11.12a.36.36 0 0 0 .22.45z"
+                                              data-name="&lt;Group&gt;"
+                                          />
+                                          <path
+                                              d="M12 15.5a3.5 3.5 0 1 1 3.5-3.5 3.5 3.5 0 0 1-3.5 3.5zm0-5a1.5 1.5 0 1 0 1.5 1.5 1.5 1.5 0 0 0-1.5-1.5z"
+                                          />
+                                      </g>
+                                  </g>
+                              </svg>
+                              <span>Settings</span>
+                          </button>
+                          <logout-btn></logout-btn>
+                      `
+                    : auth !== null
+                      ? html` <user-follow-btn .user=${user} @follow-toggle=${onFollowToggle}></user-follow-btn> `
+                      : null}
             </div>
         </div>
         <dialog class="user-settings-dialog" ${ref(settingsDialogRef)} @close=${onSettingsDialogClose}>
@@ -562,7 +685,8 @@ function UserProfile({ user: initialUser }) {
                                 <g data-name="close">
                                     <rect width="24" height="24" transform="rotate(180 12 12)" opacity="0" />
                                     <path
-                                        d="M13.41 12l4.3-4.29a1 1 0 1 0-1.42-1.42L12 10.59l-4.29-4.3a1 1 0 0 0-1.42 1.42l4.3 4.29-4.3 4.29a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l4.29-4.3 4.29 4.3a1 1 0 0 0 1.42 0 1 1 0 0 0 0-1.42z" />
+                                        d="M13.41 12l4.3-4.29a1 1 0 1 0-1.42-1.42L12 10.59l-4.29-4.3a1 1 0 0 0-1.42 1.42l4.3 4.29-4.3 4.29a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l4.29-4.3 4.29 4.3a1 1 0 0 0 1.42 0 1 1 0 0 0 0-1.42z"
+                                    />
                                 </g>
                             </g>
                         </svg>
@@ -572,31 +696,58 @@ function UserProfile({ user: initialUser }) {
                 <form class="update-user-form" @submit=${onUserFormSubmit}>
                     <div class="input-grp">
                         <label for="update-username-input">Username:</label>
-                        <input id="update-username-input" type="text" name="username" placeholder="Username" pattern="^[a-zA-Z][a-zA-Z0-9_-]{0,17}$" autocomplete="off"
+                        <input
+                            id="update-username-input"
+                            type="text"
+                            name="username"
+                            placeholder="Username"
+                            pattern="^[a-zA-Z][a-zA-Z0-9_-]{0,17}$"
+                            autocomplete="off"
                             .value=${username}
                             .disabled=${updatingUser}
-                            @input=${onUsernameInput}>
+                            @input=${onUsernameInput}
+                        />
                     </div>
                     <div class="input-grp">
                         <label for="update-user-bio-input">Bio:</label>
-                        <textarea id="update-user-bio-input" name="bio" placeholder="Bio" autocomplete="off" maxlength="480"
+                        <textarea
+                            id="update-user-bio-input"
+                            name="bio"
+                            placeholder="Bio"
+                            autocomplete="off"
+                            maxlength="480"
                             .value=${bio}
                             .disabled=${updatingUser}
-                            @input=${onUserBioInput}></textarea>
+                            @input=${onUserBioInput}
+                        ></textarea>
                     </div>
                     <div class="input-grp">
                         <label for="update-user-waifu-input">Waifu:</label>
-                        <input id="update-user-waifu-input" type="text" name="waifu" placeholder="Waifu" autocomplete="off" maxlength="32"
+                        <input
+                            id="update-user-waifu-input"
+                            type="text"
+                            name="waifu"
+                            placeholder="Waifu"
+                            autocomplete="off"
+                            maxlength="32"
                             .value=${waifu}
                             .disabled=${updatingUser}
-                            @input=${onUserWaifuInput}>
+                            @input=${onUserWaifuInput}
+                        />
                     </div>
                     <div class="input-grp">
                         <label for="update-user-husbando-input">Husbando:</label>
-                        <input id="update-user-husbando-input" type="text" name="husbando" placeholder="Husbando" autocomplete="off" maxlength="32"
+                        <input
+                            id="update-user-husbando-input"
+                            type="text"
+                            name="husbando"
+                            placeholder="Husbando"
+                            autocomplete="off"
+                            maxlength="32"
                             .value=${husbando}
                             .disabled=${updatingUser}
-                            @input=${onUserHusbandoInput}>
+                            @input=${onUserHusbandoInput}
+                        />
                     </div>
                     <button .disabled=${updatingUser}>Update</button>
                 </form>
@@ -605,50 +756,123 @@ function UserProfile({ user: initialUser }) {
                     <form class="update-email-form" @submit="${onEmailFormSubmit}">
                         <div class="input-grp">
                             <label for="update-email-input">Email:</label>
-                            <input id="update-email-input" type="email" name="email" placeholder="Email" autocomplete="off"
+                            <input
+                                id="update-email-input"
+                                type="email"
+                                name="email"
+                                placeholder="Email"
+                                autocomplete="off"
                                 .value=${email}
-                                .disabled=${sendingMagicLink}
-                                @input=${onEmailInput}>
+                                .disabled=${sendingMagicLink || verifyingEmail}
+                                @input=${onEmailInput}
+                            />
                         </div>
 
-                        <button .disabled=${sendingMagicLink}>Update and verify</button>
+                        <button .disabled=${sendingMagicLink || verifyingEmail}>
+                            ${requestedEmail === null ? "Update and verify" : "Resend code"}
+                        </button>
                     </form>
+
+                    ${requestedEmail !== null
+                        ? html`
+                              <form
+                                  class="update-email-verification-form access-callback-form"
+                                  @submit=${onEmailVerificationFormSubmit}
+                              >
+                                  <div class="input-grp">
+                                      <label for="update-email-code-input">Verification code:</label>
+                                      <input
+                                          id="update-email-code-input"
+                                          class="access-login-code-input"
+                                          type="text"
+                                          name="code"
+                                          placeholder="Paste the verification code"
+                                          autocomplete="off"
+                                          aria-describedby="update-email-code-help"
+                                          required
+                                          .value=${emailVerificationCode}
+                                          .disabled=${verifyingEmail}
+                                          @input=${onEmailVerificationCodeInput}
+                                      />
+                                  </div>
+                                  <p id="update-email-code-help" class="access-callback-help">
+                                      Enter the verification code sent to ${requestedEmail}. You can also use the link
+                                      in the email.
+                                  </p>
+                                  <button .disabled=${verifyingEmail || emailVerificationCode.trim() === ""}>
+                                      ${verifyingEmail ? "Updating..." : "Verify and update"}
+                                  </button>
+                              </form>
+                          `
+                        : null}
                 </fieldset>
 
                 <fieldset class="avatar-fieldset" @drop=${onAvatarDrop} @dragover=${onAvatarDragOver}>
                     <legend>Avatar</legend>
                     <div class="avatar-grp">
-                        <div @dblclick=${onAvatarDblClick}>
-                            ${Avatar(user)}
-                        </div>
-                        <input type="file" name="avatar" accept="image/png,image/jpeg" required hidden
-                            .disabled=${updatingAvatar} ${ref(avatarInputRef)} @change=${onAvatarInputChange}>
+                        <div @dblclick=${onAvatarDblClick}>${Avatar(user)}</div>
+                        <input
+                            type="file"
+                            name="avatar"
+                            accept="image/png,image/jpeg"
+                            required
+                            hidden
+                            .disabled=${updatingAvatar}
+                            ${ref(avatarInputRef)}
+                            @change=${onAvatarInputChange}
+                        />
                         <button .disabled=${updatingAvatar} @click=${onAvatarBtnClick}>Update</button>
                     </div>
                 </fieldset>
                 <fieldset class="cover-fieldset" @drop=${onCoverDrop} @dragover=${onCoverDragOver}>
                     <legend>Cover</legend>
                     <div class="cover-grp">
-                        ${user.coverURL !== null ? html`
-                            <img src="${user.coverURL}" @dblclick=${onCoverDblClick}>
-                        ` : null}
-                        <input type="file" name="cover" accept="image/png,image/jpeg" required hidden
-                            .disabled=${updatingCover} ${ref(coverInputRef)} @change=${onCoverInputChange}>
+                        ${user.coverURL !== null
+                            ? html` <img src="${user.coverURL}" @dblclick=${onCoverDblClick} /> `
+                            : null}
+                        <input
+                            type="file"
+                            name="cover"
+                            accept="image/png,image/jpeg"
+                            required
+                            hidden
+                            .disabled=${updatingCover}
+                            ${ref(coverInputRef)}
+                            @change=${onCoverInputChange}
+                        />
                         <button .disabled=${updatingCover} @click=${onCoverBtnClick}>Update</button>
                     </div>
                 </fieldset>
                 <fieldset class="theme-fieldset">
                     <legend>Theme</legend>
                     <label>
-                        <input type="radio" name="theme" value="default" .checked=${theme === "default"} @change=${onThemeChange}>
+                        <input
+                            type="radio"
+                            name="theme"
+                            value="default"
+                            .checked=${theme === "default"}
+                            @change=${onThemeChange}
+                        />
                         <span>Default</span>
                     </label>
                     <label>
-                        <input type="radio" name="theme" value="dark" .checked=${theme === "dark"} @change=${onThemeChange}>
+                        <input
+                            type="radio"
+                            name="theme"
+                            value="dark"
+                            .checked=${theme === "dark"}
+                            @change=${onThemeChange}
+                        />
                         <span>Dark</span>
                     </label>
                     <label>
-                        <input type="radio" name="theme" value="light" .checked=${theme === "light"} @change=${onThemeChange}>
+                        <input
+                            type="radio"
+                            name="theme"
+                            value="light"
+                            .checked=${theme === "light"}
+                            @change=${onThemeChange}
+                        />
                         <span>Light</span>
                     </label>
                 </fieldset>
@@ -663,26 +887,51 @@ customElements.define("user-profile", component(UserProfile, { useShadowDOM: fal
 
 function LogoutBtn() {
     const [, setAuth] = useStore(authStore)
+    const [fetching, setFetching] = useState(false)
 
     const onClick = () => {
-        localStorage.removeItem("auth")
-        setAuth(null)
-        navigate("/")
+        if (fetching) {
+            return
+        }
+
+        setFetching(true)
+        request("POST", "/api/auth/logout")
+            .then(
+                () => {
+                    setLocalAuth(null)
+                    setAuth(null)
+                    navigate("/")
+                },
+                err => {
+                    if (err.name === "UnauthenticatedError") {
+                        setLocalAuth(null)
+                        setAuth(null)
+                        navigate("/")
+                        return
+                    }
+
+                    console.error("could not logout:", err)
+                },
+            )
+            .finally(() => {
+                setFetching(false)
+            })
     }
 
     return html`
-        <button @click=${onClick}>
+        <button .disabled=${fetching} @click=${onClick}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                 <g data-name="Layer 2">
                     <g data-name="log-out">
                         <rect width="24" height="24" transform="rotate(90 12 12)" opacity="0" />
                         <path d="M7 6a1 1 0 0 0 0-2H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h2a1 1 0 0 0 0-2H6V6z" />
                         <path
-                            d="M20.82 11.42l-2.82-4a1 1 0 0 0-1.39-.24 1 1 0 0 0-.24 1.4L18.09 11H10a1 1 0 0 0 0 2h8l-1.8 2.4a1 1 0 0 0 .2 1.4 1 1 0 0 0 .6.2 1 1 0 0 0 .8-.4l3-4a1 1 0 0 0 .02-1.18z" />
+                            d="M20.82 11.42l-2.82-4a1 1 0 0 0-1.39-.24 1 1 0 0 0-.24 1.4L18.09 11H10a1 1 0 0 0 0 2h8l-1.8 2.4a1 1 0 0 0 .2 1.4 1 1 0 0 0 .6.2 1 1 0 0 0 .8-.4l3-4a1 1 0 0 0 .02-1.18z"
+                        />
                     </g>
                 </g>
             </svg>
-            <span>Logout</span>
+            <span>${fetching ? "Logging out..." : "Logout"}</span>
         </button>
     `
 }
@@ -693,8 +942,7 @@ customElements.define("logout-btn", component(LogoutBtn, { useShadowDOM: false }
  * @param {string} username
  */
 function fetchUser(username) {
-    return request("GET", "/api/users/" + encodeURIComponent(username))
-        .then(resp => resp.body)
+    return request("GET", "/api/users/" + encodeURIComponent(username)).then(resp => resp.body)
 }
 
 /**
@@ -737,14 +985,14 @@ function fetchUserPosts(input) {
  * @param {{username?:string,bio?:string,waifu?:string,husbando?:string}} payload
  */
 function updateUser({ username, bio, waifu, husbando }) {
-    return request("PATCH", "/api/auth_user", { body: { username, bio, waifu, husbando } })
+    return request("PATCH", "/api/user", { body: { username, bio, waifu, husbando } })
 }
 
 /**
  * @param {File} avatar
  */
 function updateAvatar(avatar) {
-    return request("PUT", "/api/auth_user/avatar", { body: avatar })
+    return request("PUT", "/api/user/avatar", { body: avatar })
         .then(resp => resp.body)
         .then(avatarURL => ({ avatarURL }))
 }
@@ -753,7 +1001,19 @@ function updateAvatar(avatar) {
  * @param {File} cover
  */
 function updateCover(cover) {
-    return request("PUT", "/api/auth_user/cover", { body: cover })
+    return request("PUT", "/api/user/cover", { body: cover })
         .then(resp => resp.body)
         .then(coverURL => ({ coverURL }))
+}
+
+/**
+ * @param {{ email: string, redirectURI: string }} payload
+ */
+function requestEmailUpdate(payload) {
+    return request("POST", "/api/user/email/request", {
+        body: {
+            email: payload.email,
+            redirectURI: payload.redirectURI,
+        },
+    })
 }

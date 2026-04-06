@@ -73,8 +73,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           # TODO: docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
           script: |
-            echo "TOKEN_KEY=${{ secrets.TOKEN_KEY }}" >| .env \
-            && echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> .env \
+            echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >| .env \
             && echo "TRAEFIK_PILOT_TOKEN=${{ secrets.TRAEFIK_PILOT_TOKEN }}" >> .env \
             && echo "S3_ENDPOINT=${{ secrets.S3_ENDPOINT }}" >> .env \
             && echo "S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}" >> .env \
@@ -85,6 +84,8 @@ jobs:
             && echo "GITHUB_CLIENT_ID=${{ secrets.OAUTH_GITHUB_CLIENT_ID }}" >> .env \
             && echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env \
             && echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env \
+            && echo "DISCORD_CLIENT_ID=${{ vars.DISCORD_CLIENT_ID }}" >> .env \
+            && echo "DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}" >> .env \
             && echo "VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}" >> .env \
             && echo "VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}" >> .env \
             && docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions || true \

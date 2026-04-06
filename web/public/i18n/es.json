@@ -41,6 +41,7 @@
         "errSendMagicLink": "no se pudo enviar el link mágico: ",
         "placeholder": "Correo",
         "btn": "Acceder",
+        "devBtn": "dev login",
         "subheading": "O accede con:",
         "signupHelp": {
             "heading": "Primera vez aquí?",

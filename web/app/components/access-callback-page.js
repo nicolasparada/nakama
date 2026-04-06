@@ -1,9 +1,14 @@
 import { component, useEffect, useState } from "haunted"
 import { html } from "lit"
-import { translate } from "lit-translate"
-import { setLocalAuth } from "../auth.js"
+import {
+    applyAuth,
+    clearAuth,
+    completeSignup,
+    errorFromMessage,
+    loadAuthFromSession,
+    renderPendingSignupForm,
+} from "../lib/access-auth.js"
 import { authStore, useStore } from "../ctx.js"
-import { navigate } from "../router.js"
 
 export default function () {
     return html`<access-callback-page></access-callback-page>`
@@ -11,91 +16,128 @@ export default function () {
 
 function AccessCallbackPage() {
     const [, setAuth] = useStore(authStore)
-    const [err, setErr] = useState(/** @type {Error|null} */(null))
-    const [retryEndpoint, setRetryEndpoint] = useState(/** @type {URL|null} */(null))
-    const [username, setUsername] = useState("")
+    const [err, setErr] = useState(/** @type {Error|null} */ (null))
+    const [pendingSignup, setPendingSignup] = useState(false)
+    const [fetching, setFetching] = useState(false)
 
+    /** @param {SubmitEvent} ev */
     const onUsernameFormSubmit = ev => {
         ev.preventDefault()
 
-        if (retryEndpoint === null) {
+        if (!(ev.currentTarget instanceof HTMLFormElement)) {
             return
         }
 
-        retryEndpoint.searchParams.set("username", username)
-        location.replace(retryEndpoint.toString())
-    }
+        if (fetching) {
+            return
+        }
 
-    const onUsernameInput = ev => {
-        setUsername(ev.currentTarget.value)
+        const formData = new FormData(ev.currentTarget)
+        const username = formData.get("username")
+        if (typeof username !== "string") {
+            setErr(errorFromMessage("username is required"))
+            return
+        }
+
+        setFetching(true)
+        setErr(null)
+
+        completeSignup(username)
+            .then(auth => {
+                applyAuth(auth, setAuth)
+            })
+            .catch(err => {
+                setErr(err)
+            })
+            .finally(() => {
+                setFetching(false)
+            })
     }
 
     useEffect(() => {
         const data = new URLSearchParams(location.hash.substr(1))
-        if (data.has("error")) {
-            const err = new Error(decodeURIComponent(data.get("error")))
-            err.name = err.message
-                .split(" ")
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join("")
-                + "Error"
+        const result = data.get("result")
 
-            setErr(err)
-
-            setLocalAuth(null)
-            setAuth(null)
-            
-            if (data.has("retry_endpoint") && isRetriableError(err)) {
-                setRetryEndpoint(new URL(decodeURIComponent(data.get("retry_endpoint")), location.origin))
-                return
-            }
-            
+        if (result === "error") {
+            setErr(errorFromMessage(data.get("error") ?? "unknown error"))
+            setPendingSignup(false)
+            clearAuth(setAuth)
             return
         }
 
-        if (!data.has("token") || !data.has("expires_at") || !data.has("user.id") || !data.has("user.username")) {
-            const err = new Error("missing auth data")
-            err.name = "MissingAuthDataError"
-            setErr(err)
+        if (result === "pending_signup") {
+            setErr(null)
+            setPendingSignup(true)
+            clearAuth(setAuth)
             return
         }
 
-        const auth = {
-            token: decodeURIComponent(data.get("token")),
-            expiresAt: new Date(decodeURIComponent(data.get("expires_at"))),
-            user: {
-                id: decodeURIComponent(data.get("user.id")),
-                username: decodeURIComponent(data.get("user.username")),
-                avatarURL: data.has("user.avatar_url") ? decodeURIComponent(data.get("user.avatar_url")) : null,
-            }
+        if (result === "success") {
+            setErr(null)
+            setPendingSignup(false)
+            loadAuthFromSession().then(
+                auth => {
+                    applyAuth(auth, setAuth)
+                },
+                err => {
+                    setErr(err)
+                    clearAuth(setAuth)
+                },
+            )
+            return
         }
 
-        setLocalAuth(auth)
-        setAuth(auth)
-        navigate("/", true)
+        setErr(errorFromMessage("missing auth result"))
+        setPendingSignup(false)
     }, [])
 
     return html`
-        <main class="container">
-            <h1>${translate("accessCallbackPage.title")}</h1>
-            ${err !== null ? html`
-                <p class="error" role="alert">${translate("accessCallbackPage.err")} ${translate(err.name)}</p>
-                ${!isRetriableError(err) ? html`
-                    <a href="/">${translate("accessCallbackPage.goHome")}</a>
-                ` : null}
-            ` : null}
-            ${retryEndpoint !== null ? html`
-                <form class="username-form" @submit=${onUsernameFormSubmit}>
-                    <input type="text" name="username" placeholder="${translate("accessCallbackPage.usernamePlaceholder")}" pattern="^[a-zA-Z][a-zA-Z0-9_-]{0,17}$" autofocus .value=${username} @input=${onUsernameInput}>
-                    <button>${translate("accessCallbackPage.createAccountBtn")}</button>
-                </form>
-            ` : null}
+        <main class="container access-callback-page">
+            <section class="access-callback-panel">
+                <p class="access-callback-kicker">
+                    ${pendingSignup ? "Almost there" : err !== null ? "Sign-in problem" : "Signing you in"}
+                </p>
+                <h1>
+                    ${pendingSignup
+                        ? "Choose your username"
+                        : err !== null
+                          ? "We couldn’t finish sign in"
+                          : "Finishing sign in"}
+                </h1>
+                <p class="access-callback-summary">
+                    ${pendingSignup
+                        ? "Your social sign-in is waiting for a username. Pick a public username to create your Nakama account and complete signup."
+                        : err !== null
+                          ? "Something interrupted the authentication flow. You can go back home and try again."
+                          : fetching
+                            ? "Creating your account and starting your session..."
+                            : "Checking your session and preparing your account..."}
+                </p>
+
+                ${pendingSignup
+                    ? html`
+                          <div class="access-callback-hints">
+                              <p class="access-callback-hints-title">Before you continue:</p>
+                              <ul>
+                                  <li>Your username will appear on your profile and posts.</li>
+                                  <li>It must start with a letter.</li>
+                                  <li>You can use letters, numbers, underscores, and hyphens.</li>
+                              </ul>
+                          </div>
+
+                          ${err !== null ? html`<p class="error" role="alert">${err.message}</p>` : null}
+                          ${renderPendingSignupForm({ err, fetching, onSubmit: onUsernameFormSubmit })}
+                      `
+                    : null}
+                ${!pendingSignup && err !== null
+                    ? html`<a class="btn access-callback-home" href="/">Go home</a>`
+                    : null}
+                ${!pendingSignup && err === null
+                    ? html`<p class="loader" aria-busy="true" aria-live="polite">Please wait...</p>`
+                    : null}
+            </section>
         </main>
     `
 }
 
 customElements.define("access-callback-page", component(AccessCallbackPage, { useShadowDOM: false }))
-
-function isRetriableError(err) {
-    return err.name === "UserNotFoundError" || err.name === "InvalidUsernameError" || err.name === "UsernameTakenError"
-}

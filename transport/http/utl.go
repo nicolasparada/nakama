@@ -10,7 +10,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -151,20 +150,9 @@ func withCacheControl(d time.Duration) func(http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func emptyStrPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 func redirectWithHashFragment(w http.ResponseWriter, r *http.Request, uri *url.URL, data url.Values, statusCode int) {
-	// Using query string instead of hash fragment because golang's url.URL#RawFragment is a no-op.
-	// We set the RawQuery instead, and then string replace the "?" symbol by "#".
-	uri.RawQuery = data.Encode()
-	location := uri.String()
-	location = strings.Replace(location, "?", "#", 1)
-	http.Redirect(w, r, location, statusCode)
+	uri.Fragment = data.Encode()
+	http.Redirect(w, r, uri.String(), statusCode)
 }
 
 func parsePageArgs(q url.Values) (types.PageArgs, error) {

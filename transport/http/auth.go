@@ -2,31 +2,44 @@ package http
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/gob"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
-	"time"
 
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
+	"github.com/nicolasparada/go-errs"
 )
 
-type loginInput struct {
-	Email string
+const (
+	sessKeyOauthRedirectURI = "sess_oauth_redirect_uri"
+	sessKeyOauthState       = "sess_oauth_state"
+	sessKeyPendingSignup    = "sess_pending_signup"
+	sessKeyUserID           = "sess_user_id"
+)
+
+func init() {
+	// scs uses gob to encode session data, so we need to register our custom types.
+	gob.Register(&url.URL{})            // for sessKeyOauthRedirectURI
+	gob.Register(types.PendingSignup{}) // for sessKeyPendingSignup
 }
 
-func (h *handler) sendMagicLink(w http.ResponseWriter, r *http.Request) {
+func (h *handler) requestLogin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in types.SendMagicLink
+	var in types.RequestLogin
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
-	err := h.svc.SendMagicLink(r.Context(), in)
+	ctx := r.Context()
+	err := h.svc.RequestLogin(ctx, in)
 	if err != nil {
 		h.respondErr(w, err)
 		return
@@ -35,75 +48,201 @@ func (h *handler) sendMagicLink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *handler) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	q := r.URL.Query()
-	code := q.Get("code")
-	redirectURI, err := h.svc.EmailVerificationCodeRedirectURI(ctx, code)
-	if err != nil {
-		h.respondErr(w, err)
-		return
-	}
-
-	in := types.UseEmailVerificationCode{
-		Code:     code,
-		Username: emptyStrPtr(q.Get("username")),
-	}
-	auth, err := h.svc.VerifyMagicLink(ctx, in)
-	if shouldAskUsername(err) {
-		redirectWithHashFragment(w, r, redirectURI, url.Values{
-			"error":          []string{err.Error()},
-			"retry_endpoint": []string{r.RequestURI},
-		}, http.StatusFound)
-		return
-	}
-
-	if err != nil {
-		statusCode := err2code(err)
-		if statusCode != http.StatusInternalServerError {
-			redirectWithHashFragment(w, r, redirectURI, url.Values{
-				"error": []string{err.Error()},
-			}, http.StatusFound)
-			return
-		}
-
-		if !errors.Is(err, context.Canceled) {
-			_ = h.logger.Log("err", err)
-		}
-		redirectWithHashFragment(w, r, redirectURI, url.Values{
-			"error": []string{"internal server error"},
-		}, http.StatusFound)
-		return
-	}
-
-	values := url.Values{
-		"token":         []string{auth.Token},
-		"expires_at":    []string{auth.ExpiresAt.Format(time.RFC3339Nano)},
-		"user.id":       []string{auth.User.ID},
-		"user.username": []string{auth.User.Username},
-	}
-	if auth.User.AvatarURL != nil {
-		values.Set("user.avatar_url", *auth.User.AvatarURL)
-	}
-	redirectWithHashFragment(w, r, redirectURI, values, http.StatusFound)
-}
-
-func (h *handler) devLogin(w http.ResponseWriter, r *http.Request) {
+func (h *handler) verifyLogin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var in loginInput
+	var in struct {
+		Code string `json:"code"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		h.respondErr(w, errBadRequest)
 		return
 	}
 
-	out, err := h.svc.DevLogin(r.Context(), in.Email)
+	ctx := r.Context()
+	resp, err := h.svc.VerifyLogin(ctx, in.Code)
 	if err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	h.respond(w, out, http.StatusOK)
+	switch resp.Status {
+	case types.LoginResultSuccess:
+		h.sess.Put(ctx, sessKeyUserID, resp.User.ID)
+		if err := h.sess.RenewToken(ctx); err != nil {
+			h.respondErr(w, err)
+			return
+		}
+
+	case types.LoginResultPendingSignup:
+		h.sess.Put(ctx, sessKeyPendingSignup, resp.PendingSignup)
+	}
+
+	h.respond(w, resp, http.StatusOK)
+}
+
+func (h *handler) oauthRedirect(w http.ResponseWriter, r *http.Request) {
+	providerName := r.PathValue("provider")
+
+	state, err := genOAuthState()
+	if err != nil {
+		h.respondErr(w, fmt.Errorf("generate oauth state: %w", err))
+		return
+	}
+
+	redirectURI, err := url.Parse(r.URL.Query().Get("redirect_uri"))
+	if err != nil || !redirectURI.IsAbs() {
+		h.respondErr(w, errs.InvalidArgumentError("invalid redirect uri"))
+		return
+	}
+
+	ctx := r.Context()
+
+	oauthURL, err := h.svc.OAuthURL(ctx, providerName, state)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.sess.Put(ctx, sessKeyOauthState, state)
+	h.sess.Put(ctx, sessKeyOauthRedirectURI, redirectURI)
+	http.Redirect(w, r, oauthURL, http.StatusFound)
+}
+
+func (h *handler) oauthCallback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	redirectURI, ok := h.sess.Pop(ctx, sessKeyOauthRedirectURI).(*url.URL)
+	if !ok {
+		h.respondErr(w, errs.InvalidArgumentError("redirect URI not found in session"))
+		return
+	}
+
+	state := h.sess.PopString(ctx, sessKeyOauthState)
+	if state == "" {
+		h.logger.Log("msg", "oauth state not found in session")
+		redirectWithHashFragment(w, r, redirectURI, url.Values{
+			"result": []string{"error"},
+			"error":  []string{"oauth state not found in session"},
+		}, http.StatusFound)
+		return
+	}
+
+	q := r.URL.Query()
+
+	if q.Get("state") != state {
+		h.logger.Log("msg", "invalid oauth state", "expected", state, "got", q.Get("state"))
+		redirectWithHashFragment(w, r, redirectURI, url.Values{
+			"result": []string{"error"},
+			"error":  []string{"invalid oauth state"},
+		}, http.StatusFound)
+		return
+	}
+
+	code := q.Get("code")
+	providerName := r.PathValue("provider")
+
+	resp, err := h.svc.OAuthLogin(ctx, providerName, code)
+	if err != nil {
+		h.logger.Log("msg", "oauth login failed", "err", err)
+		redirectWithHashFragment(w, r, redirectURI, url.Values{
+			"result": []string{"error"},
+			"error":  []string{err.Error()},
+		}, http.StatusFound)
+		return
+	}
+
+	switch resp.Status {
+	case types.LoginResultSuccess:
+		h.sess.Put(ctx, sessKeyUserID, resp.User.ID)
+		if err := h.sess.RenewToken(ctx); err != nil {
+			h.logger.Log("msg", "renew session token", "err", err)
+			redirectWithHashFragment(w, r, redirectURI, url.Values{
+				"result": []string{"error"},
+				"error":  []string{fmt.Sprintf("renew session token: %v", err)},
+			}, http.StatusFound)
+			return
+		}
+
+		redirectWithHashFragment(w, r, redirectURI, url.Values{
+			"result": []string{"success"},
+		}, http.StatusFound)
+
+	case types.LoginResultPendingSignup:
+		h.sess.Put(ctx, sessKeyPendingSignup, resp.PendingSignup)
+		redirectWithHashFragment(w, r, redirectURI, url.Values{
+			"result": []string{"pending_signup"},
+		}, http.StatusFound)
+	}
+}
+
+func (h *handler) completeSignup(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	pendingSignup, ok := h.sess.Get(ctx, sessKeyPendingSignup).(types.PendingSignup)
+	if !ok {
+		h.respondErr(w, errs.InvalidArgumentError("no pending signup"))
+		return
+	}
+
+	if pendingSignup.IsExpired() {
+		h.sess.Remove(ctx, sessKeyPendingSignup)
+		h.respondErr(w, errs.InvalidArgumentError("pending signup has expired"))
+		return
+	}
+
+	defer r.Body.Close()
+
+	var in struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		h.respondErr(w, errs.InvalidArgumentError("invalid request body"))
+		return
+	}
+
+	pendingSignup.SetUsername(in.Username)
+	user, err := h.svc.CompleteSignup(ctx, pendingSignup)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.sess.Remove(ctx, sessKeyPendingSignup)
+
+	h.sess.Put(ctx, sessKeyUserID, user.ID)
+	if err := h.sess.RenewToken(ctx); err != nil {
+		h.logger.Log("msg", "renew session token", "err", err)
+		h.respondErr(w, fmt.Errorf("renew session token: %w", err))
+		return
+	}
+
+	h.respond(w, user, http.StatusOK)
+}
+
+func (h *handler) devLogin(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var in struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		h.respondErr(w, errBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	user, err := h.svc.DevLogin(ctx, in.Email)
+	if err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.sess.Put(ctx, sessKeyUserID, user.ID)
+	if err := h.sess.RenewToken(ctx); err != nil {
+		h.respondErr(w, err)
+		return
+	}
+
+	h.respond(w, user, http.StatusOK)
 }
 
 func (h *handler) authUser(w http.ResponseWriter, r *http.Request) {
@@ -116,39 +255,38 @@ func (h *handler) authUser(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, u, http.StatusOK)
 }
 
-func (h *handler) token(w http.ResponseWriter, r *http.Request) {
-	out, err := h.svc.Token(r.Context())
-	if err != nil {
+func (h *handler) logout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := h.sess.Destroy(ctx); err != nil {
 		h.respondErr(w, err)
 		return
 	}
 
-	h.respond(w, out, http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *handler) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimSpace(r.URL.Query().Get("auth_token"))
-
-		if token == "" {
-			if a := r.Header.Get("Authorization"); strings.HasPrefix(a, "Bearer ") {
-				token = a[7:]
-			}
-		}
-
-		if token == "" {
+		ctx := r.Context()
+		if !h.sess.Exists(ctx, sessKeyUserID) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		uid, err := h.svc.AuthUserIDFromToken(token)
-		if err != nil {
-			h.respondErr(w, err)
-			return
-		}
-
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, service.KeyAuthUserID, uid)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		userID := h.sess.GetString(ctx, sessKeyUserID)
+		ctx = context.WithValue(ctx, service.KeyAuthUserID, userID)
+		r = r.WithContext(ctx)
+		next.ServeHTTP(w, r)
 	})
+}
+
+func genOAuthState() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	h := sha256.Sum256(b)
+
+	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(h[:]), nil
 }

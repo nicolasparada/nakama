@@ -8,33 +8,31 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgxutil"
 	"github.com/nakamauwu/nakama/types"
-	"github.com/nicolasparada/go-db"
 	"github.com/nicolasparada/go-errs"
 )
 
-func (c *Cockroach) CreateEmailVerificationCode(ctx context.Context, in types.CreateEmailVerificationCode) (string, error) {
+func (c *Cockroach) CreateEmailVerificationCode(ctx context.Context, in types.CreateEmailVerificationCode) error {
 	const query = `
-		INSERT INTO email_verification_codes (user_id, email, redirect_uri)
-		VALUES (@user_id, @email, @redirect_uri)
-		RETURNING code
+		INSERT INTO email_verification_codes (user_id, email, hash)
+		VALUES (@user_id, @email, @hash)
 	`
 	args := pgx.StrictNamedArgs{
-		"user_id":      in.UserID,
-		"email":        in.Email,
-		"redirect_uri": in.RedirectURI,
+		"user_id": in.UserID,
+		"email":   in.Email,
+		"hash":    in.Hash,
 	}
-	code, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
+	_, err := c.db.Exec(ctx, query, args)
 	if err != nil {
-		return "", fmt.Errorf("sql insert email verification code: %w", err)
+		return fmt.Errorf("sql insert email verification code: %w", err)
 	}
 
-	return code, nil
+	return nil
 }
 
-func (c *Cockroach) EmailVerificationCode(ctx context.Context, code string) (types.EmailVerificationCode, error) {
-	const query = "SELECT user_id, email, code, redirect_uri, created_at FROM email_verification_codes WHERE code = @code"
+func (c *Cockroach) EmailVerificationCode(ctx context.Context, hash []byte) (types.EmailVerificationCode, error) {
+	const query = "SELECT user_id, email, hash, created_at FROM email_verification_codes WHERE hash = @hash"
 	args := pgx.StrictNamedArgs{
-		"code": code,
+		"hash": hash,
 	}
 	out, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowToStructByNameLax[types.EmailVerificationCode])
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -48,13 +46,13 @@ func (c *Cockroach) EmailVerificationCode(ctx context.Context, code string) (typ
 	return out, nil
 }
 
-func (c *Cockroach) DeleteEmailVerificationCode(ctx context.Context, code string) error {
+func (c *Cockroach) DeleteEmailVerificationCode(ctx context.Context, hash []byte) error {
 	const query = `
 		DELETE FROM email_verification_codes
-		WHERE code = @code
+		WHERE hash = @hash
 	`
 	args := pgx.StrictNamedArgs{
-		"code": code,
+		"hash": hash,
 	}
 	_, err := c.db.Exec(ctx, query, args)
 	if err != nil {
@@ -64,78 +62,28 @@ func (c *Cockroach) DeleteEmailVerificationCode(ctx context.Context, code string
 	return nil
 }
 
-func (c *Cockroach) EmailVerificationCodeRedirectURI(ctx context.Context, code string) (string, error) {
-	const query = "SELECT redirect_uri FROM email_verification_codes WHERE code = @code"
-	args := pgx.StrictNamedArgs{
-		"code": code,
-	}
-	redirectURI, err := pgxutil.SelectRow(ctx, c.db, query, []any{args}, pgx.RowTo[string])
-	if db.IsNotFoundError(err) {
-		return "", errs.NotFoundError("verification code not found")
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("sql select email verification code redirect uri: %w", err)
-	}
-
-	return redirectURI, nil
-}
-
-func (c *Cockroach) UseEmailVerificationCode(ctx context.Context, in types.UseEmailVerificationCode, beforeDelete func(user types.User) error) (types.User, error) {
-	var user types.User
-	return user, c.db.RunTx(ctx, func(ctx context.Context) error {
-		code, err := c.EmailVerificationCode(ctx, in.Code)
+func (c *Cockroach) UseEmailVerificationCode(ctx context.Context, hash []byte, deleteFunc func(ctx context.Context, verificationCode types.EmailVerificationCode) (bool, error)) error {
+	// errDeleteFunc is returned outside of the tx, so it doesn't cause the tx to rollback.
+	var errDeleteFunc error
+	err := c.db.RunTx(ctx, func(ctx context.Context) error {
+		verificationCode, err := c.EmailVerificationCode(ctx, hash)
 		if err != nil {
 			return err
 		}
 
-		if code.IsExpired(in.TTL()) {
-			return errs.UnauthenticatedError("expired token")
-		}
-
-		if code.UserID != nil {
-			updated, err := c.UpdateEmail(ctx, *code.UserID, code.Email)
-			if err != nil {
+		var shouldDelete bool
+		shouldDelete, errDeleteFunc = deleteFunc(ctx, verificationCode)
+		if shouldDelete {
+			if err := c.DeleteEmailVerificationCode(ctx, hash); err != nil {
 				return err
 			}
-
-			user = updated
-		} else {
-			exists, err := c.userExistsWithEmail(ctx, code.Email)
-			if err != nil {
-				return err
-			}
-
-			if !exists {
-				if in.Username == nil {
-					return errs.NotFoundError("user not found")
-				}
-
-				created, err := c.createUser(ctx, types.CreateUser{
-					Email:    code.Email,
-					Username: *in.Username,
-				})
-				if err != nil {
-					return err
-				}
-
-				user = types.User{
-					ID:       created.ID,
-					Username: *in.Username,
-				}
-			} else {
-				user, err = c.UserByEmail(ctx, code.Email)
-				if err != nil {
-					return err
-				}
-			}
-
 		}
 
-		if err := beforeDelete(user); err != nil {
-			return err
-		}
-
-		return c.DeleteEmailVerificationCode(ctx, in.Code)
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	return errDeleteFunc
 }
