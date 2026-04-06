@@ -1143,7 +1143,6 @@ media-scroller zoomable-img {
 }
 
 .media-scroller li > *,
-.media-scroller li img,
 .media-scroller li audio,
 .media-scroller li video,
 .media-scroller li iframe {
@@ -1153,6 +1152,16 @@ media-scroller zoomable-img {
   background-color: var(--background);
   border-radius: 1rem;
   overflow: hidden;
+}
+
+.media-scroller li img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  background-color: var(--background);
+  border-radius: 1rem;
+  overflow: hidden;
+  margin-inline: auto;
 }
 
 .media-scroller li img,
@@ -1169,7 +1178,6 @@ media-scroller zoomable-img {
 /* Safari issue */
 @supports (height: intrinsic) {
 
-  .media-scroller li img,
   .media-scroller li audio,
   .media-scroller li video,
   .media-scroller li iframe {
