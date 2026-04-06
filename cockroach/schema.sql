@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
     PRIMARY KEY (email, code)
 );
 
-DELETE FROM email_verification_codes;
-TRUNCATE email_verification_codes;
-ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hash BYTEA NOT NULL DEFAULT ''::bytea;
-ALTER TABLE email_verification_codes DROP CONSTRAINT IF EXISTS email_verification_codes_pkey, ADD CONSTRAINT email_verification_codes_pkey PRIMARY KEY (hash);
-ALTER TABLE email_verification_codes DROP COLUMN IF EXISTS code, DROP COLUMN IF EXISTS redirect_uri;
+-- DELETE FROM email_verification_codes;
+-- TRUNCATE email_verification_codes;
+-- ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hash BYTEA NOT NULL DEFAULT ''::bytea;
+-- ALTER TABLE email_verification_codes DROP CONSTRAINT IF EXISTS email_verification_codes_pkey, ADD CONSTRAINT email_verification_codes_pkey PRIMARY KEY (hash);
+-- ALTER TABLE email_verification_codes DROP COLUMN IF EXISTS code, DROP COLUMN IF EXISTS redirect_uri;
 
 CREATE TABLE IF NOT EXISTS follows (
     follower_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
