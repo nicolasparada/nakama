@@ -1142,10 +1142,7 @@ media-scroller zoomable-img {
   width: 100%;
 }
 
-.media-scroller li > *,
-.media-scroller li audio,
-.media-scroller li video,
-.media-scroller li iframe {
+.media-scroller li > * {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -1170,19 +1167,46 @@ media-scroller zoomable-img {
   max-height: calc(100vh - 8rem);
 }
 
-.media-scroller li audio,
-.media-scroller li iframe {
-  min-width: 0;
+.media-scroller li blockquote.instagram-media {
+  margin: 0 auto !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  width: min(100%, 34rem) !important;
+  max-width: 100% !important;
 }
 
-/* Safari issue */
-@supports (height: intrinsic) {
+.media-scroller li .instagram-embed-shell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 100%;
+  min-height: min(38rem, calc(100vh - 8rem));
+  overflow: hidden;
+  contain: layout paint;
+}
 
-  .media-scroller li audio,
-  .media-scroller li video,
-  .media-scroller li iframe {
-    height: intrinsic
-  }
+.media-scroller li .instagram-embed-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, var(--surface-0), var(--surface-1));
+}
+
+.media-scroller li .instagram-embed-shell[data-loaded="true"]::before {
+  display: none;
+}
+
+.media-scroller li .instagram-embed-shell[data-loaded="false"] > * {
+  opacity: 0;
+}
+
+.media-scroller li > audio,
+.media-scroller li > iframe.embed-frame {
+  min-width: 0;
+  height: auto;
 }
 
 .media-scroller[data-length="1"] {
@@ -1193,16 +1217,16 @@ media-scroller zoomable-img {
   --media-scroller-item-width: calc(50% - 0.25rem);
 }
 
-.media-scroller li audio {
+.media-scroller li > audio {
   min-width: calc(100% / 1.1);
 }
 
-.media-scroller li iframe {
+.media-scroller li > iframe.embed-frame {
   width: 100%;
 }
 
-.media-scroller li video,
-.media-scroller li iframe {
+.media-scroller li > video,
+.media-scroller li > iframe.embed-frame {
   aspect-ratio: 16/9;
 }
 

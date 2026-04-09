@@ -780,6 +780,7 @@ function MediaScroller({ items: mediaItems }) {
                     if (result.id !== null) {
                         pushItem(
                             html`<iframe
+                                class="embed-frame embed-frame-youtube"
                                 src="https://www.youtube-nocookie.com/embed/${result.id}${result.seconds !== null
                                     ? "?start=" + result.seconds
                                     : ""}"
@@ -799,6 +800,7 @@ function MediaScroller({ items: mediaItems }) {
                     if (vimeoID !== null) {
                         pushItem(
                             html`<iframe
+                                class="embed-frame embed-frame-vimeo"
                                 src="https://player.vimeo.com/video/${vimeoID}?byline=0&portrait=0"
                                 title="Vimeo video player"
                                 frameborder="0"
@@ -875,10 +877,69 @@ function MediaScroller({ items: mediaItems }) {
                 }
 
                 {
+                    const permalink = findInstagramPermalink(url)
+                    if (permalink !== null) {
+                        const shell = document.createElement("div")
+                        shell.className = "instagram-embed-shell"
+                        shell.dataset.loaded = "false"
+
+                        const blockquote = document.createElement("blockquote")
+                        blockquote.className = "instagram-media"
+                        blockquote.dataset.instgrmPermalink = permalink
+                        blockquote.dataset.instgrmVersion = "14"
+
+                        const link = document.createElement("a")
+                        link.href = permalink
+                        link.target = "_blank"
+                        link.rel = "noopener noreferrer"
+                        link.textContent = "View this post on Instagram"
+                        blockquote.appendChild(link)
+                        shell.appendChild(blockquote)
+
+                        const markLoaded = () => {
+                            shell.dataset.loaded = "true"
+                        }
+
+                        const observer = new MutationObserver(() => {
+                            if (shell.querySelector("iframe") === null) {
+                                return
+                            }
+
+                            markLoaded()
+                            observer.disconnect()
+                        })
+                        observer.observe(shell, { childList: true, subtree: true })
+
+                        pushItem(html`${shell}`, { fullWidth: true })
+                        setTimeout(() => {
+                            addInstagramWidget()
+                                .then(() => {
+                                    if ("instgrm" in window) {
+                                        // @ts-ignore
+                                        window.instgrm.Embeds.process()
+                                        requestAnimationFrame(() => {
+                                            if (shell.querySelector("iframe") !== null) {
+                                                markLoaded()
+                                            }
+                                        })
+                                    }
+                                })
+                                .catch(err => {
+                                    observer.disconnect()
+                                    markLoaded()
+                                    console.error("failed to load instagram embed", err)
+                                })
+                        }, 1)
+                        continue
+                    }
+                }
+
+                {
                     const id = findCoubVideoID(url)
                     if (id !== null) {
                         pushItem(
                             html`<iframe
+                                class="embed-frame embed-frame-coub"
                                 src="https://coub.com/embed/${id}?muted=false&autostart=false&originalSize=true&startWithHD=true"
                                 title="Coub video player"
                                 frameborder="0"
@@ -1064,6 +1125,10 @@ function addBskyWidget() {
     return addScript("https://embed.bsky.app/static/embed.js", "bluesky")
 }
 
+function addInstagramWidget() {
+    return addScript("https://www.instagram.com/embed.js", "instgrm")
+}
+
 // @ts-ignore
 customElements.define("media-scroller", component(MediaScroller, { useShadowDOM: false }))
 
@@ -1163,6 +1228,23 @@ function findTweetID(url) {
     }
 
     return parts[3]
+}
+
+/**
+ * @param {URL} url
+ * @returns {string|null}
+ */
+function findInstagramPermalink(url) {
+    if (!["instagram.com", "www.instagram.com", "m.instagram.com"].includes(url.hostname)) {
+        return null
+    }
+
+    const parts = url.pathname.split("/").filter(Boolean)
+    if (parts.length < 2 || !["p", "reel", "tv"].includes(parts[0]) || parts[1] === "") {
+        return null
+    }
+
+    return new URL(`/${parts[0]}/${parts[1]}/`, "https://www.instagram.com").toString()
 }
 
 /**
