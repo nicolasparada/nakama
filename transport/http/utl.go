@@ -102,6 +102,12 @@ func (h *handler) writeSSE(w io.Writer, v any) {
 }
 
 func (h *handler) proxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
 	targetStr := r.URL.Query().Get("target")
 	if targetStr == "" {
 		h.respondErr(w, errInvalidTargetURL)
@@ -109,32 +115,40 @@ func (h *handler) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	target, err := url.Parse(targetStr)
-	if err != nil || (target.Scheme != "http" && target.Scheme != "https") {
+	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Hostname() == "" || target.User != nil {
 		h.respondErr(w, errInvalidTargetURL)
 		return
 	}
 
-	director := func(newr *http.Request) {
-		newr.Host = r.URL.Host
-		newr.RequestURI = target.String()
-		newr.URL = target
-
-		// taken from httputil.NewSingleHostReverseProxy
-		if _, ok := newr.Header["User-Agent"]; !ok {
-			// explicitly disable User-Agent so it's not set to default value
-			newr.Header.Set("User-Agent", "")
-		}
-	}
 	proxy := &httputil.ReverseProxy{
-		Director: director,
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Host = pr.Out.URL.Host
+			pr.Out.Header.Del("Cookie")              // Drop browser cookies.
+			pr.Out.Header.Del("Authorization")       // Drop app credentials.
+			pr.Out.Header.Del("Proxy-Authorization") // Drop proxy credentials.
+			pr.Out.Header.Del("Origin")              // Drop caller origin.
+			pr.Out.Header.Del("Referer")             // Drop caller page.
+			pr.Out.Header.Del("X-Real-Ip")           // Drop client IP hints.
+			pr.Out.Header.Del("Forwarded")           // Drop forwarded chain.
+			pr.Out.Header.Del("X-Forwarded-For")     // Drop forwarded client IPs.
+			pr.Out.Header.Del("X-Forwarded-Host")    // Drop forwarded host.
+			pr.Out.Header.Del("X-Forwarded-Proto")   // Drop forwarded scheme.
+
+			// Keep Go from adding its default User-Agent upstream.
+			if _, ok := pr.Out.Header["User-Agent"]; !ok {
+				pr.Out.Header.Set("User-Agent", "")
+			}
+		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			w.WriteHeader(http.StatusBadGateway)
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// Remove the WWW-Authenticate header to prevent the browser from showing the basic auth pop-up dialog.
-			if resp.Header.Get("Www-Authenticate") != "" {
-				resp.Header.Del("Www-Authenticate")
-			}
+			resp.Header.Del("Set-Cookie")         // Drop upstream cookies.
+			resp.Header.Del("Set-Cookie2")        // Drop legacy cookies.
+			resp.Header.Del("Clear-Site-Data")    // Drop site-wide clears.
+			resp.Header.Del("Www-Authenticate")   // Drop browser auth prompts.
+			resp.Header.Del("Proxy-Authenticate") // Drop proxy auth prompts.
 			return nil
 		},
 	}

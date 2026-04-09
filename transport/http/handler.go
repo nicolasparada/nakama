@@ -24,6 +24,7 @@ func New(svc *service.Service, sessStore scs.Store, origin *url.URL, logger log.
 	sess := scs.New()
 	sess.Store = sessStore
 	sess.Lifetime = time.Hour * 24 * 7 * 2 // 2 weeks
+	sess.Cookie.Name = "nakama_session"
 	sess.Cookie.Secure = origin.Scheme == "https"
 
 	h := &handler{

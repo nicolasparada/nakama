@@ -175,14 +175,14 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		sender = mailing.NewLogSender(sendFrom)
 	}
 
-	store := minio.NewStore(minio.StoreOptions{
+	minioStore := minio.NewStore(minio.StoreOptions{
 		Endpoint:  s3Endpoint,
 		AccessKey: s3AccessKey,
 		SecretKey: s3SecretKey,
 		Secure:    s3Secure,
 	})
 
-	if err := store.CreateReadOnlyBuckets(ctx, service.AvatarsBucket, service.CoversBucket, service.MediaBucket); err != nil {
+	if err := minioStore.CreateReadOnlyBuckets(ctx, service.AvatarsBucket, service.CoversBucket, service.MediaBucket); err != nil {
 		return err
 	}
 
@@ -235,7 +235,7 @@ func run(ctx context.Context, logger log.Logger, args []string) error {
 		Sender:           sender,
 		Origin:           origin,
 		PubSub:           pubsub,
-		MinioStore:       store,
+		MinioStore:       minioStore,
 		ObjectsBaseURL:   objectsBaseURL,
 		DisabledDevLogin: disabledDevLogin,
 		AllowedOrigins:   strings.Split(allowedOrigins, ","),
