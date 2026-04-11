@@ -119,11 +119,13 @@ func (h *handler) proxy(w http.ResponseWriter, r *http.Request) {
 		h.respondErr(w, errInvalidTargetURL)
 		return
 	}
+	target.Fragment = ""
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(target)
-			pr.Out.Host = pr.Out.URL.Host
+			pr.Out.URL = target
+			pr.Out.Host = target.Host
+			pr.Out.RequestURI = ""
 			pr.Out.Header.Del("Cookie")              // Drop browser cookies.
 			pr.Out.Header.Del("Authorization")       // Drop app credentials.
 			pr.Out.Header.Del("Proxy-Authorization") // Drop proxy credentials.
