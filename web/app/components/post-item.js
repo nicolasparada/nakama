@@ -1019,17 +1019,7 @@ function MediaScroller({ items: mediaItems }) {
 
                 try {
                     const endpoint = "/api/proxy?target=" + encodeURIComponent(url.toString())
-                    const resp = await fetch(endpoint, {
-                        method: "HEAD",
-                        headers: {
-                            accept: "image/*, audio/*, video/*",
-                        },
-                    })
-                    if (!resp.ok) {
-                        continue
-                    }
-
-                    const ct = resp.headers.get("content-type")
+                    const ct = await probeMediaContentType(endpoint)
                     if (ct === null) {
                         continue
                     }
@@ -1127,6 +1117,42 @@ function addBskyWidget() {
 
 function addInstagramWidget() {
     return addScript("https://www.instagram.com/embed.js", "instgrm")
+}
+
+/**
+ * @param {string} endpoint
+ * @returns {Promise<string|null>}
+ */
+async function probeMediaContentType(endpoint) {
+    const accept = "image/*, audio/*, video/*"
+
+    try {
+        const resp = await fetch(endpoint, {
+            method: "HEAD",
+            headers: {
+                accept,
+            },
+        })
+        if (resp.ok) {
+            return resp.headers.get("content-type")
+        }
+    } catch (_) {}
+
+    try {
+        const resp = await fetch(endpoint, {
+            headers: {
+                accept,
+                range: "bytes=0-0",
+            },
+        })
+        const ct = resp.ok ? resp.headers.get("content-type") : null
+        if (resp.body !== null) {
+            void resp.body.cancel().catch(() => {})
+        }
+        return ct
+    } catch (_) {
+        return null
+    }
 }
 
 // @ts-ignore
