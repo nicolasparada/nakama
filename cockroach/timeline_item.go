@@ -98,7 +98,7 @@ func (c *Cockroach) Timeline(ctx context.Context, in types.ListTimeline) (types.
 	out.Items = posts
 
 	return out, applyPageInfo(&out, pageArgs, func(ti types.TimelineItem) Cursor[time.Time] {
-		return Cursor[time.Time]{ID: ti.ID, Value: ti.CreatedAt}
+		return Cursor[time.Time]{ID: ti.Post.ID, Value: ti.Post.CreatedAt}
 	})
 }
 
