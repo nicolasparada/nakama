@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image/gif"
 	"image/jpeg"
@@ -160,9 +161,12 @@ func contentTypeExtension(ct string) string {
 func detectContentType(r io.ReadSeeker) (string, error) {
 	// http.DetectContentType uses at most 512 bytes to make its decision.
 	h := make([]byte, 512)
-	_, err := r.Read(h)
-	if err != nil {
+	n, err := r.Read(h)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return "", fmt.Errorf("detect content type: read head: %w", err)
+	}
+	if n == 0 {
+		return "", errs.InvalidArgumentError("invalid media item format")
 	}
 
 	// Reset the reader so it can be used again.
@@ -171,7 +175,7 @@ func detectContentType(r io.ReadSeeker) (string, error) {
 		return "", fmt.Errorf("detect content type: seek to start: %w", err)
 	}
 
-	mt, _, err := mime.ParseMediaType(http.DetectContentType(h))
+	mt, _, err := mime.ParseMediaType(http.DetectContentType(h[:n]))
 	if err != nil {
 		return "", fmt.Errorf("detect content type: parsing media type: %w", err)
 	}
