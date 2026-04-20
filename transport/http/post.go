@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-kit/kit/log/level"
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
 )
@@ -24,9 +25,9 @@ func (h *handler) createPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	mediatype, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err == nil && strings.Contains(strings.ToLower(mediatype), "multipart/form-data") {
+	if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
 		if err := r.ParseMultipartForm(service.MaxMediaItemBytes); err != nil {
+			level.Warn(h.logger).Log("msg", "failed to parse multipart form", "err", err)
 			h.respondErr(w, errBadRequest)
 			return
 		}
@@ -49,6 +50,7 @@ func (h *handler) createPost(w http.ResponseWriter, r *http.Request) {
 
 				f, err := header.Open()
 				if err != nil {
+					level.Warn(h.logger).Log("msg", "failed to open media file", "err", err)
 					h.respondErr(w, errBadRequest)
 					return
 				}
