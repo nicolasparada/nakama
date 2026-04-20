@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log/level"
 	"github.com/nakamauwu/nakama/service"
 	"github.com/nakamauwu/nakama/types"
 )
