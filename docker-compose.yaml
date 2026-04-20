@@ -33,8 +33,11 @@ services:
       ORIGIN: "https://nakama.social"
       DATABASE_URL: "postgresql://root@cockroach:26257/nakama?sslmode=disable"
       NATS_URL: "nats://nats:4222"
+      TMPDIR: "/tmp"
     env_file:
       - ./.env
+    tmpfs:
+      - "/tmp:mode=1777"
     # expose:
     #   - 3000
     restart: "always"
