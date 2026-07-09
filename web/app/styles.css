@@ -1146,6 +1146,7 @@ media-scroller zoomable-img {
   display: block;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   background-color: var(--background);
   border-radius: 1rem;
   overflow: hidden;
@@ -1167,11 +1168,27 @@ media-scroller zoomable-img {
   max-height: calc(100vh - 8rem);
 }
 
-.media-scroller li blockquote.instagram-media {
+.media-scroller li blockquote.instagram-media,
+.media-scroller li blockquote.twitter-tweet {
   margin: 0 auto !important;
   padding: 0 !important;
   min-width: 0 !important;
   width: min(100%, 34rem) !important;
+  max-width: 100% !important;
+}
+
+.media-scroller li .twitter-tweet,
+.media-scroller li .twitter-tweet-rendered {
+  margin: 0 auto !important;
+  min-width: 0 !important;
+  width: min(100%, 34rem) !important;
+  max-width: 100% !important;
+}
+
+.media-scroller li .twitter-tweet iframe,
+.media-scroller li .twitter-tweet-rendered iframe {
+  min-width: 0 !important;
+  width: 100% !important;
   max-width: 100% !important;
 }
 

@@ -21,7 +21,7 @@ docker-compose up --build
 
 Instead of Docker, you can also install and build stuff by yourself, that way you have complete control.
 
-So, besides having [Go](https://golang.org) installed, the server needs [CockroachDB](https://www.cockroachlabs.com) and [NATS](https://nats.io).
+So, besides having [Go](https://golang.org) installed, the server needs [CockroachDB](https://www.cockroachlabs.com), [NATS](https://nats.io) and [Minio](https://min.io/).
 Also [Node.js](https://nodejs.org) and [npm](https://nodejs.org) for the front-end.
 
 First, you need a cockroach node running.
@@ -33,13 +33,19 @@ cockroach start-single-node --insecure --listen-addr 127.0.0.1
 Then, you need to create the database and tables.
 
 ```bash
-cat schema.sql | cockroach sql --insecure
+cat cockroach/schema.sql | cockroach sql --insecure
 ```
 
 Then you need to start NATS server.
 
 ```bash
 nats-server
+```
+
+Then Minio.
+
+```bash
+minio server ./minio-data
 ```
 
 Now, you can build and run the server.

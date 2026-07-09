@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS post_reactions (
     PRIMARY KEY (user_id, post_id, reaction)
 );
 
-ALTER TABLE post_reactions 
-ADD CONSTRAINT IF NOT EXISTS post_reactions_kind_check 
+ALTER TABLE post_reactions
+ADD CONSTRAINT IF NOT EXISTS post_reactions_kind_check
 CHECK (kind IN ('emoji', 'custom'));
 
 CREATE INDEX IF NOT EXISTS idx_post_reactions_post_user
@@ -114,8 +114,8 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
     PRIMARY KEY (user_id, comment_id, reaction)
 );
 
-ALTER TABLE comment_reactions 
-ADD CONSTRAINT IF NOT EXISTS comment_reactions_kind_check 
+ALTER TABLE comment_reactions
+ADD CONSTRAINT IF NOT EXISTS comment_reactions_kind_check
 CHECK (kind IN ('emoji', 'custom'));
 
 CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_user
@@ -173,19 +173,19 @@ BEGIN
     END IF;
 
     SELECT COUNT(*) INTO total_count
-    FROM notification_actors 
+    FROM notification_actors
     WHERE notification_id = notification_id_to_update;
 
     SELECT ARRAY(
-        SELECT user_id 
-        FROM notification_actors 
+        SELECT user_id
+        FROM notification_actors
         WHERE notification_id = notification_id_to_update
         ORDER BY created_at DESC
         LIMIT 2
     ) INTO latest_two_actor_user_ids;
 
-    UPDATE notifications 
-    SET 
+    UPDATE notifications
+    SET
         actor_user_ids = latest_two_actor_user_ids,
         actors_count = total_count
     WHERE id = notification_id_to_update;
